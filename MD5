@@ -1,7 +1,7 @@
-d4e0540268484224175820c594b05ecc *DESCRIPTION
+b4d0cf31b219a346c7dcc3800d30f1b9 *DESCRIPTION
 44b42abf175150c1e37a8d871caac748 *LICENSE
 fbc30a472b2a25915fb15d1c95209784 *NAMESPACE
-9d2fbaeab8e4becba39c0145efacf6dc *NEWS.md
+875afa8d0b10c7b31b8f7980eb942dfe *NEWS.md
 03818b689616940254b5b38cf4549565 *R/R.R
 3eb5da55967a4f3785b33e46425780f3 *R/actions.R
 c8eeb8ee1d29bb0c637497c86ed9a2a6 *R/aliases.R
@@ -64,7 +64,7 @@ d3cd8995a577579df65e62ee233ab905 *R/parallel.R
 b39799b39debca661e3f5c13ef25971e *R/parse.R
 c6e7b7b8fa5e1a183b430b1d113ac72c *R/patch.R
 f15b5c207d736a526769a9829d2da9b3 *R/path.R
-ab434b5d279f0460d795099a1fb79eea *R/paths.R
+705ccb7f2e04b6ff2ca3379f349a3dbe *R/paths.R
 c14fee144f07e4ee2c74f8d5b799187d *R/platform.R
 9c71765af95383e8197e7c47c9c863ac *R/preflight.R
 4c7c19ad9752f9e82f88e13bdbb45e94 *R/pretty.R
@@ -96,12 +96,12 @@ a83ebc3b5cbd0135a5a1dabd9b0f6cbc *R/scope.R
 83acde70eea4339cf0b767bb090305ab *R/settings.R
 a89d5645ca579fbf764c5a70ad4f1f4d *R/shims.R
 26ed8a27f1924630203c66cfee7933d8 *R/skip.R
-2b633d9594bbe4483a3005afb3e6682d *R/snapshot.R
+bf625f38f4bc9eb33aeba952fcee917d *R/snapshot.R
 43f5510a4bb2d1029864f39d47f788b8 *R/stack.R
 4cd83a70463b5ba4ba4a84894adcf67d *R/status.R
 8b14e391aeca734ee313b62259642b09 *R/temp.R
 596af2b84d019f31ad785167c02b071a *R/template.R
-81a6d19c8841b4a1e641ef8d0802595f *R/tests.R
+bc5ee7bda0fbefeed5c3f149753c246b *R/tests.R
 bc80d3fcfff8e7505361bbd896ebb9a9 *R/testthat-helpers.R
 b7df4dacad06cdeaf3f64cf62ff4fe62 *R/timecache.R
 0568a812359c87a415970f306782609a *R/update.R
@@ -140,7 +140,7 @@ fdcd05c9900e61f1b240a67225c9660a *inst/doc/python.R
 82b3c15d0e2cfdf999e0aadd973c5c58 *inst/doc/python.html
 53ebc4e568af05b06def2e6c8ccab9d8 *inst/doc/renv.R
 c3db7462fdaacf30dd3a1c9a3561a6b4 *inst/doc/renv.Rmd
-189d4b7151ca53c5421fed7cfdafd5cc *inst/doc/renv.html
+d5b73bac97099b818ab9fc4c9eb73dc5 *inst/doc/renv.html
 96bed7d220ad207ece7dd09463db8bda *inst/resources/WELCOME
 186e9509df45baede5e825232d2440a4 *inst/resources/activate.R
 0f28660d57f2dd9dad52380e812e83d5 *inst/resources/scripts-git-askpass.sh
@@ -179,7 +179,7 @@ dae5af9769bf63387728d0d45570c1ba *man/snapshot.Rd
 d5bf2854b408f2e3c707fd93cd76e819 *man/update.Rd
 ec8f77882367d68cee28e44c0a2810fb *man/upgrade.Rd
 e0ab4414fbe3cb0a9f03c2f15ad22ae5 *man/use_python.Rd
-5933fc270b1285ecb6d0a6f572996cbe *tests/testthat.R
+19603f97f66cbb4d5e0b9aa5ca5266cd *tests/testthat.R
 699d76aa165c08e796aa4078a80a7078 *tests/testthat/local/skeleton/skeleton_1.0.1.tar.gz
 3650a6a7c781e452241993b012e55642 *tests/testthat/local/skeleton/skeleton_1.0.1.tgz
 ed5a74b6ccd53686fc405ec5fe0287b3 *tests/testthat/packages/bread/DESCRIPTION
@@ -204,7 +204,7 @@ bc25aebac1d3258595b5857c8eb17ccf *tests/testthat/test-activate.R
 b20c5608a4a7ceb7242d3fdb53f51f45 *tests/testthat/test-available-packages.R
 62f6590412d4689e3f52799c9c4a33de *tests/testthat/test-base64.R
 646447ffffbaa258854e0bb45501ecde *tests/testthat/test-bioconductor.R
-f76eb0087bab7eb0e7eeee64651cbfcc *tests/testthat/test-cache.R
+536abbc8fdfdd571ffb41c2ecbe583d9 *tests/testthat/test-cache.R
 cb5e40bb5f7679b3a7b7b36f1e9d7022 *tests/testthat/test-clean.R
 c311bd0fa79d1656ed633d3ab2b7250e *tests/testthat/test-config.R
 4e9de30639d331a0dabf6f1cbde7485a *tests/testthat/test-consent.R
@@ -233,7 +233,7 @@ d42dc25eeefb501affd866924864ad75 *tests/testthat/test-profiles.R
 afced6cf00cf4f15931503b8b848970c *tests/testthat/test-properties.R
 01c4a7cde4cd006119937888653bb1bd *tests/testthat/test-purge.R
 a27f9b83decddaf72c3147022b9aefc9 *tests/testthat/test-python.R
-353ca18a7084f9f573e8f465800c153f *tests/testthat/test-r.R
+e3ce6b7d2666e5b11f1246758387b947 *tests/testthat/test-r.R
 69c78f0f85a268b19c6dba7f706ea41c *tests/testthat/test-rebuild.R
 a8590d3de6ab0277b19e019202a5994e *tests/testthat/test-records.R
 ea5587d32c8f54750b3bd20c04b12d81 *tests/testthat/test-remotes.R
