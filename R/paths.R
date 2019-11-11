@@ -73,14 +73,14 @@ renv_paths_cache <- function(..., version = NULL) {
 }
 
 renv_paths_rtools <- function(...) {
-  drive <- Sys.getenv("SYSTEMDRIVE", unset = "C:")
-  root <- Sys.getenv("RENV_PATHS_RTOOLS", unset = file.path(drive, "Rtools"))
-  file.path(root, ...)
+  root <- renv_rtools_find()
+  file.path(root, ...) %||% ""
 }
 
 renv_paths_extsoft <- function(...) {
   renv_paths_common("extsoft", c(), ...)
 }
+
 
 
 
@@ -94,6 +94,7 @@ renv_paths_root <- function(...) {
 
 }
 
+# nocov start
 renv_paths_root_default <- function() {
 
   root <- switch(
@@ -142,6 +143,7 @@ renv_paths_root_default <- function() {
   return(temp)
 
 }
+# nocov end
 
 #' Path Customization
 #'

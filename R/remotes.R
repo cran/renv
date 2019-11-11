@@ -19,7 +19,11 @@ renv_remotes_resolve <- function(entry) {
     return(renv_remotes_resolve_url(entry))
 
   # check for paths to existing local files
-  if (renv_path_absolute(entry) && file.exists(entry)) {
+  local <-
+    fileext(entry) %in% c(".tar.gz", ".tgz", ".zip") ||
+    renv_path_absolute(entry)
+
+  if (local) {
     record <- catch(renv_remotes_resolve_local(entry))
     if (!inherits(record, "error"))
       return(record)
@@ -169,10 +173,8 @@ renv_remotes_resolve_repository <- function(entry) {
   if (package %in% rownames(renv_installed_packages_base()))
     return(renv_remotes_resolve_base(package))
 
+  version <- entry$version
   repository <- entry$repository
-  version <- entry$version %||% "latest"
-  if (identical(version, "latest"))
-    return(renv_available_packages_latest(package))
 
   list(
     Package    = package,
@@ -188,7 +190,7 @@ renv_remotes_resolve_base <- function(package) {
   list(
     Package = package,
     Version = renv_package_version(package),
-    Source  = "Base"
+    Source  = "R"
   )
 
 }
@@ -353,7 +355,7 @@ renv_remotes_resolve_local <- function(entry) {
   path <- renv_path_normalize(entry, winslash = "/", mustWork = TRUE)
 
   # first, check for a common extension
-  if (renv_archive_type(entry) == "tar")
+  if (renv_archive_type(entry) %in% c("tar", "zip"))
     return(renv_remotes_resolve_local_impl(path))
 
   # otherwise, if this is the path to a package project, use the sources as-is

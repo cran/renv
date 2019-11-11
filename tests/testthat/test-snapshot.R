@@ -1,6 +1,20 @@
 
 context("Snapshot")
 
+test_that("snapshot is idempotent", {
+
+  renv_tests_scope("oatmeal")
+
+  init(bare = TRUE)
+  install("oatmeal")
+  snapshot()
+  before <- renv_lockfile_read("renv.lock")
+  snapshot()
+  after <- renv_lockfile_read("renv.lock")
+  expect_equal(before, after)
+
+})
+
 test_that("snapshot failures are reported", {
 
   renv_scope_envvars(RENV_PATHS_ROOT = tempfile())
@@ -149,5 +163,22 @@ test_that("snapshot failures due to bad library / packages are reported", {
     expect_error(snapshot(library = "badlib"))
   })
 
+
+})
+
+test_that("snapshot ignores own package in package development scenarios", {
+
+  renv_tests_scope()
+  ensure_directory("bread")
+  setwd("bread")
+
+  writeLines(c("Type: Package", "Package: bread"), con = "DESCRIPTION")
+
+  ensure_directory("R")
+  writeLines("function() { library(bread) }", con = "R/deps.R")
+
+  lockfile <- snapshot(lockfile = NULL)
+  records <- renv_records(lockfile)
+  expect_true(is.null(records[["bread"]]))
 
 })

@@ -51,8 +51,21 @@
 #' @param quiet Boolean; report problems discovered (if any) during dependency
 #'   discovery?
 #'
+#' @param dev Boolean; include 'development' dependencies as well? That is,
+#'   packages which may be required during development but are unlikely to be
+#'   required during runtime for your project. By default, only runtime
+#'   dependencies are returned.
+#'
 #' @return An \R `data.frame` of discovered dependencies, mapping inferred
 #'   package names to the files in which they were discovered.
+#'
+#' @section Development Dependencies:
+#'
+#' `renv` attempts to distinguish between 'development' dependencies and
+#' 'runtime' dependencies. For example, you might rely on e.g.
+#' [devtools](https://cran.r-project.org/package=devtools) and
+#' [roxygen2](https://cran.r-project.org/package=roxygen2) during development
+#' for a project, but may not actually require these packages at runtime.
 #'
 #' @export
 #'
@@ -65,7 +78,8 @@
 #' }
 dependencies <- function(path = getwd(),
                          root = NULL,
-                         quiet = FALSE)
+                         quiet = FALSE,
+                         dev = FALSE)
 {
   renv_scope_error_handler()
 
@@ -80,6 +94,12 @@ dependencies <- function(path = getwd(),
 
   if (!quiet)
     renv_dependencies_report()
+
+  if (empty(deps) || nrow(deps) == 0L)
+    return(deps)
+
+  if (identical(dev, FALSE))
+    deps <- deps[!deps$Dev, ]
 
   deps
 
@@ -118,25 +138,23 @@ renv_dependencies_root_impl <- function(path) {
 
 renv_dependencies_callback <- function(path) {
 
-  name <- basename(path)
-  ext <- tolower(fileext(path))
-  case(
-
-    # special cases for special filenames
-    name == ".Rprofile"     ~ function() renv_dependencies_discover_r(path),
-    name == "DESCRIPTION"   ~ function() renv_dependencies_discover_description(path),
-    name == "_bookdown.yml" ~ function() renv_dependencies_discover_bookdown(path),
-    name == "_pkgdown.yml"  ~ function() renv_dependencies_discover_pkgdown(path),
-    name == "renv.lock"     ~ function() renv_dependencies_discover_renv_lock(path),
-    name == "rsconnect"     ~ function() renv_dependencies_discover_rsconnect(path),
-
-    # generic extension-based lookup
-    ext == ".rproj" ~ function() renv_dependencies_discover_rproj(path),
-    ext == ".r"     ~ function() renv_dependencies_discover_r(path),
-    ext == ".rmd"   ~ function() renv_dependencies_discover_multimode(path, "rmd"),
-    ext == ".rnw"   ~ function() renv_dependencies_discover_multimode(path, "rnw")
-
+  cbname <- list(
+    ".Rprofile"     = function(path) renv_dependencies_discover_r(path),
+    "DESCRIPTION"   = function(path) renv_dependencies_discover_description(path),
+    "_bookdown.yml" = function(path) renv_dependencies_discover_bookdown(path),
+    "_pkgdown.yml"  = function(path) renv_dependencies_discover_pkgdown(path),
+    "renv.lock"     = function(path) renv_dependencies_discover_renv_lock(path),
+    "rsconnect"     = function(path) renv_dependencies_discover_rsconnect(path)
   )
+
+  cbext <- list(
+    ".rproj" = function(path) renv_dependencies_discover_rproj(path),
+    ".r"     = function(path) renv_dependencies_discover_r(path),
+    ".rmd"   = function(path) renv_dependencies_discover_multimode(path, "rmd"),
+    ".rnw"   = function(path) renv_dependencies_discover_multimode(path, "rnw")
+  )
+
+  cbname[[basename(path)]] %||% cbext[[tolower(fileext(path))]]
 
 }
 
@@ -170,9 +188,9 @@ renv_dependencies_find_dir <- function(path, root) {
   children <- renv_dependencies_find_dir_children(path, root)
   paths <- lapply(children, renv_dependencies_find_impl, root = root)
 
-  callback <- renv_dependencies_callback(path)
-  if (is.function(callback))
-    paths <- c(path, paths)
+  rsconnect <- file.path(path, "rsconnect")
+  if (file.exists(rsconnect))
+    paths <- c(rsconnect, paths)
 
   paths
 
@@ -229,7 +247,12 @@ renv_dependencies_discover_impl <- function(path) {
     return(entry)
 
   callback <- renv_dependencies_callback(path)
-  result <- tryCatch(callback(), error = warning)
+  if (is.null(callback)) {
+    fmt <- "internal error: no callback registered for file %s"
+    warningf(fmt, shQuote(aliased_path(callback), type = "cmd"))
+  }
+
+  result <- tryCatch(callback(path), error = warning)
   if (inherits(result, "condition"))
     return(NULL)
 
@@ -294,11 +317,13 @@ renv_dependencies_discover_description <- function(path, fields = NULL) {
     if (empty(matches))
       return(list())
 
+    dev <- field == "Suggests"
     renv_dependencies_list(
       path,
       extract_chr(matches, 2L),
       extract_chr(matches, 3L),
-      extract_chr(matches, 4L)
+      extract_chr(matches, 4L),
+      dev
     )
 
   })
@@ -517,7 +542,7 @@ renv_dependencies_discover_rproj <- function(path) {
     deps$push("roxygen2")
   }
 
-  renv_dependencies_list(path, deps$data())
+  renv_dependencies_list(path, deps$data(), dev = TRUE)
 
 }
 
@@ -716,8 +741,12 @@ renv_dependencies_discover_r_pacman <- function(node, envir) {
 
 }
 
-renv_dependencies_list <- function(source, packages, require = "", version = "") {
-
+renv_dependencies_list <- function(source,
+                                   packages,
+                                   require = "",
+                                   version = "",
+                                   dev = FALSE)
+{
   if (empty(packages))
     return(list())
 
@@ -728,6 +757,7 @@ renv_dependencies_list <- function(source, packages, require = "", version = "")
     Package = as.character(packages),
     Require = require,
     Version = version,
+    Dev     = dev,
     stringsAsFactors = FALSE
   )
 

@@ -89,7 +89,7 @@ snapshot <- function(project  = NULL,
 
   new <- renv_lockfile_init(project)
   renv_records(new) <-
-    renv_snapshot_r_packages(library = library) %>%
+    renv_snapshot_r_packages(library = library, project = project) %>%
     renv_snapshot_filter(project = project, type = type) %>%
     renv_snapshot_fixup()
 
@@ -128,10 +128,13 @@ snapshot <- function(project  = NULL,
     renv_snapshot_report_actions(actions, old, new)
 
   # request user confirmation
+
+  # nocov start
   if (confirm && !proceed()) {
     message("* Operation aborted.")
     return(invisible(new))
   }
+  # nocov end
 
   # write it out
   ensure_parent_directory(lockfile)
@@ -354,6 +357,7 @@ renv_snapshot_validate_sources <- function(project, lockfile, library) {
       "Consider re-installing these packages from a known source (e.g. CRAN)."
     )
   )
+  # nocov end
 
   FALSE
 
@@ -362,13 +366,13 @@ renv_snapshot_validate_sources <- function(project, lockfile, library) {
 # NOTE: if packages are found in multiple libraries,
 # then the first package found in the library paths is
 # kept and others are discarded
-renv_snapshot_r_packages <- function(library = NULL) {
-  records <- uapply(library, renv_snapshot_r_packages_impl)
+renv_snapshot_r_packages <- function(library = NULL, project = NULL) {
+  records <- uapply(library, renv_snapshot_r_packages_impl, project = project)
   dupes <- duplicated(names(records))
   records[!dupes]
 }
 
-renv_snapshot_r_packages_impl <- function(library = NULL) {
+renv_snapshot_r_packages_impl <- function(library = NULL, project = NULL) {
 
   # list packages in the library
   library <- library %||% renv_libpaths_default()
@@ -379,7 +383,8 @@ renv_snapshot_r_packages_impl <- function(library = NULL) {
   paths <- paths[!basename(paths) %in% c(ip$Package, "translations")]
 
   # remove ignored packages
-  paths <- paths[!basename(paths) %in% settings$ignored.packages()]
+  ignored <- renv_project_ignored_packages(project = project)
+  paths <- paths[!basename(paths) %in% ignored]
 
   # ignore '_cache' folder explicitly (written by 'pak')
   paths <- paths[!basename(paths) %in% "_cache"]
@@ -553,6 +558,7 @@ renv_snapshot_report_actions <- function(actions, old, new) {
 }
 # nocov end
 
+# nocov start
 renv_snapshot_auto <- function(project) {
 
   # don't auto-snapshot if disabled by user
@@ -591,6 +597,7 @@ renv_snapshot_auto <- function(project) {
   TRUE
 
 }
+# nocov end
 
 renv_snapshot_filter <- function(project, records, type) {
 
@@ -643,7 +650,7 @@ renv_snapshot_filter_packrat <- function(project, records) {
 
   # keep only package records for packages actually used in project
   deps <- dependencies(project, quiet = TRUE)
-  ignored <- settings$ignored.packages(project = project)
+  ignored <- renv_project_ignored_packages(project = project)
   packages <- renv_vector_diff(unique(deps$Package), ignored)
   paths <- renv_package_dependencies(packages, project = project)
   all <- as.character(names(paths))
@@ -702,6 +709,7 @@ renv_snapshot_fixup_renv <- function(records) {
   if (renv_testing())
     return(records)
 
+  # nocov start
   record <- records$renv
   if (is.null(record) || !identical(record$Source, "unknown"))
     return(records)
@@ -709,5 +717,6 @@ renv_snapshot_fixup_renv <- function(records) {
   remote <- paste("rstudio/renv", record$Version, sep = "@")
   records$renv <- renv_remotes_resolve(remote)
   records
+  # nocov end
 
 }

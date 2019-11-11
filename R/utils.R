@@ -65,6 +65,9 @@ aliased_path <- function(path) {
   if (is.na(home))
     return(path)
 
+  home <- gsub("\\", "/", home, fixed = TRUE)
+  path <- gsub("\\", "/", path, fixed = TRUE)
+
   match <- regexpr(home, path, fixed = TRUE, useBytes = TRUE)
   path[match == 1] <- file.path("~", substring(path[match == 1], nchar(home) + 2L))
 
@@ -320,14 +323,14 @@ remap <- function(x, map) {
 
 }
 
-header <- function(label, n = 38L) {
+header <- function(label, prefix = "#", n = 38L) {
 
-  n <- n - nchar(label) - 3L
+  n <- n - nchar(label) - nchar(prefix) - 2L
   if (n <= 0)
-    return(paste("#", label))
+    return(paste(prefix, label))
 
   tail <- paste(rep.int("=", n), collapse = "")
-  paste("#", label, tail)
+  paste(prefix, label, tail)
 
 }
 

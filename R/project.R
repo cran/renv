@@ -84,20 +84,43 @@ renv_project_records_description <- function(project, descpath) {
   # next, find packages mentioned in the DESCRIPTION file
   fields <- c("Depends", "Imports", "Suggests", "LinkingTo")
   deps <- renv_dependencies_discover_description(descpath, fields)
-  ignored <- settings$ignored.packages(project = project)
-  packages <- setdiff(deps$Package, c("R", ignored))
+  specs <- split(deps, deps$Package)
+
+  # drop ignored specs
+  ignored <- renv_project_ignored_packages(project = project)
+  specs <- specs[setdiff(names(specs), c("R", ignored))]
 
   # if any Roxygen fields are included,
   # infer a dependency on roxygen2 and devtools
   desc <- renv_description_read(descpath)
-  if (any(grepl("^Roxygen", names(desc))))
-    packages <- union(packages, c("devtools", "roxygen2"))
+  if (any(grepl("^Roxygen", names(desc)))) {
+    for (package in c("devtools", "roxygen2")) {
+      specs[[package]] <-
+        specs[[package]] %||%
+        list(Package = package, Require = "", Version = "")
+    }
+  }
 
   # now, try to resolve the packages
-  records <- lapply(packages, function(package) {
-    remotes[[package]] %||% renv_remotes_resolve(package)
+  records <- enumerate(specs, function(package, spec) {
+
+    # use remote if supplied
+    if (!is.null(remotes[[package]]))
+      return(remotes[[package]])
+
+    # check for explicit version requirement
+    explicit <- spec[spec$Require == "==", ]
+    if (nrow(explicit) == 0)
+      return(renv_remotes_resolve(package))
+
+    version <- spec$Version[[1]]
+    if (!nzchar(version))
+      return(renv_remotes_resolve(package))
+
+    entry <- paste(package, version, sep = "@")
+    renv_remotes_resolve(entry)
+
   })
-  names(records) <- extract_chr(records, "Package")
 
   # return records
   records
@@ -116,5 +139,25 @@ renv_project_records_description_remotes <- function(project, descpath) {
   resolved <- lapply(splat, renv_remotes_resolve)
   names(resolved) <- extract_chr(resolved, "Package")
   resolved
+
+}
+
+renv_project_ignored_packages <- function(project) {
+
+  # if we don't have a project, nothing to do
+  if (is.null(project))
+    return(character())
+
+  # read base set of ignored packages
+  ignored <- settings$ignored.packages(project = project)
+
+  # for R package projects, ensure the project itself is ignored
+  if (renv_project_type(project) == "package") {
+    desc <- renv_description_read(project)
+    ignored <- c(ignored, desc[["Package"]])
+  }
+
+  # return collected set of ignored packages
+  ignored
 
 }
