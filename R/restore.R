@@ -13,6 +13,11 @@
 #'   project. When `NULL`, the most recently generated lockfile for this project
 #'   is used.
 #'
+#' @param packages A subset of packages recorded in the lockfile to restore.
+#'   When `NULL` (the default), all packages available in the lockfile will be
+#'   restored. Any required recursive dependencies of the requested packages
+#'   will be restored as well.
+#'
 #' @param repos The repositories to use during restore, for packages installed
 #'   from CRAN or another similar R package repository. When set, this will
 #'   override any repositories declared in the lockfile. See also the
@@ -43,6 +48,7 @@ restore <- function(project  = NULL,
                     ...,
                     library  = NULL,
                     lockfile = NULL,
+                    packages = NULL,
                     repos    = NULL,
                     clean    = FALSE,
                     confirm  = interactive())
@@ -53,6 +59,7 @@ restore <- function(project  = NULL,
   project  <- project %||% renv_project()
   library  <- library %||% renv_libpaths_all()
   lockfile <- lockfile %||% renv_lockfile_load(project = project)
+  lockfile <- renv_lockfile_resolve(lockfile)
 
   # activate the requested library
   ensure_directory(library)
@@ -75,6 +82,13 @@ restore <- function(project  = NULL,
 
   if (length(repos))
     renv_scope_options(repos = convert(repos, "character"))
+
+  # set up Bioconductor repositories
+  biocversion <- lockfile$Bioconductor$Version
+  if (!is.null(biocversion)) {
+    biocversion <- package_version(biocversion)
+    renv_scope_options(renv.bioconductor.version = biocversion)
+  }
 
   # get records for R packages currently installed
   current <- snapshot(project = project,
@@ -99,6 +113,9 @@ restore <- function(project  = NULL,
   # don't take any actions with ignored packages
   ignored <- renv_project_ignored_packages(project = project)
   diff <- diff[renv_vector_diff(names(diff), ignored)]
+
+  # only take action with requested packages
+  diff <- diff[intersect(names(diff), packages %||% names(diff))]
 
   if (!length(diff)) {
     name <- if (!missing(library)) "library" else "project"
@@ -128,13 +145,11 @@ renv_restore_run_actions <- function(project, actions, current, lockfile) {
 
   packages <- names(actions)
 
-  renv_restore_begin(
+  renv_scope_restore(
     project = project,
     records = renv_records(lockfile),
     packages = packages
   )
-
-  on.exit(renv_restore_end(), add = TRUE)
 
   # first, handle package removals
   removes <- actions[actions == "remove"]
@@ -181,7 +196,7 @@ renv_restore_begin <- function(project = NULL,
                                rebuild = NULL,
                                recursive = TRUE)
 {
-
+  state <- renv_global_get("restore.state")
   renv_global_set("restore.state", env(
 
     # the active project (if any) used for restore
@@ -218,10 +233,11 @@ renv_restore_begin <- function(project = NULL,
 
   ))
 
+  state
 }
 
-renv_restore_end <- function() {
-  renv_global_clear("restore.state")
+renv_restore_end <- function(state) {
+  renv_global_set("restore.state", state)
 }
 
 # nocov start
@@ -290,13 +306,8 @@ renv_restore_find_impl <- function(record, library) {
   if (inherits(current, "error"))
     return("")
 
-  # check for matching records
-  source <- tolower(record$Source %||% "")
-  if (!nzchar(source))
-    return("")
-
   # check for an up-to-date version from R package repository
-  if (source %in% c("cran", "repository")) {
+  if (renv_record_source(record) %in% c("cran", "repository")) {
     fields <- c("Package", "Version")
     if (identical(record[fields], current[fields]))
       return(path)

@@ -114,12 +114,10 @@ renv_download_default <- function(url, destfile, type, request, headers) {
   headers <- c(headers, renv_download_auth(url, type))
   renv_download_default_agent_scope(headers)
 
-  # prefer the 'libcurl' method if available, but fall back
-  # to 'auto' if not available
-  method <- "auto"
-  libcurl <- capabilities("libcurl")
-  if (length(libcurl) && libcurl)
-    method <- "libcurl"
+  # on Windows, prefer 'wininet' as most users will have already configured
+  # authentication etc. to work with this protocol
+  default <- if (renv_platform_windows()) "wininet" else "auto"
+  method <- Sys.getenv("RENV_DOWNLOAD_FILE_METHOD", unset = default)
 
   # handle absence of 'headers' argument in older versions of R
   args <- list(url      = url,
@@ -244,16 +242,10 @@ renv_download_curl <- function(url, destfile, type, request, headers) {
 
   args$push("--config", shQuote(config))
 
-  stdout <- tempfile("renv-curl-stdout-")
-  stderr <- tempfile("renv-curl-stderr-")
-
-  status <- system2("curl", args$data(), stdout = stdout, stderr = stderr)
-
-  if (file.exists(stderr)) {
-    errs <- readLines(stderr)
-    if (length(errs))
-      warning(errs)
-  }
+  output <- system2("curl", args$data(), stdout = TRUE, stderr = TRUE)
+  status <- attr(output, "status") %||% 0L
+  if (status != 0L)
+    warning(output)
 
   status
 

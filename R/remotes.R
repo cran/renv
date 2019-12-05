@@ -14,9 +14,13 @@ remote <- function(spec) {
 # take a short-form remotes entry, and generate a package record
 renv_remotes_resolve <- function(entry) {
 
+  # check for already-resolved lists
+  if (is.list(entry))
+    return(entry)
+
   # check for URLs
   if (grepl("^(?:file|https?)://", entry))
-    return(renv_remotes_resolve_url(entry))
+    return(renv_remotes_resolve_url(entry, quiet = TRUE))
 
   # check for paths to existing local files
   local <-
@@ -58,7 +62,7 @@ renv_remotes_resolve_impl <- function(entry) {
     stopf("unknown remote type '%s'", parsed$type %||% "<NA>")
   )
 
-  drop_if(is.null, resolved)
+  reject(resolved, is.null)
 
 }
 
@@ -323,7 +327,7 @@ renv_remotes_resolve_gitlab <- function(entry) {
 
 }
 
-renv_remotes_resolve_url <- function(entry) {
+renv_remotes_resolve_url <- function(entry, quiet = FALSE) {
 
   tempfile <- renv_tempfile("renv-url-")
   writeLines(entry, con = tempfile)
@@ -334,7 +338,7 @@ renv_remotes_resolve_url <- function(entry) {
   path <- renv_paths_source("url", name)
 
   ensure_parent_directory(path)
-  download(entry, path, quiet = TRUE)
+  download(entry, path, quiet = quiet)
 
   desc <- renv_description_read(path)
 

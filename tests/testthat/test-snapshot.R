@@ -182,3 +182,39 @@ test_that("snapshot ignores own package in package development scenarios", {
   expect_true(is.null(records[["bread"]]))
 
 })
+
+test_that("snapshot warns about unsatisfied dependencies", {
+
+  renv_tests_scope("toast")
+  init(settings = list(use.cache = FALSE))
+
+  descpath <- system.file("DESCRIPTION", package = "toast")
+  toast <- renv_description_read(descpath)
+  toast$Depends <- "bread (> 1.0.0)"
+  renv_dcf_write(toast, file = descpath)
+
+  expect_condition(
+    snapshot(),
+    class = "renv.snapshot.unsatisfied_dependencies"
+  )
+
+})
+
+test_that("snapshot records packages discovered in local sources", {
+
+  renv_tests_scope("skeleton")
+  renv_scope_envvars(RENV_PATHS_CACHE = tempfile())
+
+  init(bare = TRUE)
+
+  record <- list(Package = "skeleton", Version = "1.0.1", Source = "Local")
+  install(list(record))
+
+  lockfile <- snapshot(lockfile = NULL)
+  records <- renv_records(lockfile)
+  skeleton <- records[["skeleton"]]
+
+  expect_equal(skeleton$Version, "1.0.1")
+  expect_equal(skeleton$Source, "Local")
+
+})

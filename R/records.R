@@ -42,13 +42,17 @@ renv_record_cacheable <- function(record) {
     return(FALSE)
 
   # check for unknown source
-  source <- record$Source %||% "unknown"
+  source <- renv_record_source(record)
   if (source == "unknown")
     return(FALSE)
 
   # record is ok
   TRUE
 
+}
+
+renv_record_source <- function(record) {
+  tolower(record$Source %||% "unknown")
 }
 
 renv_record_validate <- function(record, quiet = FALSE) {
@@ -119,10 +123,11 @@ renv_record_format_pair <- function(lhs, rhs) {
   })
 
   changed <- names(which(diff))
-  if (empty(changed) || "Source" %in% changed) {
+
+  if (empty(changed)) {
+    fmt <- "[%s: unchanged]"
     lhsf <- renv_record_format_short(lhs)
-    rhsf <- renv_record_format_short(rhs)
-    return(sprintf("[%s -> %s]", lhsf, rhsf))
+    return(sprintf(fmt, lhsf))
   }
 
   # check for only sha changed
@@ -165,6 +170,14 @@ renv_record_format_pair <- function(lhs, rhs) {
     return(sprintf(fmt, lhsf, rhsf))
   }
 
+  # if the source has changed, highlight that
+  if ("Source" %in% changed) {
+    fmt <- "[%s -> %s]"
+    lhsf <- renv_record_format_short(lhs)
+    rhsf <- renv_record_format_short(rhs)
+    return(sprintf(fmt, lhsf, rhsf))
+  }
+
   # otherwise, report each diff individually
   diffs <- map_chr(changed, function(field) {
 
@@ -186,10 +199,31 @@ renv_record_format_pair <- function(lhs, rhs) {
 
 renv_records_equal <- function(lhs, rhs) {
 
-  lhs <- drop_if(is.null, lhs)
-  rhs <- drop_if(is.null, rhs)
+  lhs <- reject(lhs, is.null)
+  rhs <- reject(rhs, is.null)
 
   nm <- setdiff(union(names(lhs), names(rhs)), "Hash")
   identical(keep(lhs, nm), keep(rhs, nm))
+
+}
+
+renv_records_resolve <- function(records) {
+
+  enumerate(records, function(package, record) {
+
+    # check for already-resolved records
+    if (is.null(record) || is.list(record))
+      return(record)
+
+    # check for version-only specifications and
+    # prepend the package name in such a case
+    pattern <- "^(?:[[:digit:]]+[.-]){1,}[[:digit:]]+$"
+    if (grepl(pattern, record))
+      record <- paste(package, record, sep = "@")
+
+    # resolve the record
+    renv_remotes_resolve(record)
+
+  })
 
 }

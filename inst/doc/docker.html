@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html>
 
 <head>
 
 <meta charset="utf-8" />
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="pandoc" />
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
@@ -19,19 +18,18 @@
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
-code.sourceCode > span:empty { height: 1.2em; }
-.sourceCode { overflow: visible; }
-code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
 pre.sourceCode { margin: 0; }
 @media screen {
 div.sourceCode { overflow: auto; }
 }
 @media print {
-code.sourceCode { white-space: pre-wrap; }
-code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
   { counter-reset: source-line 0; }
@@ -51,7 +49,7 @@ pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-le
 div.sourceCode
   {   }
 @media screen {
-code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -330,12 +328,12 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 <h2>Creating Docker Images with renv</h2>
 <p>With Docker, <a href="https://docs.docker.com/engine/reference/builder/">Dockerfiles</a> are used to define new images. Dockerfiles can be used to declaratively specify how a Docker image should be created. A Docker image captures the state of a machine at some point in time – e.g., an Ubuntu operating system after downloading and installing R 3.5. Docker containers can be created using that image as a base, allowing isolated applications to run using the same pre-defined machine state.</p>
 <p>First, you’ll need to get <code>renv</code> installed on your Docker image. The easiest way to accomplish this is with the <code>remotes</code> package. For example:</p>
-<pre><code>ENV RENV_VERSION 0.5.0-25
+<pre><code>ENV RENV_VERSION 0.9.0
 RUN R -e &quot;install.packages(&#39;remotes&#39;, repos = c(CRAN = &#39;https://cloud.r-project.org&#39;))&quot;
 RUN R -e &quot;remotes::install_github(&#39;rstudio/renv@${RENV_VERSION}&#39;)&quot;</code></pre>
 <p>Now, <code>renv</code> can be used to install packages on the image. If you’d like the <code>renv.lock</code> lockfile to be used to install R packages when the Docker image is built, you can include something of the form:</p>
 <pre><code>WORKDIR /project
-COPY renv.lock ./
+COPY renv.lock renv.lock
 RUN R -e &#39;renv::restore()&#39;</code></pre>
 <p>With this, <code>renv</code> will download and install packages from CRAN and other external sources as appropriate when the image is created.</p>
 <p>There are two main downsides to this approach:</p>
@@ -351,7 +349,7 @@ RUN R -e &#39;renv::restore()&#39;</code></pre>
 <p>One can control the <code>renv</code> cache directory with the environment variable <code>RENV_PATHS_CACHE</code>. For example:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw">Sys.setenv</span>(<span class="dt">RENV_PATHS_CACHE =</span> <span class="st">&quot;~/path/to/cache&quot;</span>)</span>
 <span id="cb3-2"><a href="#cb3-2"></a>renv<span class="op">:::</span><span class="kw">renv_paths_cache</span>()</span>
-<span id="cb3-3"><a href="#cb3-3"></a><span class="co">#&gt; [1] &quot;~/path/to/cache/v4/R-3.6/x86_64-apple-darwin15.6.0&quot;</span></span></code></pre></div>
+<span id="cb3-3"><a href="#cb3-3"></a><span class="co">#&gt; [1] &quot;~/path/to/cache/v5/R-3.6/x86_64-apple-darwin15.6.0&quot;</span></span></code></pre></div>
 <p>Note that the platform and R version in use are appended to the requested cache directory. This ensures that a single directory can act a base of cached packages for multiple different platforms and R versions.</p>
 <p>Next, we need to figure out how to tell the Docker containers we create to use this cache. The most common option here is to mount a directory in the container that maps to persistent storage on the host system, and then set the aforementioned <code>RENV_PATHS_CACHE</code> environment variable to point to this mount. You can specify this when the container is launched. For example, if you had a container running a Shiny application:</p>
 <pre><code>RENV_PATHS_CACHE_HOST=/opt/local/renv/cache
@@ -359,8 +357,8 @@ RENV_PATHS_CACHE_CONTAINER=/renv/cache
 docker run --rm \
     -e &quot;RENV_PATHS_CACHE=${RENV_PATHS_CACHE_CONTAINER}&quot; \
     -v &quot;${RENV_PATHS_CACHE_HOST}:${RENV_PATHS_CACHE_CONTAINER}&quot; \
-    -p 14619:14619 \
-    R --vanilla --slave -e &#39;renv::activate(); renv::restore(); shiny::runApp(host = &quot;0.0.0.0&quot;, port = 14619)&#39;</code></pre>
+    -p 14618:14618 \
+    R --slave -e &#39;renv::restore(); shiny::runApp(host = &quot;0.0.0.0&quot;, port = 14618)&#39;</code></pre>
 <p>With this, any calls to <code>renv</code> APIs within the created docker container will have access to the mounted cache. The first time you run a container, <code>renv</code> will likely need to populate the cache, and so some time will be spent downloading and installing the required packages. Subsequent runs should be much faster, as <code>renv</code> will be able to reuse the global package cache.</p>
 <p>The primary downside with this approach compared to the image-based approach is that it requires you to modify how containers are created, and requires a bit of extra orchestration in how containers are launched. However, once the <code>renv</code> cache is active, newly-created containers will launch very quickly, and a single image can then be used as a base for a myriad of different containers and applications, each with their own private R library.</p>
 </div>

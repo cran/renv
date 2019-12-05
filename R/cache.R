@@ -1,7 +1,15 @@
 
 # tools for interacting with the renv global package cache
 renv_cache_version <- function() {
-  "v4"
+  # NOTE: users should normally not override the cache version;
+  # this is provided just to make testing easier
+  Sys.getenv("RENV_CACHE_VERSION", unset = "v5")
+}
+
+renv_cache_version_previous <- function() {
+  version <- renv_cache_version()
+  number <- as.integer(substring(version, 2L))
+  paste("v", number - 1L, sep = "")
 }
 
 renv_cache_package_path <- function(record) {
@@ -18,17 +26,9 @@ renv_cache_package_path <- function(record) {
     return(path)
   }
 
-  # figure out the R version to be used when constructing
-  # the cache package path
-  built <- record$Built
-  version <- if (is.null(built))
-    getRversion()
-  else
-    substring(built, 3, regexpr(";", built, fixed = TRUE) - 1L)
-
   # if the record doesn't have a hash, check to see if we can still locate a
   # compatible package version within the cache
-  root <- with(record, renv_paths_cache(Package, Version, version = version))
+  root <- with(record, renv_paths_cache(Package, Version))
   hashes <- list.files(root, full.names = TRUE)
   packages <- list.files(hashes, full.names = TRUE)
 
@@ -42,7 +42,7 @@ renv_cache_package_path <- function(record) {
 
     # if we're requesting an install from an R package repository,
     # and the cached package has a "Repository" field, then use it
-    source <- tolower(record$Source %||% "")
+    source <- renv_record_source(record)
     hasrepo <-
       source %in% c("cran", "repository") &&
       "Repository" %in% names(dcf)
@@ -79,7 +79,7 @@ renv_cache_synchronize <- function(record, linkable = FALSE) {
   # unknown source are not cacheable)
   desc <- renv_description_read(path)
   source <- renv_snapshot_description_source(desc)
-  if (identical(source, list(Source = "unknown")))
+  if (identical(source, list(Source = "Unknown")))
     return(FALSE)
 
   # bail if record not cacheable
@@ -134,8 +134,8 @@ renv_cache_synchronize <- function(record, linkable = FALSE) {
 
 }
 
-renv_cache_list <- function(packages = NULL) {
-  cache <- renv_paths_cache()
+renv_cache_list <- function(cache = NULL, packages = NULL) {
+  cache <- cache %||% renv_paths_cache()
   names <- file.path(cache, packages %||% list.files(cache))
   versions <- list.files(names, full.names = TRUE)
   hashes <- list.files(versions, full.names = TRUE)
@@ -207,7 +207,7 @@ renv_cache_diagnose_bad_hash <- function(paths, problems, verbose) {
     renv_pretty_print(
       entries,
       "The following packages have incorrect hashes:",
-      "These packages should be purged and re-installed.",
+      "Consider using `renv::rehash()` to re-hash these packages.",
       wrap = FALSE
     )
   }
@@ -257,20 +257,23 @@ renv_cache_format_path <- function(paths) {
 }
 # nocov end
 
-renv_cache_clean_empty <- function() {
+renv_cache_clean_empty <- function(cache = NULL) {
 
   # move to cache root
-  root <- renv_paths_cache()
-  owd <- setwd(root)
+  cache <- cache %||% renv_paths_cache()
+  owd <- setwd(cache)
   on.exit(setwd(owd), add = TRUE)
 
   # construct system command for removing empty directories
-  command <- if (renv_platform_windows())
-    "robocopy . . /S /MOVE"
-  else
-    "find . -type d -empty -delete"
+  action <- "removing empty directories"
+  if (renv_platform_windows()) {
+    args <- c(".", ".", "/S", "/MOVE")
+    renv_system_exec("robocopy", args, action, 0:8)
+  } else {
+    args <- c(".", "-type", "d", "-empty", "-delete")
+    renv_system_exec("find", args, action)
+  }
 
-  system(command, ignore.stdout = TRUE, ignore.stderr = TRUE)
   TRUE
 
 }

@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html>
 
 <head>
 
 <meta charset="utf-8" />
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="pandoc" />
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
@@ -19,19 +18,18 @@
 
 <style type="text/css">code{white-space: pre;}</style>
 <style type="text/css" data-origin="pandoc">
-code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
-code.sourceCode > span:empty { height: 1.2em; }
-.sourceCode { overflow: visible; }
-code.sourceCode { white-space: pre; position: relative; }
 div.sourceCode { margin: 1em 0; }
 pre.sourceCode { margin: 0; }
 @media screen {
 div.sourceCode { overflow: auto; }
 }
 @media print {
-code.sourceCode { white-space: pre-wrap; }
-code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
   { counter-reset: source-line 0; }
@@ -51,7 +49,7 @@ pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-le
 div.sourceCode
   {   }
 @media screen {
-code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 code span.al { color: #ff0000; font-weight: bold; } /* Alert */
 code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
@@ -309,13 +307,23 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 <p>If your project depends on R packages not available in any external source, you can set up an ad-hoc local source to use during restore. This allows you to provide package tarballs that can be used to restore packages otherwise not available elsewhere.</p>
 <p>The environment variable <code>RENV_PATHS_LOCAL</code> can be used to customize where this local source of packages should live. It should point to a directory containing package binaries and sources, with a structure of the form:</p>
 <ul>
+<li><code>${RENV_PATHS_LOCAL}/&lt;package&gt;_&lt;version&gt;.tar.gz</code>; or</li>
 <li><code>${RENV_PATHS_LOCAL}/&lt;package&gt;/&lt;package&gt;_&lt;version&gt;.tar.gz</code></li>
 </ul>
-<p>For example, if your project depended on a package <code>skeleton [1.0.0]</code>, you could place the tarball for this package at:</p>
+<p>Alternatively, you can also use project-specific local sources by placing your packages within a folder located at <code>renv/local</code>. Note that this folder does not exist by default; you must create it to opt-in to this mechanism.</p>
 <ul>
-<li><code>${RENV_PATHS_LOCAL}/skeleton/skeleton_1.0.0.tar.gz</code></li>
+<li><code>&lt;project&gt;/renv/local/&lt;package&gt;_&lt;version&gt;.tar.gz</code>; or</li>
+<li><code>&lt;project&gt;/renv/local/&lt;package&gt;/&lt;package&gt;_&lt;version&gt;.tar.gz</code></li>
 </ul>
-<p>Once this is done, <code>renv</code> will consult this directory during future attempts to restore packages installed from unknown sources.</p>
+<p>As an example, if your project depended on a package <code>skeleton 1.0.0</code>, you could place a tarball for this package in one of the following locations:</p>
+<ul>
+<li><code>${RENV_PATHS_LOCAL}/skeleton_1.0.0.tar.gz</code></li>
+<li><code>${RENV_PATHS_LOCAL}/skeleton/skeleton_1.0.0.tar.gz</code></li>
+<li><code>&lt;project&gt;/renv/local/&lt;package&gt;_&lt;version&gt;.tar.gz</code>; or</li>
+<li><code>&lt;project&gt;/renv/local/&lt;package&gt;/&lt;package&gt;_&lt;version&gt;.tar.gz</code></li>
+</ul>
+<p>Once this is done, <code>renv</code> will consult these directories during future attempts to restore packages installed from unknown sources.</p>
+<p>Note that packages placed in one of these local sources will override any default source recorded in the lockfile. For example, if <code>skeleton 1.0.0</code> was also available on CRAN, <code>renv::restore()</code> would still use the locally-provided tarball rather than the version available from CRAN.</p>
 <p>If you want to see what directory is being used by <code>renv</code> for local package sources, you can execute:</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a>renv<span class="op">:::</span><span class="kw">renv_paths_local</span>()</span></code></pre></div>
 <p>See <code>?paths</code> for more details.</p>
@@ -327,7 +335,7 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
   &quot;Version&quot;: &quot;1.0.1&quot;,
   &quot;Source&quot;: &quot;/mnt/r/pkg/skeleton_1.0.1.tar.gz&quot;
 }</code></pre>
-<p>The main requirement is that your source path exists, and the path has an extension of either <code>.tar.gz</code>, <code>.tgz</code> (for macOS binaries) or <code>.zip</code> (for Windows binaries).</p>
+<p>The main requirement is that your source path exists, and the path has an extension of either <code>.tar.gz</code>, (for source packages), <code>.tgz</code> (for macOS binaries) or <code>.zip</code> (for Windows binaries).</p>
 </div>
 
 

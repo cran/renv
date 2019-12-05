@@ -83,11 +83,11 @@ dependencies <- function(path = getwd(),
 {
   renv_scope_error_handler()
 
-  renv_dependencies_begin()
-  on.exit(renv_dependencies_end(), add = TRUE)
-
   path <- renv_path_normalize(path, winslash = "/", mustWork = TRUE)
   root <- root %||% renv_dependencies_root(path)
+
+  renv_dependencies_begin(root = root)
+  on.exit(renv_dependencies_end(), add = TRUE)
 
   files <- renv_dependencies_find(path, root)
   deps <- renv_dependencies_discover(files, quiet)
@@ -301,9 +301,14 @@ renv_dependencies_discover_description <- function(path, fields = NULL) {
   pattern <- "([a-zA-Z0-9._]+)(?:\\s*\\(([><=]+)\\s*([0-9.-]+)\\))?"
 
   # if this is the DESCRIPTION file for the active project, include
-  # Suggests since they're often needed as well
-  if (identical(renv_project(), dirname(path)))
+  # Suggests since they're often needed as well. such packages will be
+  # considered development dependencies, except for package projects
+  state <- renv_dependencies_state()
+  type <- "unknown"
+  if (identical(file.path(state$root, "DESCRIPTION"), path)) {
     fields <- c(fields, "Suggests")
+    type <- renv_description_type(desc = dcf)
+  }
 
   data <- lapply(fields, function(field) {
 
@@ -317,7 +322,7 @@ renv_dependencies_discover_description <- function(path, fields = NULL) {
     if (empty(matches))
       return(list())
 
-    dev <- field == "Suggests"
+    dev <- field == "Suggests" && type != "package"
     renv_dependencies_list(
       path,
       extract_chr(matches, 2L),
@@ -384,6 +389,15 @@ renv_dependencies_discover_rmd_yaml_header <- function(path) {
   output <- yaml$output %||% ""
   if (is.list(output) && length(output) == 1)
     output <- names(output)
+
+  if (is_string(output)) {
+    splat <- strsplit(output, ":{2,3}")[[1]]
+    if (length(splat) == 2)
+      deps$push(splat[[1]])
+  }
+
+  # check for custom site generator function from another package
+  output <- yaml$site %||% ""
 
   if (is_string(output)) {
     splat <- strsplit(output, ":{2,3}")[[1]]
@@ -562,7 +576,8 @@ renv_dependencies_discover_r <- function(path = NULL, text = NULL) {
     renv_dependencies_discover_r_library_require,
     renv_dependencies_discover_r_require_namespace,
     renv_dependencies_discover_r_colon,
-    renv_dependencies_discover_r_pacman
+    renv_dependencies_discover_r_pacman,
+    renv_dependencies_discover_r_modules
   )
 
   discoveries <- new.env(parent = emptyenv())
@@ -741,6 +756,30 @@ renv_dependencies_discover_r_pacman <- function(node, envir) {
 
 }
 
+renv_dependencies_discover_r_modules <- function(node, envir) {
+
+  node <- renv_call_expect(node, "modules", c("import"))
+  if (is.null(node))
+    return(FALSE)
+
+  # attempt to match the call
+  prototype <- function(from, ..., attach = TRUE, where = parent.frame()) {}
+  matched <- catch(match.call(prototype, node, expand.dots = FALSE))
+  if (inherits(matched, "error"))
+    return(FALSE)
+
+  # extract character vector or symbol from `from`
+  package <- matched[["from"]]
+  if (empty(package))
+    return(FALSE)
+
+  # package could be symbols or character so call as.character
+  # to be safe then mark packages as known
+  envir[[as.character(package)]] <- TRUE
+
+  TRUE
+}
+
 renv_dependencies_list <- function(source,
                                    packages,
                                    require = "",
@@ -826,8 +865,9 @@ renv_dependencies_state <- function() {
   renv_global_get("dependencies.state")
 }
 
-renv_dependencies_begin <- function() {
-  renv_global_set("dependencies.state", env(problems = stack()))
+renv_dependencies_begin <- function(root = NULL) {
+  state <- env(root = root, problems = stack())
+  renv_global_set("dependencies.state", state)
 }
 
 renv_dependencies_end <- function() {

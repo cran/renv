@@ -45,12 +45,17 @@ install <- function(packages = NULL,
   renv_consent_check()
   renv_scope_error_handler()
 
-  project  <- project %||% renv_project()
-  library  <- library %||% renv_libpaths_all()
+  project <- project %||% renv_project()
+  library <- library %||% renv_libpaths_all()
 
   packages <- packages %||% renv_project_records(project)
   if (is.null(packages))
     stopf("no packages specified in renv::install() request")
+
+  if (empty(packages)) {
+    vwritef("* There are no packages to install.")
+    return(invisible(list()))
+  }
 
   # override repositories if requested
   repos <- renv_config("repos.override")
@@ -58,12 +63,7 @@ install <- function(packages = NULL,
     renv_scope_options(repos = repos)
 
   records <- renv_snapshot_r_packages(library = library, project = project)
-  remotes <- lapply(packages, function(package) {
-    case(
-      is.list(package)      ~ package,
-      is.character(package) ~ renv_remotes_resolve(package)
-    )
-  })
+  remotes <- lapply(packages, renv_remotes_resolve)
 
   packages <- extract_chr(remotes, "Package")
   names(remotes) <- packages
@@ -71,7 +71,7 @@ install <- function(packages = NULL,
 
   if (!renv_install_preflight(project, library, remotes, confirm)) {
     message("* Operation aborted.")
-    return(FALSE)
+    return(invisible(list()))
   }
 
   rebuild <- case(
@@ -80,14 +80,12 @@ install <- function(packages = NULL,
     as.character(rebuild)
   )
 
-  renv_restore_begin(
+  renv_scope_restore(
     project = project,
     records = records,
     packages = packages,
     rebuild = rebuild
   )
-
-  on.exit(renv_restore_end(), add = TRUE)
 
   # retrieve packages
   records <- renv_retrieve(packages)
@@ -197,7 +195,7 @@ renv_install_impl <- function(record) {
   library <- libpaths[[1]]
   linkable <-
     settings$use.cache(project = project) &&
-    identical(library, renv_paths_library(project = project))
+    renv_path_same(library, renv_paths_library(project = project))
 
   linker <- if (linkable) renv_file_link else renv_file_copy
 
@@ -255,10 +253,7 @@ renv_install_package_cache <- function(record, cache, linker) {
   # report successful link to user
   fmt <- "Installing %s [%s] ..."
   with(record, vwritef(fmt, Package, Version))
-
-  status <- catch(linker(cache, target))
-  if (inherits(status, "error"))
-    return(status)
+  linker(cache, target)
 
   type <- case(
     identical(linker, renv_file_copy) ~ "copied",
@@ -327,7 +322,7 @@ renv_install_package_local <- function(record, quiet = TRUE) {
 
     # rename to true package name
     name <- list.files(dir)
-    file.rename(file.path(dir, name), file.path(dir, package))
+    renv_file_move(file.path(dir, name), file.path(dir, package))
 
     # form new path
     components <- c(dir, package, if (nzchar(subdir)) subdir)
@@ -464,8 +459,10 @@ renv_install_postamble <- function(packages) {
     sprintf(fmt, format(Package), format(Installed), format(Loaded))
   })
 
-  if (renv_testing())
-    warning("please restart your sesion")
+  if (renv_testing()) {
+    condition <- "renv.install.restart_required"
+    renv_condition_signal(condition)
+  }
 
   # nocov start
   if (renv_verbose()) {
@@ -484,7 +481,10 @@ renv_install_postamble <- function(packages) {
 
 renv_install_preflight_unknown_source <- function(records) {
 
-  unknown <- Filter(function(record) record$Source %in% "unknown", records)
+  unknown <- filter(records, function(record) {
+    renv_record_source(record) == "unknown"
+  })
+
   if (empty(unknown))
     return(TRUE)
 
@@ -493,7 +493,7 @@ renv_install_preflight_unknown_source <- function(records) {
     renv_pretty_print_records(
       unknown,
       "The following package(s) were installed from an unknown source:",
-      "renv will install the latest version(s) from your R package repositories instead."
+      "renv may be unable to restore these packages."
     )
   }
   # nocov end

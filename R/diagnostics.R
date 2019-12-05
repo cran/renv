@@ -6,6 +6,8 @@
 #'
 #' @inheritParams renv-params
 #'
+#' @return This function is normally called for its side effects.
+#'
 #' @export
 diagnostics <- function(project = NULL) {
 
@@ -40,7 +42,7 @@ diagnostics <- function(project = NULL) {
   vwritef(c(title, lines, ""))
 
   for (reporter in reporters) {
-    tryCatch(reporter(project), error = renv_error_handler)
+    catch(reporter(project))
     vwritef()
   }
 

@@ -44,26 +44,11 @@ renv_project_initialized <- function(project) {
 
 renv_project_type <- function(path) {
 
-  # check for R package projects
   descpath <- file.path(path, "DESCRIPTION")
   if (!file.exists(descpath))
     return("unknown")
 
-  desc <- catch(renv_description_read(descpath))
-  if (inherits(desc, "error")) {
-    warning(desc)
-    return("unknown")
-  }
-
-  # check for explicitly recorded type
-  type <- desc$Type
-  if (!is.null(type))
-    return(tolower(type))
-
-  # infer otherwise from 'Package' field otherwise
-  package <- desc$Package
-  if (!is.null(package))
-    return("package")
+  renv_description_type(descpath)
 
 }
 
@@ -84,6 +69,10 @@ renv_project_records_description <- function(project, descpath) {
   # next, find packages mentioned in the DESCRIPTION file
   fields <- c("Depends", "Imports", "Suggests", "LinkingTo")
   deps <- renv_dependencies_discover_description(descpath, fields)
+  if (empty(deps))
+    return(list())
+
+  # split according to package
   specs <- split(deps, deps$Package)
 
   # drop ignored specs
@@ -97,7 +86,7 @@ renv_project_records_description <- function(project, descpath) {
     for (package in c("devtools", "roxygen2")) {
       specs[[package]] <-
         specs[[package]] %||%
-        list(Package = package, Require = "", Version = "")
+        renv_dependencies_list(descpath, package, dev = TRUE)
     }
   }
 

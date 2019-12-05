@@ -1,4 +1,77 @@
 
+# renv 0.9.0
+
+* `renv` gains a new function `renv::record()`, for recording new packages
+  within an existing lockfile. This can be useful when one or more of the
+  recorded packages need to be modified for some reason.
+
+* An empty `.renvignore` no longer erroneously ignores all files within a
+  directory. (#286)
+
+* `renv` now warns if the version of `renv` loaded within a project does not
+  match the version declared within the `renv` autoloader. (#285)
+
+* `renv` gains a new function `renv::run()`, for running R scripts within
+  a particular project's context inside an R subprocess. (#126)
+
+* The algorithm used by `renv` for hashing packages has changed. Consider 
+  using `renv::rehash()` to migrate packages from the old `renv` cache to
+  the new `renv` cache.
+
+* `renv::status()` now reports packages which are referenced in your project
+  code, but are not currently installed. (#271)
+
+* `renv` is now able to restore packages with a recorded URL remote. (#272)
+
+* `renv::dependencies()` can now parse R package dependencies used as custom
+  site generator in an Rmd yaml header. (#269, @cderv)
+
+* `renv` now properly respects a downloader requested by the environment
+  variable `RENV_DOWNLOAD_FILE_METHOD`.
+
+* `renv` no longer sources the user profile (normally located at `~/.Rprofile`)
+  by default. If you desire this behavior, you can opt-in by setting
+  `RENV_CONFIG_USER_PROFILE = TRUE`; e.g. within your project or user
+  `.Renviron` file. (#261)
+
+* `renv::restore()` gains the `packages` argument, to be used to restore
+  a subset of packages recorded within the lockfile. (#260)
+
+* `renv` now tries harder to preserve the existing structure in infrastructure
+  files (e.g. the project `.Rprofile`) that it modifies. (#259)
+
+* `renv` now warns if any Bioconductor packages used in the project appear
+  to be from a different Bioconductor release than the one currently active
+  and stored in the lockfile. (#244)
+
+* `renv` now normalizes any paths set in the `RENV_PATHS_*` family of
+  environment variables when `renv` is loaded.
+
+* Fixed an issue where `renv` would not properly clean up after a failed
+  attempt to call `Sys.junction()`. (#251)
+
+* Fixed an issue where `renv` would, in some cases, copy rather than link from
+  the package cache when the library path had been customized with the
+  `RENV_PATHS_LIBRARY` environment variable. (#245)
+
+* The method `renv` uses when copying directories can now be customized. When
+  copying directories, `renv` now by default uses `robocopy` on Windows, and
+  `cp` on Unix. This should improve robustness when attempting to copy files
+  in some contexts; e.g. when copying across network shares.
+
+* `renv` now tracks the version of Bioconductor used within a project
+  (if applicable), and uses that when retrieving the set of repositories
+  to be used during `renv::restore()`.
+
+* `renv::dependencies()` can now parse R package dependencies declared and
+  used by the `modules` package. (#238, @labriola)
+
+* Fixed an issue where `renv::restore()` could fail in Docker environments,
+  usually with an error message like 'Invalid cross-device link'. (#243)
+
+* `renv::install()` disables staged package install when running with the
+  Windows Subsystem for Linux. (#239)
+
 # renv 0.8.3
 
 * `renv::dependencies()` gains a new argument `dev`, indicating whether

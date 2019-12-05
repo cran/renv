@@ -72,6 +72,12 @@ renv_retrieve_impl <- function(package) {
   if (file.exists(path))
     return(renv_retrieve_successful(record, path))
 
+  # if the user has provided an explicit path to a tarball in the source,
+  # then just use that
+  retrieved <- catch(renv_retrieve_explicit(record))
+  if (identical(retrieved, TRUE))
+    return(TRUE)
+
   # if we find a suitable package tarball available locally,
   # then we can just use that directly (this also acts as an escape
   # hatch for cases where a package might have some known external source
@@ -82,20 +88,21 @@ renv_retrieve_impl <- function(package) {
   if (identical(retrieved, TRUE))
     return(TRUE)
 
-  # if the user has provided an explicit path to a tarball in the source,
-  # then just use that
-  retrieved <- catch(renv_retrieve_explicit(record))
-  if (identical(retrieved, TRUE))
-    return(TRUE)
-
   # otherwise, try and restore from external source
-  source <- tolower(record$Source %||% "unknown")
+  source <- renv_record_source(record)
   if (source %in% c("git2r", "xgit"))
     source <- "git"
 
   # handle case where repository was previously declared as CRAN
   if (source == "cran")
     source <- "repository"
+
+  # check for ad-hoc requests to install from bioc
+  if (identical(source, "repository")) {
+    repos <- record$Repository %||% ""
+    if (repos %in% c("bioc", "bioconductor"))
+      source <- "bioconductor"
+  }
 
   switch(source,
          bioconductor = renv_retrieve_bioconductor(record),
@@ -104,6 +111,7 @@ renv_retrieve_impl <- function(package) {
          github       = renv_retrieve_github(record),
          gitlab       = renv_retrieve_gitlab(record),
          repository   = renv_retrieve_repos(record),
+         url          = renv_retrieve_url(record),
          renv_retrieve_unknown_source(record)
   )
 
@@ -119,7 +127,7 @@ renv_retrieve_name <- function(record, type = "source", ext = NULL) {
 renv_retrieve_path <- function(record, type = "source", ext = NULL) {
   package <- record$Package
   name <- renv_retrieve_name(record, type, ext)
-  source <- tolower(record$Source)
+  source <- renv_record_source(record)
   if (type == "source")
     renv_paths_source(source, package, name)
   else if (type == "binary")
@@ -136,8 +144,7 @@ renv_retrieve_bioconductor <- function(record) {
   # activate bioconductor repositories in this context
   repos <- getOption("repos")
   biocrepos <- c(renv_bioconductor_repos(), repos)
-  options(repos = biocrepos[!duplicated(biocrepos)])
-  on.exit(options(repos = repos), add = TRUE)
+  renv_scope_options(repos = renv_vector_unique(biocrepos))
 
   # retrieve package as though from an active R repository
   renv_retrieve_repos(record)
@@ -269,18 +276,27 @@ renv_retrieve_local_find <- function(record) {
     return(named(path, type))
   }
 
-  # otherwise, use our own local cache of packages
+  # otherwise, use the user's local packages
   roots <- c(
     renv_paths_project("renv/local"),
     renv_paths_local()
   )
 
   for (type in c("binary", "source")) {
+
     name <- renv_retrieve_name(record, type = type)
     for (root in roots) {
-      path <- file.path(root, record$Package, name)
-      if (file.exists(path))
-        return(named(path, type))
+
+      package <- record$Package
+      paths <- c(
+        file.path(root, package, name),
+        file.path(root, name)
+      )
+
+      for (path in paths)
+        if (file.exists(path))
+          return(named(path, type))
+
     }
   }
 
@@ -291,11 +307,11 @@ renv_retrieve_local_find <- function(record) {
 
 renv_retrieve_local_report <- function(record) {
 
-  source <- tolower(record$Source)
-  if (tolower(source) == "local")
+  source <- renv_record_source(record)
+  if (source == "local")
     return(record)
 
-  record$Source <- "local"
+  record$Source <- "Local"
   rather <- if (source == "unknown") "" else paste(" rather than", renv_alias(source))
   fmt <- "* Package %s [%s] will be installed from local sources%s."
   with(record, vwritef(fmt, Package, Version, rather))
@@ -313,14 +329,14 @@ renv_retrieve_local <- function(record) {
 renv_retrieve_explicit <- function(record) {
 
   # try parsing as a local remote
-  source <- record$Source %||% ""
+  source <- record$Source %||% record$RemoteUrl %||% ""
   record <- catch(renv_remotes_resolve_local(source))
   if (inherits(record, "error"))
     return(FALSE)
 
   # treat as 'local' source but extract path
   normalized <- renv_path_normalize(source, winslash = "/", mustWork = TRUE)
-  record$Source <- "local"
+  record$Source <- "Local"
   renv_retrieve_successful(record, normalized)
 
 }
@@ -356,6 +372,18 @@ renv_retrieve_repos <- function(record) {
   }
 
   stopf("failed to retrieve package '%s'", record$Package)
+
+}
+
+renv_retrieve_url <- function(record) {
+
+  if (is.null(record$RemoteUrl)) {
+    fmt <- "package '%s' has no recorded RemoteUrl"
+    stopf(fmt, record$Package)
+  }
+
+  resolved <- renv_remotes_resolve_url(record$RemoteUrl, quiet = FALSE)
+  renv_retrieve_successful(record, resolved$Path)
 
 }
 
@@ -428,7 +456,7 @@ renv_retrieve_repos_impl <- function(record,
 renv_retrieve_package <- function(record, url, path) {
 
   ensure_parent_directory(path)
-  type <- tolower(record$Source)
+  type <- renv_record_source(record)
   status <- local({
     renv_scope_auth(record)
     catch(download(url, destfile = path, type = type))

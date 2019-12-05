@@ -1,5 +1,12 @@
 context("Install")
 
+test_that("install works when DESCRIPTION contains no dependencies", {
+  renv_tests_scope()
+  desc <- c("Type: Package", "Package: test")
+  writeLines(desc, con = "DESCRIPTION")
+  expect_length(install(), 0L)
+})
+
 test_that("requested version in DESCRIPTION file is honored", {
 
   renv_tests_scope()
@@ -192,9 +199,10 @@ test_that("source packages in .zip files can be installed", {
 })
 
 test_that("renv warns when installing an already-loaded package", {
+  skip_on_cran()
   renv_tests_scope()
-  install("bread")
+  install("bread@1.0.0")
   requireNamespace("bread")
-  expect_warning(install("bread@0.1.0"))
+  expect_condition(install("bread@0.1.0"), class = "renv.install.restart_required")
   unloadNamespace("bread")
 })

@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html>
 
 <head>
 
 <meta charset="utf-8" />
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="pandoc" />
 <meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
 
@@ -228,7 +227,7 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
 <p>Here is an example lockfile, including the packages <code>markdown</code> and <code>mime</code>:</p>
 <pre><code>{
   &quot;renv&quot;: {
-    &quot;Version&quot;: &quot;1.0.0&quot;
+    &quot;Version&quot;: &quot;0.9.0&quot;
   },
   &quot;R&quot;: {
     &quot;Version&quot;: &quot;3.6.1&quot;,
@@ -243,18 +242,20 @@ code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61
     &quot;markdown&quot;: {
       &quot;Package&quot;: &quot;markdown&quot;,
       &quot;Version&quot;: &quot;1.0&quot;,
-      &quot;Source&quot;: &quot;CRAN&quot;,
+      &quot;Source&quot;: &quot;Repository&quot;,
+      &quot;Repository&quot;: &quot;CRAN&quot;,
       &quot;Hash&quot;: &quot;4584a57f565dd7987d59dda3a02cfb41&quot;
     },
     &quot;mime&quot;: {
       &quot;Package&quot;: &quot;mime&quot;,
       &quot;Version&quot;: &quot;0.7&quot;,
-      &quot;Source&quot;: &quot;CRAN&quot;,
+      &quot;Source&quot;: &quot;Repository&quot;,
+      &quot;Repository&quot;: &quot;CRAN&quot;,
       &quot;Hash&quot;: &quot;908d95ccbfd1dd274073ef07a7c93934&quot;
     }
   }
 }</code></pre>
-<p>The function <code>renv::snapshot()</code> is used to create this lockfile, and by default writes these records to the file <code>renv.lock</code>. Later, if you need to reinstall the specific package versions as recorded in <code>renv.lock</code>, you can use <code>renv::restore()</code>.</p>
+<p>The function <code>renv::snapshot()</code> is used to create this lockfile, and by default writes these records to the file <code>renv.lock</code>. Later, if you need to re-install the specific package versions as recorded in <code>renv.lock</code>, you can use <code>renv::restore()</code>.</p>
 
 
 

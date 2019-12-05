@@ -116,11 +116,12 @@ renv_hydrate_dependencies <- function(project, packages = NULL) {
 # on CRAN but not that we want to use during tests
 renv_hydrate_libpaths <- function() {
 
-  if (renv_testing()) {
+  libpaths <- if (renv_testing())
     renv_libpaths_all()
-  } else {
+  else
     c(renv_libpaths_user(), renv_libpaths_site(), renv_libpaths_system())
-  }
+
+  normalizePath(libpaths, winslash = "/", mustWork = FALSE)
 
 }
 
@@ -192,12 +193,11 @@ renv_hydrate_resolve_missing <- function(project, na) {
   }
 
   # perform the restore
-  renv_restore_begin(
+  renv_scope_restore(
     project = project,
     packages = packages,
     handler = handler
   )
-  on.exit(renv_restore_end(), add = TRUE)
 
   records <- renv_retrieve(packages)
   renv_install(records, library)

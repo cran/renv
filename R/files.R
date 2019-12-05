@@ -6,7 +6,7 @@
 renv_file_preface <- function(source, target, overwrite) {
 
   callback <- function() {}
-  if (!file.exists(source))
+  if (!renv_file_exists(source))
     stopf("source file '%s' does not exist", source)
 
   if (overwrite)
@@ -38,13 +38,13 @@ renv_file_copy <- function(source, target, overwrite = FALSE) {
 renv_file_copy_file <- function(source, target) {
 
   # copy to temporary path
-  temptarget <- renv_tempfile("renv-copy-", tmpdir = dirname(target))
-  status <- catchall(file.copy(source, temptarget))
+  tmpfile <- renv_tempfile(".renv-copy-", tmpdir = dirname(target))
+  status <- catchall(file.copy(source, tmpfile))
   if (inherits(status, "condition"))
     stop(status)
 
   # move from temporary path to final target
-  status <- catchall(file.rename(temptarget, target))
+  status <- catchall(renv_file_move(tmpfile, target))
   if (inherits(status, "condition"))
     stop(status)
 
@@ -52,35 +52,125 @@ renv_file_copy_file <- function(source, target) {
   if (renv_file_exists(target))
     return(TRUE)
 
-  fmt <- "attempt to copy file '%s' to '%s' failed (unknown reason)"
-  stopf(fmt, source, target)
+  fmt <- "attempt to copy file %s to %s failed (unknown reason)"
+  stopf(fmt, renv_path_pretty(source), renv_path_pretty(target))
 
 }
 
-renv_file_copy_dir <- function(source, target) {
+renv_file_copy_dir_robocopy <- function(source, target) {
 
-  # copy to temporary sub-directory
-  tempdir <- renv_tempfile("renv-copy-", tmpdir = dirname(target))
+  flags <- c("/E", "/Z", "/R:5", "/W:10")
+  args <- c(flags, shQuote(source), shQuote(target))
+
+  # https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
+  # > Any value greater than 8 indicates that there was at least one failure
+  # > during the copy operation.
+  renv_system_exec(
+    "robocopy",
+    args,
+    action = "copying directory",
+    success = 0:8
+  )
+
+}
+
+# TODO: the version of rsync distributed with macOS
+# does not reliably copy file modified times, etc.
+renv_file_copy_dir_rsync <- function(source, target) {
+  source <- sub("/*$", "/", source)
+  flags <- if (renv_platform_macos()) "-aAX" else "-a"
+  args <- c(flags, shQuote(source), shQuote(target))
+  renv_system_exec("rsync", args, action = "copying directory")
+}
+
+renv_file_copy_dir_cp <- function(source, target) {
+  source <- sub("/*$", "/", source)
+  flags <- if (renv_platform_solaris()) "-pR" else "-a"
+  args <- c(flags, shQuote(source), shQuote(target))
+  renv_system_exec("cp", args, action = "copying directory")
+}
+
+renv_file_copy_dir_r <- function(source, target) {
+
+  # create sub-directory to host copy attempt
+  tempdir <- renv_tempfile(".renv-copy-", tmpdir = dirname(target))
   ensure_directory(tempdir)
 
-  status <- catchall(file.copy(source, tempdir, recursive = TRUE))
-  if (inherits(status, "condition"))
+  # attempt to copy to generated folder
+  status <- catchall(
+    file.copy(
+      source,
+      tempdir,
+      recursive = TRUE,
+      copy.mode = TRUE,
+      copy.date = TRUE
+    )
+  )
+
+  if (inherits(status, "error"))
     stop(status)
 
   # R will copy the directory to a sub-directory in the
   # requested folder with the same filename as the source
   # folder, so peek into that folder to grab it and rename
   tempfile <- file.path(tempdir, basename(source))
-  status <- catchall(file.rename(tempfile, target))
+  status <- catchall(renv_file_move(tempfile, target))
   if (inherits(status, "condition"))
     stop(status)
 
-  # validate target now exists
+}
+
+renv_file_copy_dir_impl <- function(source, target) {
+
+  methods <- list(
+    cp       = renv_file_copy_dir_cp,
+    r        = renv_file_copy_dir_r,
+    robocopy = renv_file_copy_dir_robocopy,
+    rsync    = renv_file_copy_dir_rsync
+  )
+
+  copy <- renv_config("copy.method", default = "auto")
+  if (is.function(copy))
+    return(copy(source, target))
+
+  method <- methods[[tolower(copy)]]
+  if (!is.null(method))
+    return(method(source, target))
+
+  if (renv_platform_windows())
+    renv_file_copy_dir_robocopy(source, target)
+  else if (renv_platform_unix())
+    renv_file_copy_dir_cp(source, target)
+  else
+    renv_file_copy_dir_r(source, target)
+
+  file.exists(target)
+
+}
+
+renv_file_copy_dir <- function(source, target) {
+
+  # create temporary sub-directory
+  tmpdir <- dirname(target)
+  ensure_directory(tmpdir)
+  tempdir <- renv_tempfile(".renv-copy-", tmpdir = tmpdir)
+
+  # copy to that directory
+  status <- catchall(renv_file_copy_dir_impl(source, tempdir))
+  if (inherits(status, "condition"))
+    stop(status)
+
+  # move directory to final location
+  status <- catchall(renv_file_move(tempdir, target))
+  if (inherits(status, "condition"))
+    stop(status)
+
+  # validate that the target file exists
   if (renv_file_exists(target))
     return(TRUE)
 
-  fmt <- "attempt to copy directory '%s' to '%s' failed (unknown reason)"
-  stopf(fmt, source, target)
+  fmt <- "attempt to copy directory %s to %s failed (unknown reason)"
+  stopf(fmt, renv_path_pretty(source), renv_path_pretty(target))
 
 }
 
@@ -103,6 +193,14 @@ renv_file_move <- function(source, target, overwrite = FALSE) {
   if (renv_platform_unix()) {
     args <- shQuote(c(source, target))
     status <- catchall(system2("mv", args, stdout = FALSE, stderr = FALSE))
+    if (renv_file_exists(target))
+      return(TRUE)
+  }
+
+  # on Windows, similarly try 'move' command
+  if (renv_platform_windows()) {
+    args <- c("/Y", shQuote(source), shQuote(target))
+    status <- catchall(system2("move", args, stdout = FALSE, stderr = FALSE))
     if (renv_file_exists(target))
       return(TRUE)
   }
@@ -130,7 +228,7 @@ renv_file_move <- function(source, target, overwrite = FALSE) {
 
 }
 
-renv_file_link <- function(source, target, overwrite = FALSE, link = NULL) {
+renv_file_link <- function(source, target, overwrite = FALSE) {
 
   if (renv_file_same(source, target))
     return(TRUE)
@@ -138,16 +236,28 @@ renv_file_link <- function(source, target, overwrite = FALSE, link = NULL) {
   callback <- renv_file_preface(source, target, overwrite)
   on.exit(callback(), add = TRUE)
 
-  # use junction points on Windows by default as symlinks
-  # are unreliable / un-deletable in some circumstances
-  link <- link %||% if (renv_platform_windows())
-    Sys.junction
-  else
-    file.symlink
+  if (renv_platform_windows()) {
 
-  status <- catchall(link(source, target))
-  if (identical(status, TRUE) && renv_file_exists(target))
-    return(TRUE)
+    # use junction points on Windows by default as symlinks
+    # are unreliable / un-deletable in some circumstances
+    status <- catchall(Sys.junction(source, target))
+    if (identical(status, TRUE))
+      return(TRUE)
+
+    # if Sys.junction() fails, it may leave behind an empty
+    # directory. this may occur if the source and target files
+    # reside on different volumes. either way, remove an empty
+    # left-behind directory on failure
+    unlink(target, recursive = TRUE, force = TRUE)
+
+  } else {
+
+    # on non-Windows, we can try to create a symlink
+    status <- catchall(file.symlink(source, target))
+    if (identical(status, TRUE))
+      return(TRUE)
+
+  }
 
   # all else fails, just perform a copy
   renv_file_copy(source, target, overwrite = overwrite)
@@ -201,16 +311,16 @@ renv_file_backup <- function(path) {
   path <- file.path(parent, basename(path))
 
   # attempt to rename the file
-  pattern <- sprintf("renv-backup-%s", basename(path))
+  pattern <- sprintf(".renv-backup-%s", basename(path))
   tempfile <- tempfile(pattern, tmpdir = dirname(path))
-  if (!file.rename(path, tempfile))
+  if (!renv_file_move(path, tempfile))
     return(function() {})
 
   # return callback that will restore if needed
   function() {
 
     if (!renv_file_exists(path))
-      file.rename(tempfile, path)
+      renv_file_move(tempfile, path)
     else
       unlink(tempfile, recursive = TRUE)
 

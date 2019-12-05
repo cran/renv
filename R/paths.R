@@ -1,9 +1,9 @@
 
 # NOTE: changes here must be synchronized with 'inst/activate.R'
-renv_prefix_platform <- function(version = NULL) {
+renv_prefix_platform <- function() {
 
   # construct version prefix
-  version <- version %||% paste(R.version$major, R.version$minor, sep = ".")
+  version <- paste(R.version$major, R.version$minor, sep = ".")
   prefix <- paste("R", numeric_version(version)[1, 1:2], sep = "-")
 
   # include SVN revision for development versions of R
@@ -68,8 +68,9 @@ renv_paths_binary <- function(...) {
 }
 
 renv_paths_cache <- function(..., version = NULL) {
-  platform <- renv_prefix_platform(version = version)
-  renv_paths_common("cache", c(renv_cache_version(), platform), ...)
+  platform <- renv_prefix_platform()
+  version <- version %||% renv_cache_version()
+  renv_paths_common("cache", c(version, platform), ...)
 }
 
 renv_paths_rtools <- function(...) {
@@ -144,6 +145,19 @@ renv_paths_root_default <- function() {
 
 }
 # nocov end
+
+renv_paths_init <- function() {
+
+  envvars <- Sys.getenv()
+
+  keys <- grep("^RENV_PATHS_", names(envvars), value = TRUE)
+  if (empty(keys))
+    return(character())
+
+  args <- lapply(envvars[keys], normalizePath, winslash = "/", mustWork = FALSE)
+  do.call(Sys.setenv, args)
+
+}
 
 #' Path Customization
 #'
@@ -220,7 +234,9 @@ renv_paths_root_default <- function() {
 #' the folder as specified by the `RENV_PATHS_LOCAL` environment variable. The
 #' package sources should be placed in a file at one of these locations:
 #'
+#' - `${RENV_PATHS_LOCAL}/<package>_<version>.<ext>`
 #' - `${RENV_PATHS_LOCAL}/<package>/<package>_<version>.<ext>`
+#' - `<project>/renv/local/<package>_<version>.<ext>`
 #' - `<project>/renv/local/<package>/<package>_<version>.<ext>`
 #'
 #' where `.<ext>` is `.tar.gz` for source packages, or `.tgz` for binaries on

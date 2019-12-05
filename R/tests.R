@@ -6,6 +6,9 @@ renv_tests_scope <- function(packages = character()) {
   # ensure that attempts to restart are a no-op
   options(restart = function(...) TRUE)
 
+  # save local repositories
+  Sys.setenv(RENV_PATHS_LOCAL = file.path(renv_tests_root(), "local"))
+
   # move to own test directory
   dir <- tempfile("renv-test-")
   ensure_directory(dir)
@@ -128,7 +131,7 @@ renv_tests_init_repos <- function(repos = NULL) {
     components <- c(root, if (subdir) package, tarball)
     target <- paste(components, collapse = "/")
     ensure_parent_directory(target)
-    file.rename(tarball, target)
+    renv_file_move(tarball, target)
 
   }
 
@@ -208,6 +211,8 @@ renv_tests_init <- function() {
   if (renv_testing())
     return()
 
+  Sys.unsetenv("RENV_PATHS_LIBRARY")
+
   Sys.unsetenv("RENV_PYTHON")
   Sys.unsetenv("RETICULATE_PYTHON")
   Sys.unsetenv("RETICULATE_PYTHON_ENV")
@@ -254,21 +259,22 @@ renv_test_retrieve <- function(record) {
   renv_scope_libpaths(c(templib, .libPaths()))
 
   # attempt a restore into that library
-  renv_restore_begin(
+  renv_scope_restore(
     project = getwd(),
     records = records,
     packages = package,
     recursive = FALSE
   )
 
-  on.exit(renv_restore_end(), add = TRUE)
-
   records <- renv_retrieve(record$Package)
   library <- renv_libpaths_all()
   renv_install(records, library)
 
-  desc <- renv_description_read(file.path(templib, package))
+  descpath <- file.path(templib, package)
+  if (!file.exists(descpath))
+    stopf("failed to retrieve package '%s'", package)
 
+  desc <- renv_description_read(descpath)
   fields <- grep("^Remote", names(record), value = TRUE)
   testthat::expect_identical(as.list(desc[fields]), as.list(record[fields]))
 

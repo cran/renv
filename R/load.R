@@ -53,6 +53,7 @@ load <- function(project = getwd(), quiet = FALSE) {
   renv_load_sandbox(project)
   renv_load_libpaths(project)
   renv_load_profile(project)
+  renv_load_cache(project)
 
   lockfile <- renv_lockfile_load(project)
   if (length(lockfile)) {
@@ -205,7 +206,7 @@ renv_load_profile <- function(project = NULL) {
 
   project <- project %||% renv_project()
 
-  enabled <- renv_config("user.profile", default = TRUE)
+  enabled <- renv_config("user.profile", default = FALSE)
   if (!enabled)
     return(FALSE)
 
@@ -391,5 +392,24 @@ renv_load_switch <- function(project) {
       do.call(base::library, args)
     }
   }
+
+}
+
+renv_load_cache <- function(project) {
+
+  if (!interactive())
+    return(FALSE)
+
+  oldcache <- renv_paths_cache(version = renv_cache_version_previous())
+  newcache <- renv_paths_cache(version = renv_cache_version())
+  if (!file.exists(oldcache) || file.exists(newcache))
+    return(FALSE)
+
+  msg <- lines(
+    "* The cache version has been updated in this version of renv.",
+    "* Use `renv::rehash()` to migrate packages from the old renv cache."
+  )
+
+  vmessagef(msg)
 
 }

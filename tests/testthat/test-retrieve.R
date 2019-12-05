@@ -136,6 +136,24 @@ test_that("we can retrieve packages with URLs", {
   renv_test_retrieve(record)
 })
 
+test_that("we can retrieve packages from URL sources", {
+  skip_on_cran()
+
+  renv_tests_scope()
+  renv_scope_envvars(RENV_PATHS_LOCAL = file.path(getwd(), "local"))
+
+  record <- list(
+    Package    = "skeleton",
+    Version    = "1.0.1",
+    Source     = "URL",
+    RemoteType = "url",
+    RemoteUrl  = "https://api.github.com/repos/kevinushey/skeleton/tarball"
+  )
+
+  renv_test_retrieve(record)
+
+})
+
 test_that("we can retrieve packages from local sources", {
 
   renv_scope_envvars(RENV_PATHS_LOCAL = file.path(getwd(), "local"))
@@ -174,10 +192,15 @@ test_that("compatible local sources are preferred when available", {
 
 test_that("an explicitly-provided local source path can be used", {
 
+  source <- normalizePath("local/skeleton/skeleton_1.0.1.tar.gz")
+
+  owd <- setwd(tempdir())
+  on.exit(setwd(owd), add = TRUE)
+
   record <- list(
     Package = "skeleton",
     Version = "1.0.1",
-    Source  = "local/skeleton/skeleton_1.0.1.tar.gz"
+    Source  = source
   )
 
   renv_test_retrieve(record)

@@ -91,15 +91,39 @@ renv_infrastructure_write_entry_impl <- function(add, remove, file, create) {
     ensure_parent_directory(file)
     writeLines(add, file)
     return(TRUE)
+
   }
 
   # if the file already has the requested line, nothing to do
-  before <- trimws(readLines(file, warn = FALSE))
-  after <- before %>% setdiff(remove) %>% union(add)
-  if (identical(before, after))
-    return(TRUE)
+  before <- readLines(file, warn = FALSE)
+  after <- before
 
-  writeLines(after, file)
+  # add requested entries
+  for (item in rev(add)) {
+    # check to see if the requested line exists (either commented
+    # or uncommented). if it exists, we'll attempt to uncomment
+    # any commented lines
+    cpattern <- sprintf("^\\s*#?\\s*\\Q%s\\E\\s*(?:#|\\s*$)", item)
+    matches <- grepl(cpattern, after, perl = TRUE)
+    if (any(matches))
+      after[matches] <- gsub("^(\\s*)#\\s*", "\\1", after[matches])
+    else
+      after <- c(item, after)
+
+  }
+
+  # remove requested entries
+  for (item in rev(remove)) {
+    pattern <- sprintf("^\\s*\\Q%s\\E\\s*(?:#|\\s*$)", item)
+    matches <- grepl(pattern, after, perl = TRUE)
+    if (any(matches))
+      after[matches] <- paste("#", after[matches])
+  }
+
+  # write to file if we have changes
+  if (!identical(before, after))
+    writeLines(after, file)
+
   TRUE
 
 }
@@ -119,8 +143,9 @@ renv_infrastructure_remove <- function(project = NULL) {
 renv_infrastructure_remove_rprofile <- function(project) {
 
   renv_infrastructure_remove_entry_impl(
-    "source(\"renv/activate.R\")",
-    file.path(project, ".Rprofile")
+    line      = "source(\"renv/activate.R\")",
+    file      = file.path(project, ".Rprofile"),
+    removable = TRUE
   )
 
 }
@@ -128,34 +153,36 @@ renv_infrastructure_remove_rprofile <- function(project) {
 renv_infrastructure_remove_rbuildignore <- function(project) {
 
   renv_infrastructure_remove_entry_impl(
-    "^renv$",
-    file.path(project, ".Rbuildignore")
+    line      = "^renv$",
+    file      = file.path(project, ".Rbuildignore"),
+    removable = FALSE
   )
 
 }
 
-renv_infrastructure_remove_entry_impl <- function(line, file) {
+renv_infrastructure_remove_entry_impl <- function(line, file, removable) {
 
   # if the file doesn't exist, nothing to do
   if (!file.exists(file))
     return(TRUE)
 
-  # if the file doesn't have the line, nothing to do
+  # find and comment out the line
   contents <- readLines(file, warn = FALSE)
-  idx <- grep(line, contents, fixed = TRUE)
-  if (!length(idx))
-    return(TRUE)
+  pattern <- sprintf("^\\s*\\Q%s\\E\\s*(?:#|\\s*$)", line)
+  matches <- grepl(pattern, contents, perl = TRUE)
 
-  # remove the line
-  contents <- contents[-idx]
-
-  # if the file is now empty, remove it
-  if (!length(contents) || all(contents == "")) {
-    unlink(file)
-    return(TRUE)
+  # if this file is removable, check to see if we matched all non-blank
+  # lines; if so, remove the file
+  if (removable) {
+    rest <- contents[!matches]
+    if (all(grepl("^\\s*$", rest)))
+      return(unlink(file))
   }
 
+  # otherwise, just mutate the file
+  contents[matches] <- paste("#", contents[matches])
   writeLines(contents, file)
+
   TRUE
 
 }
