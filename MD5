@@ -1,7 +1,7 @@
-a8c45291ef996c2b3fb904cf6d048523 *DESCRIPTION
+401cb7ed0cd8081197922a70f448b24b *DESCRIPTION
 44b42abf175150c1e37a8d871caac748 *LICENSE
 bdaa4546501789a5abecc65d5b388a89 *NAMESPACE
-2d6a378e5d37e881bfc8565d0e4b9ead *NEWS.md
+b2c93730c9c63b4a9ca4261fb67b2287 *NEWS.md
 d2bbdfd1c5c6cf14e288aa3edc76a177 *R/R.R
 bb41bb160c00d2d89099c4bff5754c29 *R/actions.R
 aa1be332519368a9ca684cfe27b91655 *R/activate.R
@@ -36,7 +36,7 @@ ff979a0f782e1ca7b26f94f6c0de8b49 *R/errors.R
 c3be0e1aabdc0fac5949f62e480a803a *R/exit-handlers.R
 53da429f558dffcb57a7a693a9be72d2 *R/extsoft.R
 458a5a6234c715fc1fce2e03058f25e2 *R/file-backed.R
-720aa0d414e49f270ef4de59dafd841f *R/files.R
+390bb9b6addb83a9be2eefd348260c49 *R/files.R
 6430a236e7a2a6a8b3ab6ab327b784d3 *R/find-package.R
 35a2bbbaf726761bcb2b43467e4db71f *R/git.R
 5b1ed81ea5fc1e88981175188f4fa798 *R/globals.R
@@ -73,7 +73,7 @@ b39799b39debca661e3f5c13ef25971e *R/parse.R
 c6e7b7b8fa5e1a183b430b1d113ac72c *R/patch.R
 a687ed13b61fd42aff2d4eec27fdada7 *R/path.R
 86890d8e3440252e5f51b484df688c64 *R/paths.R
-880201c1d371ac9e2acb7352b3243ff6 *R/platform.R
+47cf1609ec8b91928ec24cdba8ae8172 *R/platform.R
 9c71765af95383e8197e7c47c9c863ac *R/preflight.R
 645b87b6bd3d5a3b6ca2436b669f1ec9 *R/pretty.R
 45b7cf5fc9f8f81ae7e57fd283acd487 *R/progress.R
@@ -137,7 +137,7 @@ e06d88f911577c91abf24240b00577ef *inst/doc/ci.html
 60a983f307c01cd8e9365db21922af27 *inst/doc/collaborating.html
 93ffc0547f0ada0112c817257b565232 *inst/doc/docker.R
 718567dc9f8970e29e212b5f9fa31e73 *inst/doc/docker.Rmd
-eb22b0e36d3c54a3ae184418842df2ba *inst/doc/docker.html
+4d7f456c1f90c4b8f529a2d32438739f *inst/doc/docker.html
 3c9e2d06e8560272e30c98b0c827478b *inst/doc/faq.R
 e589c40a3757d784f89e93b815236b5a *inst/doc/faq.Rmd
 7bd7e1606098d636e029a4d3f1128e9a *inst/doc/faq.html
@@ -146,7 +146,7 @@ c83c42e1a5f67b0e6cebd572c71e4cd9 *inst/doc/local-sources.R
 85a63739a0e83d59f084eace03db4065 *inst/doc/local-sources.html
 46750e778a5cdb4d65c347f8e43df623 *inst/doc/lockfile.R
 b8233936e40c028aff3c72f52908ec3c *inst/doc/lockfile.Rmd
-4bcc1c5ea0c7ed14f7c71435df3b5cb3 *inst/doc/lockfile.html
+90d3cc705a8c7f8721863d597c9031e4 *inst/doc/lockfile.html
 049b63e45dea9439e179eb8d63e9b6b7 *inst/doc/packages.R
 1641ec80c5170b1f1493316aa6f0de70 *inst/doc/packages.Rmd
 5ed96c5c33ec93312bce49e74d9ff976 *inst/doc/packages.html
@@ -155,7 +155,7 @@ b8233936e40c028aff3c72f52908ec3c *inst/doc/lockfile.Rmd
 bf08c1b0d9ea0fae883b64706fea1a57 *inst/doc/python.html
 d97cfbd22ddbca139ae18988e7ee718c *inst/doc/renv.R
 6f55277967cc43e1f771bbace41e2ae1 *inst/doc/renv.Rmd
-f15739173766e3b9de4e4cf4f8fb9a06 *inst/doc/renv.html
+bcbb81e1cc0e3cf0915684d6d8bffb27 *inst/doc/renv.html
 96bed7d220ad207ece7dd09463db8bda *inst/resources/WELCOME
 97fb1c65d4ee2c84ca0392b7472e1359 *inst/resources/activate.R
 0f28660d57f2dd9dad52380e812e83d5 *inst/resources/scripts-git-askpass.sh
