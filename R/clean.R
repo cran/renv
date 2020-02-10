@@ -27,7 +27,8 @@ clean <- function(project = NULL,
                   confirm = interactive())
 {
   renv_scope_error_handler()
-  project <- project %||% renv_project()
+  renv_dots_disallow(...)
+  project <- renv_project_resolve(project)
 
   status <- any(
     renv_clean_stale_lockfiles(project, confirm),

@@ -6,15 +6,31 @@
 # (as a named character vector) to supply additional headers
 download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) {
 
+  # allow for user-defined overrides
+  override <- getOption("renv.download.override")
+  if (is.function(override)) {
+
+    result <- override(
+      url      = url,
+      destfile = destfile,
+      quiet    = quiet,
+      mode     = "wb",
+      headers  = headers
+    )
+
+    return(destfile)
+
+  }
+
   if (quiet)
     renv_scope_options(renv.verbose = FALSE)
 
+  # add custom headers as appropriate for the URL
+  headers <- c(headers, renv_download_custom_headers(url))
+
   # handle local files by just copying the file
-  if (grepl("^file:", url)) {
-    source <- sub("^file:(?://)?", "", url)
-    renv_file_copy(source, destfile, overwrite = TRUE)
+  if (renv_download_local(url, destfile, headers))
     return(destfile)
-  }
 
   # on Windows, try using our local curl binary if available
   renv_scope_downloader()
@@ -119,6 +135,10 @@ renv_download_default <- function(url, destfile, type, request, headers) {
   default <- if (renv_platform_windows()) "wininet" else "auto"
   method <- Sys.getenv("RENV_DOWNLOAD_FILE_METHOD", unset = default)
 
+  # headers _must_ be NULL rather than zero-length character
+  if (length(headers) == 0)
+    headers <- NULL
+
   # handle absence of 'headers' argument in older versions of R
   args <- list(url      = url,
                destfile = destfile,
@@ -136,7 +156,7 @@ renv_download_default <- function(url, destfile, type, request, headers) {
 
 renv_download_default_agent_scope <- function(headers) {
 
-  if (is.null(headers))
+  if (empty(headers))
     return(FALSE)
 
   if (getRversion() >= "3.6.0")
@@ -530,5 +550,46 @@ renv_download_check_archive <- function(destfile) {
 
   # try listing files in the archive
   tryCatch({renv_archive_list(destfile); TRUE}, error = identity)
+
+}
+
+renv_download_local <- function(url, destfile, headers) {
+
+  if (!grepl("^file:", url))
+    return(FALSE)
+
+  url <- gsub("\\", "/", url, fixed = TRUE)
+  destfile <- gsub("\\", "/", destfile, fixed = TRUE)
+
+  renv_download_impl(
+    url = url,
+    destfile = destfile,
+    headers = headers
+  )
+
+  TRUE
+
+}
+
+renv_download_custom_headers <- function(url) {
+
+  headers <- getOption("renv.download.headers")
+  if (is.null(headers))
+    return(character())
+
+  if (!is.function(headers))
+    stopf("'renv.download.headers' is not a function")
+
+  headers <- invoke(headers, url)
+  if (empty(headers))
+    return(character())
+
+  if (is.list(headers))
+    headers <- unlist(headers, recursive = FALSE, use.names = TRUE)
+
+  if (!is.character(headers) || is.null(names(headers)))
+    stop("invocation of 'renv.download.headers' did not return a named character vector")
+
+  headers
 
 }

@@ -61,6 +61,12 @@ test_that("pacman::p_load() usages are understood", {
   expect_setequal(packages, letters[1:length(packages)])
 })
 
+test_that("import:: usages are understood", {
+  deps <- dependencies("resources/import.R")
+  packages <- setdiff(deps$Package, "import")
+  expect_setequal(packages, letters[1:length(packages)])
+})
+
 test_that("renv warns when large number of files found", {
 
   renv_tests_scope()
@@ -183,4 +189,18 @@ test_that("Rmarkdown custom site generator is found as dependency", {
     con = "index.Rmd")
   deps <- dependencies()
   expect_true("bookdown" %in% deps$Package)
+})
+
+test_that("Suggest dependencies are ignored by default", {
+  renv_tests_scope("breakfast")
+  install("breakfast")
+  expect_false(renv_package_installed("egg"))
+})
+
+test_that("Suggest dependencies are used when requested", {
+  renv_tests_scope("breakfast")
+  fields <- c("Imports", "Depends", "LinkingTo", "Suggests")
+  settings$package.dependency.fields(fields)
+  install("breakfast")
+  expect_true(renv_package_installed("egg"))
 })

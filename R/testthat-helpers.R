@@ -34,3 +34,8 @@ expect_signal <- function(expr, class) {
   testthat::expect(ok, message)
 
 }
+
+skip_if_local <- function() {
+  ci <- Sys.getenv("CI", unset = NA)
+  testthat::skip_if(is.na(ci), "Running tests locally")
+}

@@ -125,7 +125,7 @@ renv_tests_init_repos <- function(repos = NULL) {
     desc <- renv_description_read(path)
     package <- basename(path)
     tarball <- sprintf("%s_%s.tar.gz", package, desc$Version)
-    tar(tarball, package, compression = "gzip", tar = "internal")
+    tar(tarball, package, compression = "gzip")
 
     # copy into repository tree
     components <- c(root, if (subdir) package, tarball)
@@ -164,7 +164,7 @@ renv_tests_init_repos <- function(repos = NULL) {
   options(renv.tests.repos = c(CRAN = repos))
 
   # and update our repos option
-  fmt <- if (renv_platform_windows()) "file:%s" else "file://%s"
+  fmt <- if (renv_platform_windows()) "file:///%s" else "file://%s"
   options(
     pkgType = "source",
     repos = c(CRAN = sprintf(fmt, repos))
@@ -176,7 +176,15 @@ renv_tests_init_packages <- function() {
 
   # eagerly load packages that we'll need during tests
   # (as the sandbox will otherwise 'hide' these packages)
-  packages <- c("packrat", "knitr", "reticulate", "rmarkdown", "yaml")
+  packages <- c(
+    "packrat",
+    "knitr",
+    "rappdirs",
+    "reticulate",
+    "rmarkdown",
+    "yaml"
+  )
+
   for (package in packages)
     requireNamespace(package, quietly = TRUE)
 

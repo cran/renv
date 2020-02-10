@@ -26,7 +26,7 @@
 #' renv::install("digest")
 #'
 #' # install an old version of 'digest' (using archives)
-#' renv::install("digest@0.6.18")
+#' renv::install("digest@@0.6.18")
 #'
 #' # install 'digest' from GitHub (latest dev. version)
 #' renv::install("eddelbuettel/digest")
@@ -44,8 +44,9 @@ install <- function(packages = NULL,
 {
   renv_consent_check()
   renv_scope_error_handler()
+  renv_dots_disallow(...)
 
-  project <- project %||% renv_project()
+  project <- renv_project_resolve(project)
   library <- library %||% renv_libpaths_all()
 
   packages <- packages %||% renv_project_records(project)
@@ -220,7 +221,7 @@ renv_install_impl <- function(record) {
     renv_install_package_local(record),
     error = function(e) {
       vwritef("\tFAILED")
-      vwritef(e$output)
+      writef(e$output)
     }
   )
 

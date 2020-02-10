@@ -80,8 +80,9 @@ snapshot <- function(project  = NULL,
 {
   renv_consent_check()
   renv_scope_error_handler()
+  renv_dots_disallow(...)
 
-  project <- project %||% renv_project()
+  project <- renv_project_resolve(project)
   library <- library %||% renv_libpaths_all()
 
   if (renv_config("snapshot.preflight", default = TRUE))
@@ -392,7 +393,7 @@ renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, li
   request  <- bad$Requested
 
   fmt <- "'%s' requires '%s', but version '%s' will be snapshotted"
-  txt <- sprintf(fmt, format(package), format(requires), format(package), format(request))
+  txt <- sprintf(fmt, format(package), format(requires), format(request))
 
   if (!renv_testing()) {
     renv_pretty_print(
@@ -591,15 +592,15 @@ renv_snapshot_description <- function(path = NULL, package = NULL) {
 
 renv_snapshot_description_source <- function(dcf) {
 
+  type <- dcf[["RemoteType"]]
+  if (!is.null(type))
+    return(list(Source = renv_alias(type)))
+
   if (!is.null(dcf[["Repository"]]))
     return(list(Source = "Repository", Repository = dcf[["Repository"]]))
 
   if (!is.null(dcf[["biocViews"]]))
     return(list(Source = "Bioconductor"))
-
-  type <- dcf[["RemoteType"]]
-  if (!is.null(type))
-    return(list(Source = renv_alias(type)))
 
   package <- dcf[["Package"]]
   if (is.null(package))

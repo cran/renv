@@ -17,7 +17,8 @@ init(
 \item{project}{The project directory. The \R working directory will be
 changed to match the requested project directory.}
 
-\item{...}{Optional arguments; reserved for future expansion.}
+\item{...}{Unused arguments, reserved for future expansion. If any arguments
+are matched to \code{...}, \code{renv} will signal an error.}
 
 \item{settings}{A list of \link{settings} to be used with the newly-initialized
 project.}
@@ -27,7 +28,7 @@ and install R package dependencies?}
 
 \item{force}{Boolean; force initialization? By default, \code{renv} will refuse
 to initialize the home directory as a project, to defend against accidental
-misusages of \code{init()}.}
+mis-usages of \code{init()}.}
 
 \item{restart}{Boolean; attempt to restart the \R session after initializing
 the project? A session restart will be attempted if the \code{"restart"} \R

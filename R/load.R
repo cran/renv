@@ -159,6 +159,9 @@ renv_load_renviron <- function(project) {
     if (file.exists(environ))
       readRenviron(environ)
 
+  Sys.setenv(R_LIBS_SITE = .expand_R_libs_env_var(Sys.getenv("R_LIBS_SITE")))
+  Sys.setenv(R_LIBS_USER = .expand_R_libs_env_var(Sys.getenv("R_LIBS_USER")))
+
 }
 
 renv_load_settings <- function(project) {
@@ -204,7 +207,7 @@ renv_load_project <- function(project) {
 
 renv_load_profile <- function(project = NULL) {
 
-  project <- project %||% renv_project()
+  project <- renv_project_resolve(project)
 
   enabled <- renv_config("user.profile", default = FALSE)
   if (!enabled)

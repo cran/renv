@@ -41,7 +41,8 @@
 #' ```
 #'
 #' @param path The path to a (possibly multi-mode) \R file, or a directory
-#'   containing such files.
+#'   containing such files. By default, all files within the current working
+#'   directory are checked, recursively.
 #'
 #' @param root The root directory to be used for dependency discovery.
 #'   Defaults to the active project directory. You may need to set this
@@ -296,8 +297,12 @@ renv_dependencies_discover_description <- function(path, fields = NULL) {
   if (inherits(dcf, "error"))
     return(renv_dependencies_error(path, error = dcf))
 
-  # TODO: make this user-configurable?
-  fields <- fields %||% c("Depends", "Imports", "LinkingTo")
+  # read fields from project options if available
+  fields <-
+    fields %||%
+    renv_dependencies_discover_description_fields() %||%
+    c("Depends", "Imports", "LinkingTo")
+
   pattern <- "([a-zA-Z0-9._]+)(?:\\s*\\(([><=]+)\\s*([0-9.-]+)\\))?"
 
   # if this is the DESCRIPTION file for the active project, include
@@ -334,6 +339,30 @@ renv_dependencies_discover_description <- function(path, fields = NULL) {
   })
 
   bind_list(data)
+
+}
+
+renv_dependencies_discover_description_fields <- function() {
+
+  # this is all very gross -- the project should be passed
+  # along by the caller instead
+  project <- NULL
+
+  # are we being called as part of renv::dependencies()?
+  # if so, then use the root directory as the project root
+  state <- renv_dependencies_state()
+  if (!is.null(state))
+    project <- state$root
+
+  # are we being called as part of renv::restore()?
+  # if so, then use the associated project directory
+  state <- renv_restore_state()
+  if (!is.null(state))
+    project <- state$project
+
+  # all else fails, use the active project
+  project <- project %||% renv_project()
+  renv::settings$package.dependency.fields(project = project)
 
 }
 
@@ -577,7 +606,8 @@ renv_dependencies_discover_r <- function(path = NULL, text = NULL) {
     renv_dependencies_discover_r_require_namespace,
     renv_dependencies_discover_r_colon,
     renv_dependencies_discover_r_pacman,
-    renv_dependencies_discover_r_modules
+    renv_dependencies_discover_r_modules,
+    renv_dependencies_discover_r_import
   )
 
   discoveries <- new.env(parent = emptyenv())
@@ -778,6 +808,40 @@ renv_dependencies_discover_r_modules <- function(node, envir) {
   envir[[as.character(package)]] <- TRUE
 
   TRUE
+}
+
+renv_dependencies_discover_r_import <- function(node, envir) {
+
+  node <- renv_call_expect(node, "import", c("from", "here", "into"))
+  if (is.null(node))
+    return(FALSE)
+
+  # attempt to match the call
+  name <- as.character(node[[1L]])
+  matched <- if (name == "from") {
+    catch(match.call(function(.from, ...) {}, node, expand.dots = FALSE))
+  } else {
+    catch(match.call(function(..., .from) {}, node, expand.dots = FALSE))
+  }
+
+  if (inherits(matched, "error"))
+    return(FALSE)
+
+  # the '.from' argument is the package name, either a character vector of length one or a symbol
+  from <- matched$.from
+  if (is.symbol(from))
+    from <- as.character(from)
+
+  ok <-
+    is.character(from) &&
+    length(from) == 1
+
+  if (!ok)
+    return(FALSE)
+
+  envir[[from]] <- TRUE
+  TRUE
+
 }
 
 renv_dependencies_list <- function(source,

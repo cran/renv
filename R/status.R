@@ -23,7 +23,8 @@ status <- function(project = NULL,
                    lockfile = NULL)
 {
   renv_scope_error_handler()
-  project <- project %||% renv_project()
+  renv_dots_disallow(...)
+  project <- renv_project_resolve(project)
   library <- library %||% renv_libpaths_all()
   lockpath <- lockfile %||% renv_lockfile_path(project)
   invisible(renv_status_impl(project, library, lockpath))

@@ -1,4 +1,68 @@
 
+# renv 0.9.3
+
+* Fixed an issue where attempts to specify `RENV_PATHS_RTOOLS` would
+  be ignored by `renv`. (#335)
+
+* Fixed an issue where downloads could fail when using the `wininet`
+  downloader, typically with a message of the form
+  "InternetOpenUrl failed: 'The requested header was not found'".
+
+* `renv` better handles projects containing special characters on Windows.
+  (#334)
+
+* `renv` better handles unnamed repositories. (#333)
+
+* `renv` gains the config option `hydrate.libpaths`, allowing one to control
+  the library paths used by default for `renv::hydrate()`. (#329)
+
+* `renv::hydrate()` gains the `sources` argument, used to control the library
+  paths used by `renv` when hydrating a project. (#329)
+  
+* `renv` now sandboxes the system library by default on Windows.
+
+* `renv` now validates that the Xcode license has been accepted before
+  attempting to install R packages from sources. (#296)
+  
+* The R option `renv.download.override` can now be used to override the
+  machinery used by `renv` when downloading files. For example, setting
+  `options(renv.download.override = utils::download.file)` would instruct
+  `renv` to use R's own downloader when downloading files from the internet.
+  This can be useful when configuration of `curl` is challenging or
+  intractable in your environment, or you've already configured the base
+  R downloader suitably.
+
+* `renv::use_python("~/path/to/python")` now works as expected.
+
+* `renv` now properly expands `R_LIBS_SITE` and `R_LIBS_USER` when set within a
+  startup `.Renviron` file. (#318)
+
+* The `renv.download.headers` option can now be used to provide arbitrary HTTP
+  headers when downloading files. See the **Authentication** section in
+  `vignette("renv")` for more details. (#307)
+
+* `renv` gains the project setting `package.dependency.fields`, for controlling
+  which fields in an R package's `DESCRIPTION` file are examined when
+  discovering recursive package dependencies. This can be useful when you'd like
+  to instruct `renv` to track, for example, the `Suggests` dependencies of the
+  packages used in your project. (#315)
+
+* `renv` now better handles repositories referenced using file URIs.
+
+* Packages installed from GitHub using `renv::install()` will now also have
+  `Github*` fields added, in addition to the default `Remote*` fields. This
+  should help fix issues when attempting to deploy projects to RStudio Connect
+  requiring packages installed by `renv`. (#397)
+  
+* `renv` now prefers using a RemoteType field (if any) when attempting to
+  determine a package's source. (#306)
+
+* `renv` gains a new function `renv::scaffold()`, for generating `renv` project
+  infrastructure without explicitly loading the project. (#303)
+
+* `renv` now updates its local `.gitignore` file, when part of a git repository
+  whose git root lives in a parent directory. (#300)
+
 # renv 0.9.2
 
 * Fixed an issue in invoking `find` on Solaris.

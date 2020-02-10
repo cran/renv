@@ -209,8 +209,8 @@ renv_retrieve_git <- function(record) {
 
   renv_git_preflight()
 
-  package <- renv_tempfile("renv-git-")
-  ensure_directory(package)
+  path <- tempfile("renv-git-")
+  ensure_directory(path)
 
   template <- c(
     "cd \"${DIR}\"",
@@ -221,7 +221,7 @@ renv_retrieve_git <- function(record) {
   )
 
   data <- list(
-    DIR    = renv_path_normalize(package),
+    DIR    = renv_path_normalize(path),
     ORIGIN = record$RemoteUrl,
     REF    = record$RemoteSha %||% record$RemoteRef
   )
@@ -231,27 +231,11 @@ renv_retrieve_git <- function(record) {
   if (renv_platform_windows())
     command <- paste(comspec(), "/C", command)
 
+
   status <- local({
-
     renv_scope_auth(record)
-
-    # use GIT_PAT when provided
-    pat <- Sys.getenv("GIT_PAT", unset = NA)
-    if (!is.na(pat)) {
-      renv_scope_envvars(
-        GIT_USERNAME = pat,
-        GIT_PASSWORD = "x-oauth-basic"
-      )
-    }
-
-    # set askpass helper
-    # TODO: Windows?
-    askpass <- system.file("resources/scripts-git-askpass.sh", package = "renv")
-    renv_scope_envvars(GIT_ASKPASS = askpass)
-
-    # run the command
+    renv_scope_git_auth()
     system(command)
-
   })
 
   if (status != 0L) {
@@ -259,9 +243,7 @@ renv_retrieve_git <- function(record) {
     stopf(fmt, record$Package, record$RemoteUrl, status)
   }
 
-  url <- paste("file://", package, sep = "")
-  path <- renv_retrieve_path(record)
-  renv_retrieve_package(record, url, path)
+  renv_retrieve_successful(record, path)
 
 }
 

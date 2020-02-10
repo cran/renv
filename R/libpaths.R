@@ -36,8 +36,81 @@ renv_libpaths_external <- function(project) {
 
 }
 
+# on Windows, attempting to use a library path containing
+# characters considered special by cmd.exe will fail.
+# to guard against this, we try to create a junction point
+# from the temporary directory to the target library path
+#
+# https://github.com/rstudio/renv/issues/334
+renv_libpaths_safe <- function(libpaths) {
+
+  if (!renv_platform_windows())
+    return(libpaths)
+
+  map_chr(libpaths, function(libpath) {
+
+    # check for an unsafe library path
+    unsafe <-
+      Encoding(libpath) == "UTF-8" ||
+      grepl("[&\\<>^|\"]", libpath)
+
+    # if the path appears safe, use it as-is
+    if (!unsafe)
+      return(libpath)
+
+    # try to form a safe library path
+    methods <- c(
+      renv_libpaths_safe_tempdir,
+      renv_libpaths_safe_userlib
+    )
+
+    for (method in methods) {
+      safelib <- catchall(method(libpath))
+      if (is.character(safelib))
+        return(safelib)
+    }
+
+    # could not form a safe library path;
+    # just use the existing library path as-is
+    libpath
+
+  })
+
+}
+
+renv_libpaths_safe_tempdir <- function(libpath) {
+  safelib <- tempfile("renv-library-")
+  renv_file_junction(libpath, safelib)
+  safelib
+}
+
+renv_libpaths_safe_userlib <- function(libpath) {
+
+  # form path into user library
+  userlib <- renv_libpaths_user()[[1]]
+  base <- file.path(userlib, ".renv-links")
+  ensure_directory(base)
+
+  # create name for actual junction point
+  name <- renv_hash_text(libpath)
+  safelib <- file.path(base, name)
+
+  # if the junction already exists, use it
+  if (renv_file_same(libpath, safelib))
+    return(safelib)
+
+  # otherwise, try to create it. note that junction
+  # points can be removed with a non-recursive unlink
+  unlink(safelib)
+  renv_file_junction(libpath, safelib)
+
+  safelib
+
+}
+
 renv_libpaths_set <- function(libpaths) {
   oldlibpaths <- .libPaths()
+  libpaths <- renv_libpaths_safe(libpaths)
   .libPaths(libpaths)
   oldlibpaths
 }
@@ -73,9 +146,7 @@ renv_libpaths_activate <- function(project) {
   libpaths <- c(projlib, extlib, userlib)
 
   lapply(libpaths, ensure_directory)
-  oldlibpaths <- .libPaths()
-  .libPaths(libpaths)
-  oldlibpaths
+  renv_libpaths_set(libpaths)
 
 }
 
@@ -89,6 +160,6 @@ renv_libpaths_restore <- function() {
   libpaths <- renv_global_get("default.libpaths")
   if (!is.null(libpaths)) {
     renv_global_clear("default.libpaths")
-    .libPaths(libpaths)
+    renv_libpaths_set(libpaths)
   }
 }

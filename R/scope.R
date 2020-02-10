@@ -135,12 +135,21 @@ renv_scope_rtools <- function(.envir = NULL) {
     return(FALSE)
 
   # add Rtools bin to PATH
-  bin <- renv_path_normalize(file.path(rtools, "bin"), winslash = "\\")
-  path <- paste(bin, Sys.getenv("PATH"), sep = ";")
+  bin <- normalizePath(
+    file.path(rtools, "bin"),
+    winslash = "\\",
+    mustWork = FALSE
+  )
+
+  path <- paste(bin, Sys.getenv("PATH"), sep = .Platform$path.sep)
 
   # set BINPREF (note: trailing slash required but file.path()
   # drops trailing slashes on Windows)
-  binpref <- paste(rtools, "mingw_$(WIN)/bin/", sep = "/")
+  binpref <- paste(
+    normalizePath(rtools, winslash = "/", mustWork = FALSE),
+    "mingw_$(WIN)/bin/",
+    sep = "/"
+  )
 
   # scope envvars in parent
   .envir <- .envir %||% parent.frame()
@@ -221,20 +230,14 @@ renv_scope_install_macos <- function(.envir = NULL) {
 
   }
 
-  # if we have command line tools, add them to CPPFLAGS
-  sdk <- "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk"
-  if (file.exists(sdk)) {
-    line <- paste("CPPFLAGS += -isysroot", sdk)
-    makevars$push(line)
-  }
-
   # write makevars to file
   path <- tempfile("Makevars-")
   contents <- unlist(makevars$data(), recursive = TRUE, use.names = FALSE)
-  writeLines(contents, con = path)
+  if (length(contents)) {
+    writeLines(contents, con = path)
+    renv_scope_envvars(R_MAKEVARS_SITE = path, .envir = .envir)
+  }
 
-  # tell R to use it
-  renv_scope_envvars(R_MAKEVARS_SITE = path, .envir = .envir)
   TRUE
 
 }
@@ -249,4 +252,40 @@ renv_scope_restore <- function(..., .envir = NULL) {
   .envir <- .envir %||% parent.frame()
   state <- renv_restore_begin(...)
   defer(renv_restore_end(state), envir = .envir)
+}
+
+renv_scope_git_auth <- function(.envir = NULL) {
+
+  .envir <- .envir %||% parent.frame()
+
+  # TODO: not yet implemented for Windows
+  if (renv_platform_windows())
+    return(FALSE)
+
+  # use GIT_PAT when provided
+  pat <- Sys.getenv("GIT_PAT", unset = NA)
+  if (!is.na(pat)) {
+    renv_scope_envvars(
+      GIT_USERNAME = pat,
+      GIT_PASSWORD = "x-oauth-basic",
+      .envir = .envir
+    )
+  }
+
+  # only set askpass when GIT_USERNAME + GIT_PASSWORD are set
+  user <-
+    Sys.getenv("GIT_USERNAME", unset = NA) %NA%
+    Sys.getenv("GIT_USER",     unset = NA)
+
+  pass <-
+    Sys.getenv("GIT_PASSWORD", unset = NA) %NA%
+    Sys.getenv("GIT_PASS",     unset = NA)
+
+  if (is.na(user) || is.na(pass))
+    return(FALSE)
+
+  askpass <- system.file("resources/scripts-git-askpass.sh", package = "renv")
+  renv_scope_envvars(GIT_ASKPASS = askpass, .envir = .envir)
+  return(TRUE)
+
 }

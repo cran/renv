@@ -44,13 +44,13 @@ renv_paths_common <- function(name, prefixes = NULL, ...) {
 }
 
 renv_paths_project <- function(..., project = NULL) {
-  project <- project %||% renv_project()
+  project <- renv_project_resolve(project)
   file.path(project, ...) %||% ""
 }
 
 # NOTE: changes here must be synchronized with 'inst/activate.R'
 renv_paths_library <- function(..., project = NULL) {
-  project <- project %||% renv_project()
+  project <- renv_project_resolve(project)
   root <- Sys.getenv("RENV_PATHS_LIBRARY", unset = file.path(project, "renv/library"))
   file.path(root, renv_prefix_platform(), ...) %||% ""
 }
@@ -74,8 +74,20 @@ renv_paths_cache <- function(..., version = NULL) {
 }
 
 renv_paths_rtools <- function(...) {
+
+  root <- Sys.getenv("RENV_PATHS_RTOOLS", unset = NA)
+  if (!is.na(root))
+    return(root)
+
+  # TODO: this was a typo in a previous usage; preserved
+  # for backwards compatibility
+  root <- Sys.getenv("RENV_PATH_RTOOLS", unset = NA)
+  if (!is.na(root))
+    return(root)
+
   root <- renv_rtools_find()
   file.path(root, ...) %||% ""
+
 }
 
 renv_paths_extsoft <- function(...) {
@@ -200,11 +212,11 @@ renv_paths_init <- function() {
 #' Sys.setenv(RENV_PATHS_CACHE = "/mnt/shared/renv/cache")
 #' ```
 #'
-#' then the directory used for the cache will still depend on the \R version
-#' (e.g. `3.5`) and the `renv` cache version (e.g. `v2`). For example:
+#' then the directory used for the cache will still depend on the `renv` cache version (e.g. `v2`), the \R version
+#' (e.g. `3.5`) and the platform (e.g. `x86_64-pc-linux-gnu`). For example:
 #'
 #' ```
-#' /mnt/shared/renv/cache/R-3.5/v2
+#' /mnt/shared/renv/cache/v2/R-3.5/x86_64-pc-linux-gnu
 #' ```
 #'
 #' This ensures that you can set a single `RENV_PATHS_CACHE` environment variable

@@ -1,7 +1,7 @@
 
 # tools for writing / removing renv-related infrastructure
 renv_infrastructure_write <- function(project = NULL, version = NULL) {
-  project <- project %||% renv_project()
+  project <- renv_project_resolve(project)
 
   renv_infrastructure_write_rprofile(project)
   renv_infrastructure_write_rbuildignore(project)
@@ -52,13 +52,13 @@ renv_infrastructure_write_gitignore <- function(project) {
     add    = as.character(add$data()),
     remove = as.character(remove$data()),
     file   = file.path(project, "renv/.gitignore"),
-    create = file.exists(file.path(project, ".git"))
+    create = !is.null(renv_git_root(project = project))
   )
 
 }
 
 renv_infrastructure_write_activate <- function(project = NULL, version = NULL) {
-  project <- project %||% renv_project()
+  project <- renv_project_resolve(project)
   version <- version %||% renv_activate_version(project)
 
   source <- system.file("resources/activate.R", package = "renv")
@@ -131,7 +131,7 @@ renv_infrastructure_write_entry_impl <- function(add, remove, file, create) {
 
 
 renv_infrastructure_remove <- function(project = NULL) {
-  project <- project %||% renv_project()
+  project <- renv_project_resolve(project)
 
   renv_infrastructure_remove_rprofile(project)
   renv_infrastructure_remove_rbuildignore(project)
