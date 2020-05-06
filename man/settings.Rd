@@ -4,7 +4,9 @@
 \name{settings}
 \alias{settings}
 \title{Project Settings}
-\format{An object of class \code{list} of length 6.}
+\format{
+An object of class \code{list} of length 6.
+}
 \usage{
 settings
 }
@@ -81,8 +83,8 @@ projects by setting \R options for \code{renv.settings} or \verb{renv.settings.<
 For example:
 
 \preformatted{
-options(renv.settings = list(snapshot.type = "simple"))
-options(renv.settings.snapshot.type = "simple")
+options(renv.settings = list(snapshot.type = "all"))
+options(renv.settings.snapshot.type = "all")
 }
 
 If both of the \code{renv.settings} and \verb{renv.settings.<name>} options are set

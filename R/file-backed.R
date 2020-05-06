@@ -6,7 +6,7 @@
 `_renv_filebacked` <- new.env(parent = emptyenv())
 
 renv_filebacked_init <- function() {
-  scopes <- c("DESCRIPTION", "dependencies", "hash", "settings", "test")
+  scopes <- c("DESCRIPTION", "dependencies", "hash", "mran", "settings", "test")
   for (scope in scopes) {
     envir <- new.env(parent = emptyenv())
     assign(scope, envir, envir = `_renv_filebacked`)
@@ -76,7 +76,7 @@ renv_filebacked_envir <- function(scope) {
 
 renv_filebacked <- function(scope, path, callback, ...) {
 
-  config <- renv_config("filebacked.cache", default = TRUE)
+  config <- config$filebacked.cache()
   if (identical(config, FALSE))
     return(callback(path, ...))
 

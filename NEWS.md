@@ -1,4 +1,117 @@
 
+# renv 0.10.0
+
+* `renv::install()` gains the `type` argument, used to control whether `renv`
+  should attempt to install packages from sources (`"source"`) or using
+  binaries (`"binary"`).
+
+* `renv` now knows how to find and activate Rtools40, for R 4.0.0 installations
+  on Windows.
+
+* The `RENV_PATHS_PREFIX` environment variable can now be used to prepend an
+  optional path component to the project library and global cache paths.
+  This is primarily useful for users who want to share the `renv` cache across
+  multiple operating systems on Linux, but need to disambigutate these paths
+  according to the operating system in use. See `?renv::paths` for more details.
+  
+* Fixed an issue where `renv::install()` could fail for packages from GitHub
+  whose DESCRIPTION files contained Windows-style line endings. (#408)
+
+* `renv::update()` now also checks and updates any Bioconductor packages
+  used within a project. (#392)
+
+* `renv` now properly parses negated entries within a `.gitignore`; e.g.
+  `!script.R` will indicate that `renv` should include `script.R` when
+  parsing dependencies. (#403)
+
+* Fixed an issue where packages which had only binaries available on a
+  package repository were not detected as being from a package repository.
+  (#402)
+
+* Fixed an issue where calls of the form `p_load(char = <vctr>)` caused a
+  failure when enumerating dependencies. (#401)
+
+* Fixed an issue where `renv::install()` could fail when multiple versions
+  of a package are available from a single repository, but some versions of
+  those packages are incompatible with the current version of R. (#252)
+
+* Fixed an issue where downloads could fail when the associated pre-flight
+  HEAD request failed as well. (#390)
+
+* Fixed an issue where empty records within a DESCRIPTION file could cause
+  `renv::dependencies()` to fail. (#382)
+
+* renv will now download binaries of older packages from MRAN when possible.
+
+* renv will now attempt to re-generate the system library sandbox if it is
+  deleted while a session is active. (#361)
+
+* Fixed an issue where Python packages referenced using `reticulate::import()`
+  were incorrectly tagged as R package dependencies. Similarly, `renv` now only
+  considers calls to `modules::import()` if those calls occur within a call to
+  `modules::module()`. (#359)
+
+* `renv::scaffold()` now also generates a lockfile when invoked. (#351)
+
+* The argument `confirm` has been renamed to `prompt` in all places where it
+  is used. `confirm` remains supported for backwards compatibility, but is no
+  longer explicitly documented. (#347)
+
+* The continuous integration `renv` vignette now also contains a template for
+  using `renv` together with GitLab CI. (#348, @artemklevtsov)
+
+* `renv` now properly resets the session library paths when calling
+  `renv::deactivate()` from within RStudio. (#219)
+  
+* `renv::init()` now restores the associated project library when called in a
+  project containing a lockfile but no project library nor any pre-existing
+  project infrastructure.
+
+* Fixed an issue on Windows where attempts to download packages from package
+  repositories referenced with a `file://` scheme could fail.
+  
+* The configuration option `dependency.errors` has been added, controlling how
+  errors are handled during dependency enumeration. This is used, for
+  example, when enumerating dependencies during a call to `renv::snapshot()`.
+  By default, errors are reported, and (for interactive sessions) the user is
+  prompted to continue. (#342)
+  
+* `renv::dependencies()` gains two new arguments: the `progress` argument
+  controls whether `renv` reports progress while enumerating dependencies,
+  and `errors` controls how `renv` handles and reports errors encountered
+  during dependency discovery. The `quiet` argument is now soft-deprecated,
+  but continues to be supported for backwards compatibility. Specifying
+  `quiet = TRUE` is equivalent to specifying `progress = FALSE` and
+  `errors = "ignored"`. Please see the documentation in `?dependencies`
+  for more details. (#342)
+  
+* The environment variable `RENV_PATHS_LIBRARY_ROOT` can now be set, to
+  instruct `renv` to use a particular directory as a host for any project
+  libraries that are used by `renv`. This can be useful for certain cases
+  where it is cumbersome to include the project library within the project
+  itself; for example, when developing an R package. (#345)
+
+* The code used to bootstrap `renv` (that is, the code used to install `renv`
+  into a project) has been overhauled. (#344)
+
+* `renv` no longer unsets an error handler set within the user profile when
+  loading a project. (#343)
+
+* `renv` gains the "explicit" snapshot type, wherein only packages explicitly
+  listed as dependencies within the project `DESCRIPTION` file (and those
+  package's transitive dependencies) will enter the lockfile when
+  `renv::snapshot()` is called. (#338)
+
+* `renv` will now transform RSPM source URLs into binary URLs as appropriate,
+  allowing `renv` to use RSPM's binary repositories during restore. See
+  `?config` for more details. (#124)
+
+* `renv` will now infer a dependency on `hexbin` in projects that make
+  use of the `ggplot2::geom_hex()` function.
+
+* `renv` now tries to place Rtools on the PATH when a package is installed
+  with the `install.packages()` hook active. (#335)
+
 # renv 0.9.3
 
 * Fixed an issue where attempts to specify `RENV_PATHS_RTOOLS` would

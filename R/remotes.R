@@ -145,9 +145,7 @@ renv_remotes_resolve_bitbucket <- function(entry) {
   subdir <- entry$subdir
   ref    <- entry$ref %||% "master"
 
-  host <-
-    entry$host %||%
-    renv_config("bitbucket.host", default = "api.bitbucket.org/2.0")
+  host <- entry$host %||% config$bitbucket.host()
 
   fmt <- "%s/repositories/%s/%s/src/%s/DESCRIPTION"
   origin <- renv_retrieve_origin(host)
@@ -248,6 +246,9 @@ renv_remotes_resolve_github_description <- function(host, user, repo, subdir, sh
   json <- renv_json_read(jsonfile)
   contents <- renv_base64_decode(json$content)
 
+  # normalize newlines
+  contents <- gsub("\r\n", "\n", contents, fixed = TRUE)
+
   # write to file and read back in
   descfile <- renv_tempfile("renv-description-")
   writeLines(contents, con = descfile)
@@ -263,9 +264,7 @@ renv_remotes_resolve_github <- function(entry) {
   pull   <- entry$pull %||% ""
   ref    <- entry$ref %||% "master"
 
-  host <-
-    entry$host %||%
-    renv_config("github.host", default = "api.github.com")
+  host <- entry$host %||% config$github.host()
 
   # resolve the sha associated with the ref / pull
   sha <- case(
@@ -300,9 +299,7 @@ renv_remotes_resolve_gitlab <- function(entry) {
   parts <- c(if (nzchar(subdir)) subdir, "DESCRIPTION")
   descpath <- URLencode(paste(parts, collapse = "/"), reserved = TRUE)
 
-  host <-
-    entry$host %||%
-    renv_config("gitlab.host", default = "gitlab.com")
+  host <- entry$host %||% config$gitlab.host()
 
   fmt <- "%s/api/v4/projects/%s/repository/files/%s/raw?ref=%s"
   origin <- renv_retrieve_origin(host)

@@ -4,7 +4,9 @@
 \name{paths}
 \alias{paths}
 \title{Path Customization}
-\format{An object of class \code{list} of length 3.}
+\format{
+An object of class \code{list} of length 3.
+}
 \usage{
 paths
 }
@@ -31,33 +33,48 @@ separate volume). The various environment variables that can be set are
 enumerated below:
 
 \tabular{ll}{
-\strong{Environment Variable} \tab \strong{Description} \cr
-\code{RENV_PATHS_ROOT}        \tab The root path used for global state storage. \cr
-\code{RENV_PATHS_LIBRARY}     \tab The root path containing different \R libraries. \cr
-\code{RENV_PATHS_LOCAL}       \tab The path containing local package sources. \cr
-\code{RENV_PATHS_SOURCE}      \tab The path containing downloaded package sources. \cr
-\code{RENV_PATHS_BINARY}      \tab The path containing downloaded package binaries. \cr
-\code{RENV_PATHS_CACHE}       \tab The path containing cached package installations. \cr
-\code{RENV_PATHS_RTOOLS}      \tab (Windows only) The path to \href{https://cran.r-project.org/bin/windows/Rtools/}{Rtools}. \cr
-\code{RENV_PATHS_EXTSOFT}     \tab (Windows only) The path containing external software needed for compilation of Windows source packages. \cr
+\strong{Environment Variable}  \tab \strong{Description} \cr
+\code{RENV_PATHS_ROOT}         \tab The root path used for global state storage. \cr
+\code{RENV_PATHS_LIBRARY}      \tab The path to the project library. \cr
+\code{RENV_PATHS_LIBRARY_ROOT} \tab The parent path for project libraries. \cr
+\code{RENV_PATHS_LOCAL}        \tab The path containing local package sources. \cr
+\code{RENV_PATHS_SOURCE}       \tab The path containing downloaded package sources. \cr
+\code{RENV_PATHS_BINARY}       \tab The path containing downloaded package binaries. \cr
+\code{RENV_PATHS_CACHE}        \tab The path containing cached package installations. \cr
+\code{RENV_PATHS_PREFIX}       \tab An optional prefix to prepend to the constructed library / cache paths. \cr
+\code{RENV_PATHS_RTOOLS}       \tab (Windows only) The path to \href{https://cran.r-project.org/bin/windows/Rtools/}{Rtools}. \cr
+\code{RENV_PATHS_EXTSOFT}      \tab (Windows only) The path containing external software needed for compilation of Windows source packages. \cr
 }
 
 Note that \code{renv} will append platform-specific and version-specific entries
 to the set paths as appropriate. For example, if you have set:\preformatted{Sys.setenv(RENV_PATHS_CACHE = "/mnt/shared/renv/cache")
 }
 
-then the directory used for the cache will still depend on the \code{renv} cache version (e.g. \code{v2}), the \R version
-(e.g. \code{3.5}) and the platform (e.g. \code{x86_64-pc-linux-gnu}). For example:\preformatted{/mnt/shared/renv/cache/v2/R-3.5/x86_64-pc-linux-gnu
+then the directory used for the cache will still depend on the \code{renv} cache
+version (e.g. \code{v2}), the \R version (e.g. \code{3.5}) and the platform (e.g.
+\code{x86_64-pc-linux-gnu}). For example:\preformatted{/mnt/shared/renv/cache/v2/R-3.5/x86_64-pc-linux-gnu
 }
 
 This ensures that you can set a single \code{RENV_PATHS_CACHE} environment variable
 globally without worry that it may cause collisions or errors if multiple
 versions of \R needed to interact with the same cache.
 
+If you need to share the same cache with multiple different Linux operating
+systems, you may want to set the \code{RENV_PATHS_PREFIX} environment variable
+to help disambiguate the paths used on Linux. For example, setting
+\code{RENV_PATHS_PREFIX = "ubuntu-bionic"} would instruct \code{renv} to construct a
+cache path like:\preformatted{/mnt/shared/renv/cache/v2/ubuntu-bionic/R-3.5/x86_64-pc-linux-gnu
+}
+
+If this is required, it's strongly recommended that this environment
+variable is set in your \R installation's \code{Renviron.site} file, typically
+located at \code{file.path(R.home("etc"), "Renviron.site")}, so that it can be
+active for any \R sessions launched on that machine.
+
 If reproducibility of a project is desired on a particular machine, it is
 highly recommended that the \code{renv} cache of installed packages + binary
-packages is stored, so that packages can be easily restored in the future --
-installation of packages from source can often be arduous.
+packages is backed up and persisted, so that packages can be easily restored
+in the future -- installation of packages from source can often be arduous.
 
 If you want these settings to persist in your project, it is recommended that
 you add these to an appropriate \R startup file. For example, these could be
@@ -65,7 +82,7 @@ set in:
 \itemize{
 \item A project-local \code{.Renviron};
 \item The user-level \code{.Renviron};
-\item A file at \verb{$(R RHOME)/etc/Renviron.site}.
+\item A file at \code{file.path(R.home("etc"), "Renviron.site")}.
 }
 
 Please see ?\link{Startup} for more details.

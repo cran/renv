@@ -23,7 +23,9 @@ renv_renvignore_pattern <- function(path = getwd(), root = path) {
       candidate <- file.path(parent, file)
       if (file.exists(candidate)) {
         contents <- readLines(candidate, warn = FALSE)
-        ignores$push(renv_renvignore_parse(contents, parent))
+        parsed <- renv_renvignore_parse(contents, parent)
+        if (length(parsed))
+          ignores$push(parsed)
         break
       }
     }
@@ -37,12 +39,25 @@ renv_renvignore_pattern <- function(path = getwd(), root = path) {
   }
 
   # collect patterns read
-  patterns <- unlist(ignores$data())
+  patterns <- ignores$data()
   if (empty(patterns))
-    return(patterns)
+    return(list())
+
+  # separate exclusions, exclusions
+  exclude <- unlist(extract(patterns, "exclude"))
+  include <- unlist(extract(patterns, "include"))
 
   # join into single pattern for matching
-  sprintf("(?:%s)", paste(patterns, collapse = "|"))
+  if (length(exclude))
+    exclude <- sprintf("(?:%s)", paste(exclude, collapse = "|"))
+
+  if (length(include))
+    include <- sprintf("(?:%s)", paste(include, collapse = "|"))
+
+  list(
+    exclude = exclude,
+    include = include
+  )
 
 }
 
@@ -51,7 +66,26 @@ renv_renvignore_pattern <- function(path = getwd(), root = path) {
 renv_renvignore_parse <- function(contents, prefix = "") {
 
   # read the ignore entries
-  entries <- grep("^\\s*(?:#|$)", contents, value = TRUE, invert = TRUE)
+  contents <- grep("^\\s*(?:#|$)", contents, value = TRUE, invert = TRUE)
+  if (empty(contents))
+    return(list())
+
+  # split into inclusion, exclusion patterns
+  negate <- substring(contents, 1L, 1L) == "!"
+  exclude <- contents[!negate]
+  include <- substring(contents[negate], 2L)
+
+  # parse patterns separately
+  list(
+    exclude = renv_renvignore_parse_impl(exclude, prefix),
+    include = renv_renvignore_parse_impl(include, prefix)
+  )
+
+}
+
+renv_renvignore_parse_impl <- function(entries, prefix = "") {
+
+  # check for empty entries list
   if (empty(entries))
     return(character())
 
@@ -97,10 +131,24 @@ renv_renvignore_parse <- function(contents, prefix = "") {
 
 renv_renvignore_exec <- function(path, root, children) {
 
-  pattern <- renv_renvignore_pattern(path, root)
-  if (empty(pattern))
+  patterns <- renv_renvignore_pattern(path, root)
+  if (empty(patterns))
     return(children)
 
-  grep(pattern, children, perl = TRUE, invert = TRUE, value = TRUE)
+  # if we don't have an exclusion pattern, keep everything
+  if (empty(patterns$exclude))
+    return(children)
+
+  # get the entries that need to be excluded
+  exclude <- grepl(patterns$exclude %||% "", children, perl = TRUE)
+
+  # also check which entries should explicitly be included
+  if (length(patterns$include)) {
+    include <- grepl(patterns$include, children, perl = TRUE)
+    exclude[include] <- FALSE
+  }
+
+  # keep paths not explicitly excluded
+  children[!exclude]
 
 }

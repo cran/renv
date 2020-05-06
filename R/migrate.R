@@ -91,7 +91,7 @@ renv_migrate_packrat <- function(project = NULL, components = NULL) {
     callback(project)
 
   renv_migrate_packrat_infrastructure(project)
-  renv_bootstrap_impl(project)
+  renv_imbue_impl(project)
 
   fmt <- "* Project '%s' has been migrated from Packrat to renv."
   vwritef(fmt, aliased_path(project))
@@ -123,7 +123,7 @@ renv_migrate_packrat_lockfile <- function(project) {
   repos <- getOption("repos")
   if (!is.null(header$Repos)) {
     parts <- strsplit(header$Repos, "\\s*,\\s*")[[1]]
-    repos <- renv_read_properties(text = parts, delimiter = "=")
+    repos <- renv_properties_read(text = parts, delimiter = "=")
   }
 
   # fix-up some record fields for renv
@@ -281,16 +281,8 @@ renv_migrate_packrat_cache <- function(project) {
   ok <- file.exists(file.path(sources, "DESCRIPTION"))
   sources <- sources[ok]
 
-  # read DESCRIPTIONs for each package (update the Hash
-  # as Packrat + renv hashes are not compatible)
-  records <- lapply(sources, function(source) {
-    record <- renv_description_read(source)
-    record$Hash <- renv_hash_description(source)
-    record
-  })
-
   # construct cache target paths
-  targets <- map_chr(records, renv_cache_package_path)
+  targets <- map_chr(sources, renv_cache_path)
   names(targets) <- sources
 
   # only copy to cache target paths that don't exist

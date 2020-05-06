@@ -157,3 +157,44 @@ renv_project_ignored_packages <- function(project) {
   ignored
 
 }
+
+renv_project_id <- function(project) {
+
+  idpath <- renv_id_path(project = project)
+  if (!file.exists(idpath)) {
+    id <- renv_id_generate()
+    writeLines(id, con = idpath)
+  }
+
+  readLines(idpath, n = 1L, warn = FALSE)
+
+}
+
+renv_project_synchronized_check <- function(project, lockfile) {
+
+  library <- renv_libpaths_all()
+
+  quietly({
+
+    libstate <- snapshot(
+      project  = project,
+      library  = library,
+      lockfile = NULL,
+      force    = TRUE
+    )
+
+    synchronized <- renv_status_check_synchronized(
+      project  = project,
+      lockfile = lockfile,
+      library  = library,
+      libstate = libstate
+    )
+
+  })
+
+  if (!synchronized) {
+    msg <- "* The project and lockfile are out of sync -- use `renv::status()` for more details."
+    ewritef(msg)
+  }
+
+}

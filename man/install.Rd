@@ -8,8 +8,9 @@ install(
   packages = NULL,
   ...,
   library = NULL,
+  type = NULL,
   rebuild = FALSE,
-  confirm = interactive(),
+  prompt = interactive(),
   project = NULL
 )
 }
@@ -24,12 +25,16 @@ are matched to \code{...}, \code{renv} will signal an error.}
 \item{library}{The \R library to be used. When \code{NULL}, the active project
 library will be used instead.}
 
+\item{type}{The type of package to install ("source" or "binary"). Defaults
+to the value of \code{getOption("pkgType")}.}
+
 \item{rebuild}{Force packages to be rebuilt, thereby bypassing any installed
 versions of the package available in the cache? This can either be a
 boolean (indicating that the requested package(s) should be rebuilt), or a
 vector of package names indicating which packages should be rebuilt.}
 
-\item{confirm}{Boolean; prompt the user before taking any action?}
+\item{prompt}{Boolean; prompt the user before taking any action? For backwards
+compatibility, \code{confirm} is accepted as an alias for \code{prompt}.}
 
 \item{project}{The project directory. If \code{NULL}, then the active project will
 be used. If no project is currently active, then the current working
@@ -51,6 +56,20 @@ a binary copy of that package is already available.
 Note that this interface is subject to change -- the goal is to hook into
 separate package installation backends in the future.
 }
+\section{Package Configuration}{
+
+
+Many \R packages have a \code{configure} script that needs to be run to prepare
+the package for installation. Arguments and environment variables can be
+passed through to those scripts in a manner similar to \link{install.packages}.
+In particular, the \R options \code{configure.args} and \code{configure.vars} can be
+used to map package names to their appropriate configuration. For example:\preformatted{# installation of RNetCDF may require us to set include paths for netcdf
+configure.args = c(RNetCDF = "--with-netcdf-include=/usr/include/udunits2"))
+options(configure.args = configure.args)
+renv::install("RNetCDF")
+}
+}
+
 \examples{
 \dontrun{
 

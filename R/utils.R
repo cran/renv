@@ -61,8 +61,11 @@ empty <- function(x) {
 
 aliased_path <- function(path) {
 
-  home <- Sys.getenv("HOME", unset = NA)
-  if (is.na(home))
+  home <-
+    Sys.getenv("HOME") %""%
+    Sys.getenv("R_USER")
+
+  if (!nzchar(home))
     return(path)
 
   home <- gsub("\\", "/", home, fixed = TRUE)
@@ -344,4 +347,32 @@ drop <- function(x, keys) {
 
 invoke <- function(f, ...) {
   f(...)
+}
+
+delegate <- function(to) {
+  call <- sys.call(sys.parent())
+  call[[1]] <- to
+  eval(call, envir = parent.frame(2))
+}
+
+dequote <- function(strings) {
+
+  for (quote in c("'", '"')) {
+
+    # find strings matching pattern
+    pattern <- paste0(quote, "(.*)", quote)
+    matches <- grep(pattern, strings)
+    if (empty(matches))
+      next
+
+    # remove outer quotes
+    strings[matches] <- gsub(pattern, "\\1", strings[matches])
+
+    # un-escape inner quotes
+    pattern <- paste0("\\", quote)
+    strings[matches] <- gsub(pattern, quote, strings[matches], fixed = TRUE)
+  }
+
+  strings
+
 }

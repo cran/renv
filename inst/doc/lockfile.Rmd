@@ -1,8 +1,8 @@
 ---
-title: "Lockfiles"
+title: "Anatomy of a Lockfile"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Lockfiles}
+  %\VignetteIndexEntry{Anatomy of a Lockfile}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -28,9 +28,6 @@ Here is an example lockfile, including the packages `markdown` and `mime`:
 
 ```
 {
-  "renv": {
-    "Version": "`r renv:::renv_package_version("renv")`"
-  },
   "R": {
     "Version": "`r getRversion()`",
     "Repositories": [

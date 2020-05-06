@@ -66,11 +66,11 @@ restore <- function(project  = NULL,
                     packages = NULL,
                     repos    = NULL,
                     clean    = FALSE,
-                    confirm  = interactive())
+                    prompt   = interactive())
 {
   renv_consent_check()
   renv_scope_error_handler()
-  renv_dots_disallow(...)
+  renv_dots_check(...)
 
   project  <- renv_project_resolve(project)
   library  <- library %||% renv_libpaths_all()
@@ -92,9 +92,7 @@ restore <- function(project  = NULL,
   lockfile <- renv_lockfile_override(lockfile)
 
   # override repositories if requested
-  repos <- repos %||%
-    renv_config("repos.override") %||%
-    lockfile$R$Repositories
+  repos <- repos %||% config$repos.override() %||% lockfile$R$Repositories
 
   if (length(repos))
     renv_scope_options(repos = convert(repos, "character"))
@@ -107,10 +105,10 @@ restore <- function(project  = NULL,
   }
 
   # get records for R packages currently installed
-  current <- snapshot(project = project,
-                      library = library,
+  current <- snapshot(project  = project,
+                      library  = library,
                       lockfile = NULL,
-                      type = "simple")
+                      type     = "all")
 
   # compare lockfile vs. currently-installed packages
   diff <- renv_lockfile_diff_packages(current, lockfile)
@@ -139,15 +137,15 @@ restore <- function(project  = NULL,
     return(invisible(diff))
   }
 
-  if (!renv_restore_preflight(project, library, diff, current, lockfile, confirm)) {
+  if (!renv_restore_preflight(project, library, diff, current, lockfile, prompt)) {
     message("* Operation aborted.")
     return(FALSE)
   }
 
-  if (confirm || renv_verbose())
+  if (prompt || renv_verbose())
     renv_restore_report_actions(diff, current, lockfile)
 
-  if (confirm && !proceed()) {
+  if (prompt && !proceed()) {
     message("* Operation aborted.")
     return(invisible(diff))
   }
@@ -286,10 +284,10 @@ renv_restore_remove <- function(project, package, lockfile) {
   TRUE
 }
 
-renv_restore_preflight <- function(project, library, actions, current, lockfile, confirm) {
+renv_restore_preflight <- function(project, library, actions, current, lockfile, prompt) {
   records <- renv_records(lockfile)
   matching <- keep(records, names(actions))
-  renv_install_preflight(project, library, matching, confirm)
+  renv_install_preflight(project, library, matching, prompt)
 }
 
 renv_restore_find <- function(record) {

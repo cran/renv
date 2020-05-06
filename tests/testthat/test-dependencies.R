@@ -23,6 +23,7 @@ test_that("usages of library, etc. are properly handled", {
 
 test_that("parse errors are okay in .Rmd documents", {
   skip_if_not_installed("knitr")
+  skip_if_not_installed("rmarkdown")
   deps <- dependencies("resources/chunk-errors.Rmd")
   pkgs <- deps$Package
   expect_setequal(pkgs, c("rmarkdown", "dplyr"))
@@ -30,6 +31,7 @@ test_that("parse errors are okay in .Rmd documents", {
 
 test_that("inline chunks are parsed for dependencies", {
   skip_if_not_installed("knitr")
+  skip_if_not_installed("rmarkdown")
   deps <- dependencies("resources/inline-chunks.Rmd")
   pkgs <- deps$Package
   expect_setequal(pkgs, c("rmarkdown", "inline", "multiple", "separate"))
@@ -50,6 +52,7 @@ test_that("the package name is validated when inferring dependencies", {
 
 test_that("empty chunks don't cause issues during dependency resolution", {
   skip_if_not_installed("knitr")
+  skip_if_not_installed("rmarkdown")
   deps <- dependencies("resources/empty-chunk.Rmd")
   pkgs <- deps$Package
   expect_setequal(pkgs, c("rmarkdown"))
@@ -90,6 +93,8 @@ test_that("renv warns when large number of files found", {
 })
 
 test_that("evil knitr chunks are handled", {
+  skip_if_not_installed("knitr")
+  skip_if_not_installed("rmarkdown")
   deps <- dependencies("resources/evil.Rmd")
   packages <- deps$Package
   expect_setequal(packages, c("rmarkdown", "a", "b"))
@@ -132,6 +137,9 @@ test_that("dependencies can infer the root directory", {
 
 test_that("no warnings are produced when crawling dependencies", {
 
+  skip_if_not_installed("knitr")
+  skip_if_not_installed("rmarkdown")
+
   expect_warning(
     regexp = NA,
     renv::dependencies(
@@ -162,22 +170,15 @@ test_that("Suggests are _not_ dev. deps for package projects", {
 })
 
 test_that("packages referenced by modules::import() are discovered", {
-
-  file <- renv_test_code({
-    module({
-      import("A")
-      import(B)
-      import(from = "C")
-      import(symbol, from = D)
-    })
-  })
-
-  deps <- dependencies(file)
-  expect_setequal(deps$Package, c("A", "B", "C", "D"))
-
+  deps <- dependencies("resources/modules.R")
+  expect_setequal(deps$Package, c("A", "B", "C", "D", "G", "H", "modules"))
 })
 
-test_that("Rmarkdown custom site generator is found as dependency", {
+test_that("dependencies specified in R Markdown site generators are found", {
+
+  skip_if_not_installed("knitr")
+  skip_if_not_installed("rmarkdown")
+
   renv_tests_scope()
   writeLines(
     c("---", "site: blogdown:::blogdown_site", "---"),
@@ -189,6 +190,7 @@ test_that("Rmarkdown custom site generator is found as dependency", {
     con = "index.Rmd")
   deps <- dependencies()
   expect_true("bookdown" %in% deps$Package)
+
 })
 
 test_that("Suggest dependencies are ignored by default", {
@@ -203,4 +205,36 @@ test_that("Suggest dependencies are used when requested", {
   settings$package.dependency.fields(fields)
   install("breakfast")
   expect_true(renv_package_installed("egg"))
+})
+
+test_that("a call to geom_hex() implies a dependency on ggplot2", {
+
+  file <- renv_test_code({
+    ggplot() + geom_hex()
+  })
+
+  deps <- dependencies(file)
+  expect_true("hexbin" %in% deps$Package)
+
+})
+
+test_that("empty fields are handled in DESCRIPTION", {
+  deps <- dependencies("resources/DESCRIPTION", progress = FALSE)
+  expect_setequal(deps$Package, c("a", "b", "c"))
+})
+
+test_that("recursive symlinks are handled", {
+  skip_on_os("windows")
+
+  project <- renv_tempfile()
+  ensure_directory(project)
+
+  owd <- setwd(project)
+  on.exit(setwd(owd), add = TRUE)
+
+  symlink <- file.path(project, "symlink")
+  file.symlink(dirname(symlink), symlink)
+
+  renv:::dependencies()
+
 })

@@ -9,6 +9,12 @@ renv_retrieve <- function(packages) {
   if (is.null(state))
     stopf("renv_restore_begin() must be called first")
 
+  # transform repository URLs for RSPM
+  if (renv_rspm_enabled()) {
+    repos <- getOption("repos")
+    renv_scope_options(repos = renv_rspm_transform(repos))
+  }
+
   # TODO: parallel?
   handler <- state$handler
   for (package in packages)
@@ -36,6 +42,16 @@ renv_retrieve_impl <- function(package) {
   records <- state$records
   record <- records[[package]] %||% renv_retrieve_missing_record(package)
 
+  # normalize the record source
+  source <- renv_record_source(record, normalize = TRUE)
+
+  # if this is a package from Bioconductor, activate those repositories now
+  #
+  # TODO: we should consider making this more scoped; calls to `renv_available_packages_*`
+  # would need to be record-aware or source-aware to make this a bit cleaner
+  if (source %in% c("bioconductor"))
+    renv_scope_bioconductor()
+
   # if the requested record is incompatible with the set
   # of requested package versions thus far, request the
   # latest version on the R package repositories
@@ -60,7 +76,14 @@ renv_retrieve_impl <- function(package) {
       renv_record_cacheable(record)
 
     if (cacheable) {
-      path <- renv_cache_package_path(record)
+
+      # for packages from a repository without a tagged version,
+      # attempt to tag that version now
+      if (identical(record$Source, "Repository") && is.null(record$Version))
+        record <- renv_available_packages_latest(record$Package)
+
+      # now try to find the record in the cache
+      path <- renv_cache_find(record)
       if (renv_cache_package_validate(path))
         return(renv_retrieve_successful(record, path))
     }
@@ -88,22 +111,7 @@ renv_retrieve_impl <- function(package) {
   if (identical(retrieved, TRUE))
     return(TRUE)
 
-  # otherwise, try and restore from external source
-  source <- renv_record_source(record)
-  if (source %in% c("git2r", "xgit"))
-    source <- "git"
-
-  # handle case where repository was previously declared as CRAN
-  if (source == "cran")
-    source <- "repository"
-
-  # check for ad-hoc requests to install from bioc
-  if (identical(source, "repository")) {
-    repos <- record$Repository %||% ""
-    if (repos %in% c("bioc", "bioconductor"))
-      source <- "bioconductor"
-  }
-
+  # time to retrieve -- delegate based on previously-determined source
   switch(source,
          bioconductor = renv_retrieve_bioconductor(record),
          bitbucket    = renv_retrieve_bitbucket(record),
@@ -125,9 +133,21 @@ renv_retrieve_name <- function(record, type = "source", ext = NULL) {
 }
 
 renv_retrieve_path <- function(record, type = "source", ext = NULL) {
+
+  # extract relevant record information
   package <- record$Package
   name <- renv_retrieve_name(record, type, ext)
   source <- renv_record_source(record)
+
+  # check for packages from an RSPM binary URL, and
+  # update the package type if known
+  if (renv_rspm_enabled()) {
+    url <- attr(record, "url")
+    if (is.character(url) && grepl("/__[^_]+__/", url))
+      type <- "binary"
+  }
+
+  # form path for package to be downloaded
   if (type == "source")
     renv_paths_source(source, package, name)
   else if (type == "binary")
@@ -137,18 +157,8 @@ renv_retrieve_path <- function(record, type = "source", ext = NULL) {
 }
 
 renv_retrieve_bioconductor <- function(record) {
-
-  # ensure bioconductor support infrastructure initialized
-  renv_bioconductor_init()
-
-  # activate bioconductor repositories in this context
-  repos <- getOption("repos")
-  biocrepos <- c(renv_bioconductor_repos(), repos)
-  renv_scope_options(repos = renv_vector_unique(biocrepos))
-
-  # retrieve package as though from an active R repository
+  renv_scope_bioconductor()
   renv_retrieve_repos(record)
-
 }
 
 renv_retrieve_bitbucket <- function(record) {
@@ -342,15 +352,25 @@ renv_retrieve_repos <- function(record) {
     renv_retrieve_repos_archive
   )
 
-  # only attempt to retrieve binaries when explicitly requested by user
-  # TODO: what about binaries on Linux?
   if (!identical(getOption("pkgType"), "source"))
+  {
+    # only attempt to retrieve binaries when explicitly requested by user
     methods <- c(renv_retrieve_repos_binary, methods)
 
+    # attempt to retrieve binaries from MRAN when enabled as well
+    if (config$mran.enabled())
+      methods <- c(renv_retrieve_repos_mran, methods)
+  }
+
   for (method in methods) {
-    status <- method(record)
+
+    status <- catch(method(record))
+    if (inherits(status, "error"))
+      warning(status)
+
     if (identical(status, TRUE))
       return(TRUE)
+
   }
 
   stopf("failed to retrieve package '%s'", record$Package)
@@ -374,9 +394,55 @@ renv_retrieve_repos_archive_name <- function(record, type) {
   sprintf(fmt, record$Package, record$Version, renv_package_ext(type))
 }
 
+renv_retrieve_repos_mran <- function(record) {
+
+  # MRAN does not make binaries available on Linux
+  if (renv_platform_linux())
+    return(FALSE)
+
+  # ensure local MRAN database is up-to-date
+  renv_mran_database_refresh(explicit = FALSE)
+
+  # check that we have an available database
+  path <- renv_mran_database_path()
+  if (!file.exists(path))
+    return(FALSE)
+
+  # attempt to read it
+  database <- catch(renv_mran_database_load())
+  if (inherits(database, "error"))
+    return(FALSE)
+
+  # get entry for this version of R + platform
+  suffix <- contrib.url("", type = "binary")
+  entry <- database[[suffix]]
+  if (is.null(entry))
+    return(FALSE)
+
+  # check for known entry for this package + version
+  key <- paste(record$Package, record$Version)
+  idate <- entry[[key]]
+  if (is.null(idate))
+    return(FALSE)
+
+  # convert from integer to date
+  date <- as.Date(idate, origin = "1970-01-01")
+
+  # form url to binary package
+  base <- renv_mran_url(date, suffix)
+  name <- renv_retrieve_name(record, type = "binary")
+  url <- file.path(base, name)
+
+  # form path to saved file
+  path <- renv_retrieve_path(record, "binary")
+
+  # attempt to retrieve
+  renv_retrieve_package(record, url, path)
+
+}
+
 renv_retrieve_repos_binary <- function(record) {
   renv_retrieve_repos_impl(record, "binary")
-
 }
 
 renv_retrieve_repos_source <- function(record) {

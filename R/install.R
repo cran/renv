@@ -12,6 +12,21 @@
 #' Note that this interface is subject to change -- the goal is to hook into
 #' separate package installation backends in the future.
 #'
+#' @section Package Configuration:
+#'
+#' Many \R packages have a `configure` script that needs to be run to prepare
+#' the package for installation. Arguments and environment variables can be
+#' passed through to those scripts in a manner similar to [install.packages].
+#' In particular, the \R options `configure.args` and `configure.vars` can be
+#' used to map package names to their appropriate configuration. For example:
+#'
+#' ```
+#' # installation of RNetCDF may require us to set include paths for netcdf
+#' configure.args = c(RNetCDF = "--with-netcdf-include=/usr/include/udunits2"))
+#' options(configure.args = configure.args)
+#' renv::install("RNetCDF")
+#' ```
+#'
 #' @inherit renv-params
 #' @inheritParams install-params
 #'
@@ -38,16 +53,20 @@
 install <- function(packages = NULL,
                     ...,
                     library = NULL,
+                    type    = NULL,
                     rebuild = FALSE,
-                    confirm = interactive(),
+                    prompt  = interactive(),
                     project = NULL)
 {
   renv_consent_check()
   renv_scope_error_handler()
-  renv_dots_disallow(...)
+  renv_dots_check(...)
 
   project <- renv_project_resolve(project)
   library <- library %||% renv_libpaths_all()
+
+  type <- type %||% getOption("pkgType")
+  renv_scope_options(pkgType = type)
 
   packages <- packages %||% renv_project_records(project)
   if (is.null(packages))
@@ -59,8 +78,8 @@ install <- function(packages = NULL,
   }
 
   # override repositories if requested
-  repos <- renv_config("repos.override")
-  if (!is.null(repos))
+  repos <- config$repos.override()
+  if (length(repos))
     renv_scope_options(repos = repos)
 
   records <- renv_snapshot_r_packages(library = library, project = project)
@@ -70,7 +89,7 @@ install <- function(packages = NULL,
   names(remotes) <- packages
   records[names(remotes)] <- remotes
 
-  if (!renv_install_preflight(project, library, remotes, confirm)) {
+  if (!renv_install_preflight(project, library, remotes, prompt)) {
     message("* Operation aborted.")
     return(invisible(list()))
   }
@@ -104,7 +123,7 @@ install <- function(packages = NULL,
 
 renv_install <- function(records, library) {
 
-  staged <- renv_config("install.staged", default = TRUE)
+  staged <- config$install.staged()
 
   if (staged)
     renv_install_staged(records, library)
@@ -208,7 +227,7 @@ renv_install_impl <- function(record) {
   if (cacheable) {
 
     # check for cache entry and install if there
-    path <- renv_cache_package_path(record)
+    path <- renv_cache_find(record)
     if (renv_cache_package_validate(path))
       return(renv_install_package_cache(record, path, linker))
 
@@ -524,7 +543,7 @@ renv_install_preflight_permissions <- function(library) {
 
 }
 
-renv_install_preflight <- function(project, library, records, confirm) {
+renv_install_preflight <- function(project, library, records, prompt) {
 
   # check for packages installed from an unknown source
   ok <- all(
@@ -535,7 +554,7 @@ renv_install_preflight <- function(project, library, records, confirm) {
   if (ok)
     return(TRUE)
 
-  if (confirm && !proceed())
+  if (prompt && !proceed())
     return(FALSE)
 
   TRUE
