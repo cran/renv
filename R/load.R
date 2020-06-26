@@ -110,8 +110,9 @@ renv_load_r_repos <- function(repos) {
   repos <- sub("/+$", "", repos)
   names(repos) <- nms
 
-  # convert to rspm
-  repos <- renv_rspm_transform(repos)
+  # convert to rspm if enabled
+  if (renv_rspm_enabled())
+    repos <- renv_rspm_transform(repos)
 
   # set sanitized repos
   options(repos = repos)
@@ -379,8 +380,8 @@ renv_load_finish <- function(project, lockfile) {
 renv_load_report_project <- function(project) {
 
   quiet <-
-    "--slave" %in% commandArgs(trailingOnly = FALSE) ||
-    identical(renv_verbose(), FALSE)
+    identical(renv_verbose(), FALSE) ||
+    renv_session_quiet()
 
   if (!quiet) {
     fmt <- "* Project '%s' loaded. [renv %s]"
@@ -429,7 +430,7 @@ renv_load_report_updates_impl <- function(project) {
 
 renv_load_report_synchronized <- function(project, lockfile) {
 
-  enabled <- config$synchronized.check()
+  enabled <- interactive() && config$synchronized.check()
   if (!enabled)
     return(FALSE)
 

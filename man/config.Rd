@@ -63,7 +63,9 @@ The following \code{renv} configuration options are available:
 \cr
 \code{hydrate.libpaths} \tab \verb{character[*]} \tab \code{NULL} \tab A character vector of library paths, to be used by \code{renv::hydrate()} when attempting to hydrate projects. When empty, the default set of library paths (as specified in \code{?hydrate}) are used instead. See \code{\link{hydrate}} for more details.
 \cr
-\code{install.staged} \tab \code{logical[1]} \tab \code{TRUE} \tab Perform a staged install of packages during install and restore? When enabled, \code{renv} will first install packages into a temporary library, and later copy or move those packages back into the project library only if all packages were successfully downloaded and installed. This can be useful if you'd like to avoid mutating your project library if installation of one or more packages fails.
+\code{install.staged} \tab \code{logical[1]} \tab \code{TRUE} \tab DEPRECATED: Please use \code{install.transactional} instead.
+\cr
+\code{install.transactional} \tab \code{logical[1]} \tab \code{TRUE} \tab Perform a transactional install of packages during install and restore? When enabled, \code{renv} will first install packages into a temporary library, and later copy or move those packages back into the project library only if all packages were successfully downloaded and installed. This can be useful if you'd like to avoid mutating your project library if installation of one or more packages fails.
 \cr
 \code{mran.enabled} \tab \code{logical[1]} \tab \code{TRUE} \tab Attempt to download binaries from \href{https://mran.microsoft.com/}{MRAN} during restore? See \code{vignette("mran", package = "renv")} for more details.
 \cr
@@ -77,7 +79,7 @@ The following \code{renv} configuration options are available:
 \cr
 \code{snapshot.validate} \tab \code{logical[1]} \tab \code{TRUE} \tab Validate \R package dependencies when calling snapshot? When \code{TRUE}, \code{renv} will attempt to diagnose potential issues in the project library before creating \code{renv.lock} -- for example, if a package installed in the project library depends on a package which is not currently installed.
 \cr
-\code{synchronized.check} \tab \code{logical[1]} \tab \code{TRUE} \tab Check that the project library is synchronized with the lockfile on load?
+\code{synchronized.check} \tab \code{logical[1]} \tab \code{FALSE} \tab Check that the project library is synchronized with the lockfile on load?
 \cr
 \code{updates.check} \tab \code{logical[1]} \tab \code{FALSE} \tab Check for package updates when the session is initialized? This can be useful if you'd like to ensure that your project lockfile remains up-to-date with packages as they are released on CRAN.
 \cr

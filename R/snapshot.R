@@ -96,7 +96,7 @@ snapshot <- function(project  = NULL,
   if (config$snapshot.validate())
     renv_snapshot_preflight(project, library)
 
-  new <- renv_lockfile_create(project, library, type)
+  alt <- new <- renv_lockfile_create(project, library, type)
   if (is.null(lockfile))
     return(new)
 
@@ -104,27 +104,40 @@ snapshot <- function(project  = NULL,
   # the R-level snapshot?
   on.exit(renv_python_snapshot(project), add = TRUE)
 
+  # get prior lockfile state
   old <- list()
   if (file.exists(lockfile)) {
+
+    # read a pre-existing lockfile (if any)
     old <- renv_lockfile_read(lockfile)
-    diff <- renv_lockfile_diff(old, new)
+
+    # preserve records from alternate OSes in lockfile
+    alt <- renv_snapshot_preserve(old, new)
+
+    # check if there are any changes in the lockfile
+    diff <- renv_lockfile_diff(old, alt)
     if (empty(diff)) {
       vwritef("* The lockfile is already up to date.")
-      return(invisible(new))
+      return(invisible(alt))
     }
+
   }
 
   # check for missing dependencies and warn if any are discovered
-  # TODO: enable this check for multi-library configurations
+  # (note: use 'new' rather than 'alt' here as we don't want to attempt
+  # validation on uninstalled packages)
   validated <- renv_snapshot_validate(project, new, library)
   if (!validated && !force) {
     if (prompt && !proceed()) {
       message("* Operation aborted.")
-      return(invisible(new))
+      return(invisible(alt))
     } else if (!interactive()) {
       stop("aborting snapshot due to pre-flight validation failure")
     }
   }
+
+  # update new reference
+  new <- alt
 
   # report actions to the user
   actions <- renv_lockfile_diff_packages(old, new)
@@ -152,6 +165,24 @@ snapshot <- function(project  = NULL,
   renv_infrastructure_write_activate(project)
 
   invisible(new)
+}
+
+renv_snapshot_preserve <- function(old, new) {
+  records <- filter(old$Packages, renv_snapshot_preserve_impl)
+  if (length(records))
+    new$Packages[names(records)] <- records
+  new
+}
+
+renv_snapshot_preserve_impl <- function(record) {
+
+  ostype <- tolower(record[["OS_type"]] %||% "")
+  if (!nzchar(ostype))
+    return(FALSE)
+
+  altos <- if (renv_platform_unix()) "windows" else "unix"
+  identical(ostype, altos)
+
 }
 
 renv_snapshot_preflight <- function(project, library) {
@@ -318,6 +349,11 @@ renv_snapshot_validate_dependencies_available <- function(project, lockfile, lib
   # check for required packages not currently installed
   requested <- names(splat)
   missing <- renv_vector_diff(requested, packages)
+  if (empty(missing))
+    return(TRUE)
+
+  # exclude ignored packages
+  missing <- renv_vector_diff(missing, settings$ignored.packages(project = project))
   if (empty(missing))
     return(TRUE)
 
@@ -593,7 +629,7 @@ renv_snapshot_description <- function(path = NULL, package = NULL) {
   }
 
   remotes <- grep("^Remote", names(dcf), value = TRUE)
-  all <- c(fields, "Repository", remotes, "Hash")
+  all <- c(fields, "Repository", "OS_type", remotes, "Hash")
   keep <- renv_vector_intersect(all, names(dcf))
   as.list(dcf[keep])
 
@@ -690,14 +726,22 @@ renv_snapshot_auto <- function(project) {
 }
 # nocov end
 
-renv_snapshot_dependencies <- function(source) {
+renv_snapshot_dependencies <- function(project, source) {
 
   message <- "snapshot aborted"
   errors <- config$dependency.errors()
 
   withCallingHandlers(
-    dependencies(source, progress = FALSE, errors = errors),
+
+    dependencies(
+      path = source,
+      root = project,
+      progress = FALSE,
+      errors = errors
+    ),
+
     renv.dependencies.error = renv_dependencies_error_handler(message, errors)
+
   )
 
 }
@@ -759,7 +803,7 @@ renv_snapshot_filter_all <- function(project, records) {
 
 renv_snapshot_filter_impl <- function(project, records, source) {
 
-  deps <- renv_snapshot_dependencies(source)
+  deps <- renv_snapshot_dependencies(project, source)
   packages <- unique(c(deps$Package, "renv"))
 
   # ignore packages as defined by project

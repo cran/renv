@@ -42,34 +42,41 @@ renv_libpaths_safe <- function(libpaths) {
   if (!renv_platform_windows())
     return(libpaths)
 
-  map_chr(libpaths, function(libpath) {
+  # note: was fixed upstream for R 4.0.0; see:
+  # https://bugs.r-project.org/bugzilla/show_bug.cgi?id=17709
+  if (getRversion() >= "4.0.0")
+    return(libpaths)
 
-    # check for an unsafe library path
-    unsafe <-
-      Encoding(libpath) == "UTF-8" ||
-      grepl("[&\\<>^|\"]", libpath)
+  map_chr(libpaths, renv_libpaths_safe_impl)
 
-    # if the path appears safe, use it as-is
-    if (!unsafe)
-      return(libpath)
+}
 
-    # try to form a safe library path
-    methods <- c(
-      renv_libpaths_safe_tempdir,
-      renv_libpaths_safe_userlib
-    )
+renv_libpaths_safe_impl <- function(libpath) {
 
-    for (method in methods) {
-      safelib <- catchall(method(libpath))
-      if (is.character(safelib))
-        return(safelib)
-    }
+  # check for an unsafe library path
+  unsafe <-
+    Encoding(libpath) == "UTF-8" ||
+    grepl("[&\\<>^|\"]", libpath)
 
-    # could not form a safe library path;
-    # just use the existing library path as-is
-    libpath
+  # if the path appears safe, use it as-is
+  if (!unsafe)
+    return(libpath)
 
-  })
+  # try to form a safe library path
+  methods <- c(
+    renv_libpaths_safe_tempdir,
+    renv_libpaths_safe_userlib
+  )
+
+  for (method in methods) {
+    safelib <- catchall(method(libpath))
+    if (is.character(safelib))
+      return(safelib)
+  }
+
+  # could not form a safe library path;
+  # just use the existing library path as-is
+  libpath
 
 }
 

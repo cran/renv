@@ -179,13 +179,17 @@ ask <- function(question, default = FALSE) {
   if (!interactive())
     return(default)
 
+  initializing <- Sys.getenv("RENV_R_INITIALIZING", unset = NA)
+  if (identical(initializing, "true"))
+    return(default)
+
   selection <- if (default) "[Y/n]" else "[y/N]"
   prompt <- sprintf("%s %s: ", question, selection)
   response <- tolower(trimws(readline(prompt)))
   if (!nzchar(response))
     return(default)
 
-  substring(response, 1, 1) == "y"
+  substring(response, 1L, 1L) == "y"
 
 }
 
@@ -287,7 +291,7 @@ rowapply <- function(X, FUN, ...) {
 }
 
 comspec <- function() {
-  Sys.getenv("COMSPEC", unset = "cmd.exe")
+  Sys.getenv("COMSPEC", unset = Sys.which("cmd.exe"))
 }
 
 nullfile <- function() {
@@ -326,13 +330,16 @@ remap <- function(x, map) {
 
 }
 
-header <- function(label, prefix = "#", n = 38L) {
-
+header <- function(label,
+                   prefix = "#",
+                   suffix = "=",
+                   n = 38L)
+{
   n <- n - nchar(label) - nchar(prefix) - 2L
   if (n <= 0)
     return(paste(prefix, label))
 
-  tail <- paste(rep.int("=", n), collapse = "")
+  tail <- paste(rep.int(suffix, n), collapse = "")
   paste(prefix, label, tail)
 
 }
@@ -375,4 +382,10 @@ dequote <- function(strings) {
 
   strings
 
+}
+
+memoize <- function(key, expr, envir) {
+  value <- envir[[key]] %||% expr
+  envir[[key]] <- value
+  value
 }

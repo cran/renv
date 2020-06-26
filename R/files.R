@@ -361,27 +361,64 @@ renv_file_exists <- function(path) {
 }
 
 renv_file_list <- function(path, full.names = TRUE) {
+
+  # list files
   files <- renv_file_list_impl(path)
-  if (full.names) file.path(path, files) else files
+
+  # NOTE: paths may be marked with UTF-8 encoding;
+  # if that's the case we need to use paste rather
+  # than file.path to preserve the encoding
+  if (full.names)
+    files <- paste(path, files, sep = "/")
+
+  files
+
 }
 
 renv_file_list_impl <- function(path) {
 
-  # on Windows, list.files mangles encoding; avoid this by making a call to
-  # 'dir' with the code page set to request UTF-8 encoded paths
+  if (!renv_platform_windows())
+    return(list.files(path))
 
   # nocov start
-  if (renv_platform_windows()) {
-    path <- renv_path_normalize(path)
-    command <- paste(comspec(), "/c chcp 65001 && dir /B", shQuote(path))
-    output <- system(command, intern = TRUE)
-    Encoding(output) <- "UTF-8"
-    return(output)
-  }
-  # nocov end
 
-  # otherwise, a plain old list.files will suffice
-  list.files(path)
+  # change working directory (done just to avoid encoding issues
+  # when submitting path to cmd shell)
+  owd <- setwd(path)
+  on.exit(setwd(owd), add = TRUE)
+
+  # NOTE: a sub-shell is required here in some contexts; e.g. when running
+  # tests non-interactively or building in the RStudio pane
+  command <- paste(comspec(), "/U /C dir /B")
+  conn <- pipe(command, open = "rb", encoding = "native.enc")
+  on.exit(close(conn), add = TRUE)
+
+  # read binary output from connection
+  output <- stack()
+
+  while (TRUE) {
+
+    data <- readBin(conn, what = "raw", n = 1024L)
+    if (empty(data))
+      break
+
+    output$push(data)
+
+  }
+
+  # join into single raw vector
+  encoded <- unlist(output$data(), recursive = FALSE, use.names = FALSE)
+
+  # convert raw data (encoded as UTF-16LE) to UTF-8
+  converted <- iconv(list(encoded), from = "UTF-16LE", to = "UTF-8")
+
+  # split on (Windows) newlines
+  paths <- strsplit(converted, "\r\n", fixed = TRUE)[[1]]
+
+  # just in case?
+  paths[nzchar(paths)]
+
+  # nocov end
 
 }
 
@@ -441,6 +478,6 @@ renv_file_find <- function(path, predicate, limit = 8L) {
 }
 
 renv_file_read <- function(path) {
-  contents <- readLines(path, warn = FALSE)
+  contents <- readLines(path, warn = FALSE, encoding = "UTF-8")
   paste(contents, collapse = "\n")
 }

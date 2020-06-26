@@ -197,10 +197,11 @@ renv_dependencies_callback <- function(path) {
   )
 
   cbext <- list(
-    ".rproj" = function(path) renv_dependencies_discover_rproj(path),
-    ".r"     = function(path) renv_dependencies_discover_r(path),
-    ".rmd"   = function(path) renv_dependencies_discover_multimode(path, "rmd"),
-    ".rnw"   = function(path) renv_dependencies_discover_multimode(path, "rnw")
+    ".rproj"       = function(path) renv_dependencies_discover_rproj(path),
+    ".r"           = function(path) renv_dependencies_discover_r(path),
+    ".rmd"         = function(path) renv_dependencies_discover_multimode(path, "rmd"),
+    ".rmarkdown"   = function(path) renv_dependencies_discover_multimode(path, "rmd"),
+    ".rnw"         = function(path) renv_dependencies_discover_multimode(path, "rnw")
   )
 
   cbname[[basename(path)]] %||% cbext[[tolower(fileext(path))]]
@@ -216,12 +217,16 @@ renv_dependencies_find_impl <- function(path, root) {
 
   # check file type
   info <- file.info(path, extra_cols = FALSE)
-  if (is.na(info$isdir))
-    stopf("file '%s' does not exist", path)
 
+  # the file might have been removed after listing -- if so, just ignore it
+  if (is.na(info$isdir))
+    return(NULL)
+
+  # if this is a directory, recurse
   if (info$isdir)
     return(renv_dependencies_find_dir(path, root))
 
+  # otherwise, check and see if we have a registered callback
   callback <- renv_dependencies_callback(path)
   if (is.function(callback))
     return(path)
@@ -663,7 +668,11 @@ renv_dependencies_discover_rproj <- function(path) {
 
 renv_dependencies_discover_r <- function(path = NULL, text = NULL) {
 
-  parsed <- catch(renv_parse(file = path, text = text))
+  parsed <- if (is.character(text))
+    catch(renv_parse_text(text))
+  else
+    catch(renv_parse_file(path))
+
   if (inherits(parsed, "error")) {
     # workaround for an R bug where parse-related state could be
     # leaked if an error occurred
@@ -685,8 +694,8 @@ renv_dependencies_discover_r <- function(path = NULL, text = NULL) {
 
   discoveries <- new.env(parent = emptyenv())
   recurse(parsed, function(node, stack) {
-    for (method in methods)
-      if (is.call(node))
+    if (is.call(node))
+      for (method in methods)
         method(node, stack, discoveries)
   })
 

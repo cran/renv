@@ -52,7 +52,7 @@ renv_infrastructure_write_gitignore <- function(project) {
     add    = as.character(add$data()),
     remove = as.character(remove$data()),
     file   = file.path(project, "renv/.gitignore"),
-    create = !is.null(renv_git_root(project = project))
+    create = TRUE
   )
 
 }
@@ -64,11 +64,11 @@ renv_infrastructure_write_activate <- function(project = NULL, version = NULL) {
   source <- system.file("resources/activate.R", package = "renv")
   target <- file.path(project, "renv/activate.R")
 
-  template <- paste(readLines(source, encoding = "UTF-8"), collapse = "\n")
+  template <- renv_file_read(source)
   new <- renv_template_replace(template, list(VERSION = version))
 
   if (file.exists(target)) {
-    old <- paste(readLines(target, warn = FALSE), collapse = "\n")
+    old <- renv_file_read(target)
     if (old == new)
       return(TRUE)
   }

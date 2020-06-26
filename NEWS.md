@@ -1,4 +1,61 @@
 
+# renv 0.11.0
+
+* Fixed an issue where `renv::install(..., type = "binary")` would
+  still attempt to install packages from sources in some cases. (#461)
+  
+* `renv` now always writes `renv/.gitignore`, to ensure that the appropriate
+  directories are ignored for projects which initialize `git` after `renv`
+  itself is initialized. (#462)
+
+* R Markdown documents with the `.Rmarkdown` file extension are now parsed for
+  dependencies.
+
+* Fixed an issue where setting the `external.libraries` configuration option
+  would trigger a warning. (#452)
+
+* Improved handling of unicode paths on Windows. (#451)
+
+* `renv::snapshot(project = <path>)` now properly respects `.gitignore` /
+  `.renvignore` files, even when that project has not yet been explicitly
+  initialized yet. (#439)
+  
+* The default value of the `synchronized.check` option has been changed from
+  TRUE to FALSE.
+
+* Fixed an issue where packages downloaded from Bitbucket and GitLab did not
+  record the associated commit hash.
+
+* Fixed an issue where attempting to install packages from GitLab could fail
+  to install the correct version of the package. (#436)
+
+* `renv::snapshot()` now preserves records in a lockfile that are only
+  available for a different operating system. This should make it easier
+  to share lockfiles that make use of platform-specific packages. (#419)
+
+* `renv` better handles files that are removed during an invocation to
+  `renv::dependencies()`. (#429)
+
+* The configuration option `install.staged` has been renamed to
+  `install.transactional`, to better reflect its purpose. `install.staged`
+  remains supported as a deprecated alias.
+
+* Fixed an issue where `renv` could fail to parse non-ASCII content on Windows.
+  (#421)
+
+* `renv::update()` gains the `exclude` argument, useful in cases where one
+  would like to update all packages used in a project, except for a small
+  subset of excluded packages. (#425)
+
+* `renv::update()` now respects the project `ignored.packages` setting. (#425)
+
+* Fixed an issue where RSPM binary URL transformations could fail for
+  Ubuntu Trusty. (#423)
+
+* `renv` now records the `OS_type` reported in a package's `DESCRIPTION` file
+  (if any), and ignores packages incompatible with the current operating
+  system during restore. (#394)
+
 # renv 0.10.0
 
 * `renv::install()` gains the `type` argument, used to control whether `renv`

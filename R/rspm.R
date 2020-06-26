@@ -46,7 +46,7 @@ renv_rspm_transform_impl <- function(url) {
   mirrors <- getCRANmirrors(local.only = TRUE)
   urls <- mirrors$URL
 
-  # include RStudio URLs
+  # also ignore some RStudio URLs
   rstudio <- c(
     "http://cran.rstudio.com",
     "http://cran.rstudio.org",
@@ -86,18 +86,28 @@ renv_rspm_transform_impl <- function(url) {
 }
 
 renv_rspm_status <- function(base) {
+  memoize(
+    key   = base,
+    expr  = catch(renv_rspm_status_impl(base)),
+    envir = `_renv_rspm_status`
+  )
+}
 
-  status <- `_renv_rspm_status`[[base]]
-  if (!is.null(status))
-    return(status)
+renv_rspm_status_impl <- function(base) {
 
+  # use a shorter delay to avoid hanging a session
+  renv_scope_options(
+    renv.config.connect.timeout = 10L,
+    renv.config.connect.retry   = 1L
+  )
+
+  # attempt the download
   endpoint <- file.path(base, "__api__/status")
   destfile <- renv_tempfile("renv-rspm-status-", fileext = ".json")
   quietly(download(endpoint, destfile))
-  status <- renv_json_read(destfile)
 
-  `_renv_rspm_status`[[base]] <- status
-  status
+  # read the downloaded JSON
+  renv_json_read(destfile)
 
 }
 
@@ -122,22 +132,45 @@ renv_rspm_platform <- function() {
     )
 
     id <- properties$ID %||% ""
-    id_like <- properties$ID_LIKE %||% ""
-    version_codename <- properties$VERSION_CODENAME %||% ""
-    version_id <- properties$VERSION_ID %||% ""
 
-    if (id == "ubuntu")
-      return(version_codename)
-
-    if (id == "centos")
-      return(paste(id, version_id, sep = ""))
-
-    if (grepl("\\bsuse\\b", id_like)) {
-      parts <- strsplit(version_id, ".", fixed = TRUE)
-      return(paste("opensuse", parts[[1]], sep = ""))
-    }
+    case(
+      identical(id, "ubuntu") ~ renv_rspm_platform_ubuntu(properties),
+      identical(id, "centos") ~ renv_rspm_platform_centos(properties),
+      grepl("\\bsuse\\b", id) ~ renv_rspm_platform_suse(properties)
+    )
 
   }
+
+}
+
+renv_rspm_platform_ubuntu <- function(properties) {
+
+  codename <- properties$VERSION_CODENAME
+  if (is.null(codename))
+    return(NULL)
+
+  codename
+
+}
+
+renv_rspm_platform_centos <- function(properties) {
+
+  id <- properties$VERSION_ID
+  if (is.null(id))
+    return(NULL)
+
+  paste0("centos", id)
+
+}
+
+renv_rspm_platform_suse <- function(properties) {
+
+  id <- properties$VERSION_ID
+  if (is.null(id))
+    return(NULL)
+
+  parts <- strsplit(id, ".", fixed = TRUE)[[1L]]
+  paste0("opensuse", parts[[1L]])
 
 }
 

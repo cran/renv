@@ -258,3 +258,50 @@ test_that("parse errors cause snapshot to abort", {
   renv_scope_options(renv.config.dependency.errors = "fatal")
   expect_error(snapshot())
 })
+
+test_that("records for packages available on other OSes are preserved", {
+  skip_on_os("windows")
+  renv_tests_scope("unixonly")
+
+  init()
+
+  # fake a windows-only record
+  lockfile <- renv_lockfile_read("renv.lock")
+  lockfile$Packages$windowsonly <- lockfile$Packages$unixonly
+  lockfile$Packages$windowsonly$Package <- "windowsonly"
+  lockfile$Packages$windowsonly$Hash <- NULL
+  lockfile$Packages$windowsonly$OS_type <- "windows"
+  renv_lockfile_write(lockfile, "renv.lock")
+
+  # call snapshot to update lockfile
+  snapshot()
+
+  # ensure that 'windowsonly' is still preserved
+  lockfile <- renv_lockfile_read("renv.lock")
+  expect_true(!is.null(lockfile$Packages$windowsonly))
+
+})
+
+test_that(".renvignore works during snapshot without an explicit root", {
+
+  renv_tests_scope()
+
+  # pretend we don't know the project root
+  renv_scope_envvars(RENV_PROJECT = NULL)
+
+  # install bread
+  install("bread")
+
+  # create sub-directory that should be ignored
+  dir.create("ignored")
+  writeLines("library(bread)", con = "ignored/script.R")
+
+  lockfile <- snapshot(project = ".", lockfile = NULL)
+  expect_false(is.null(lockfile$Packages$bread))
+
+  writeLines("*", con = "ignored/.renvignore")
+
+  lockfile <- snapshot(project = ".", lockfile = NULL)
+  expect_true(is.null(lockfile$Packages$bread))
+
+})

@@ -60,7 +60,10 @@ install <- function(packages = NULL,
 {
   renv_consent_check()
   renv_scope_error_handler()
-  renv_dots_check(...)
+
+  dots <- list(...)
+  names(dots) <- names(dots) %||% rep.int("", length(dots))
+  packages <- c(packages, dots[!nzchar(names(dots))])
 
   project <- renv_project_resolve(project)
   library <- library %||% renv_libpaths_all()
@@ -97,6 +100,7 @@ install <- function(packages = NULL,
   rebuild <- case(
     identical(rebuild, TRUE)  ~ packages,
     identical(rebuild, FALSE) ~ character(),
+    identical(rebuild, "*")   ~ NA_character_,
     as.character(rebuild)
   )
 
@@ -123,7 +127,9 @@ install <- function(packages = NULL,
 
 renv_install <- function(records, library) {
 
-  staged <- config$install.staged()
+  staged <-
+    config$install.transactional(default = NULL) %||%
+    config$install.staged()
 
   if (staged)
     renv_install_staged(records, library)

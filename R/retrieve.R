@@ -45,6 +45,16 @@ renv_retrieve_impl <- function(package) {
   # normalize the record source
   source <- renv_record_source(record, normalize = TRUE)
 
+  # don't install packages from incompatible OS
+  ostype <- tolower(record[["OS_type"]] %||% "")
+
+  skip <-
+    renv_platform_unix() && identical(ostype, "windows") ||
+    renv_platform_windows() && identical(ostype, "unix")
+
+  if (skip)
+    return()
+
   # if this is a package from Bioconductor, activate those repositories now
   #
   # TODO: we should consider making this more scoped; calls to `renv_available_packages_*`
@@ -197,7 +207,8 @@ renv_retrieve_github <- function(record) {
 
 renv_retrieve_gitlab <- function(record) {
 
-  origin <- renv_retrieve_origin(record$RemoteHost %||% "gitlab.com")
+  host <- record$RemoteHost %||% config$gitlab.host()
+  origin <- renv_retrieve_origin(host)
 
   user <- record$RemoteUsername
   repo <- record$RemoteRepo
@@ -207,7 +218,7 @@ renv_retrieve_gitlab <- function(record) {
   url <- sprintf(fmt, origin, id)
   path <- renv_retrieve_path(record)
 
-  sha <- record$RemoteSha
+  sha <- record$RemoteSha %||% record$RemoteRef
   if (!is.null(sha))
     url <- paste(url, paste("sha", sha, sep = "="), sep = "?")
 
@@ -410,8 +421,10 @@ renv_retrieve_repos_mran <- function(record) {
 
   # attempt to read it
   database <- catch(renv_mran_database_load())
-  if (inherits(database, "error"))
+  if (inherits(database, "error")) {
+    warning(database)
     return(FALSE)
+  }
 
   # get entry for this version of R + platform
   suffix <- contrib.url("", type = "binary")

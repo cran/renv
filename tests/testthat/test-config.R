@@ -52,3 +52,28 @@ test_that("functions are returned as-is for '*' types", {
   })
 
 })
+
+test_that("we can query options without warnings", {
+
+  local({
+    renv_scope_envvars(RENV_CONFIG_EXTERNAL_LIBRARIES = "/tmp")
+    expect_identical(config$external.libraries(), "/tmp")
+  })
+
+})
+
+test_that("invalid configuration options trigger a warning", {
+
+  local({
+    renv_scope_options(renv.config.connect.timeout = "oops")
+    expect_warning(config$connect.timeout())
+  })
+
+})
+
+test_that("we can query the default configuration values without issue", {
+
+  for (key in names(config))
+    config[[key]]()
+
+})
