@@ -56,6 +56,29 @@ a binary copy of that package is already available.
 Note that this interface is subject to change -- the goal is to hook into
 separate package installation backends in the future.
 }
+\section{Bioconductor}{
+
+
+Packages from Bioconductor can be installed by using the \verb{bioc::} prefix.
+For example,\preformatted{renv::install("bioc::Biobase")
+}
+
+will install the latest-available version of \code{Biobase} from Bioconductor.
+
+\code{renv} depends on \code{BiocManager} (or, for older versions of \R, \code{BiocInstaller})
+for the installation of packages from Bioconductor. If these packages are
+not available, \code{renv} will attempt to automatically install them before
+fulfilling the installation request.
+}
+
+\section{Remotes Syntax}{
+
+
+\code{renv} supports a subset of the \code{remotes} syntax used for package installation,
+as described in \url{https://remotes.r-lib.org/articles/dependencies.html}. See
+the examples below for more details.
+}
+
 \section{Package Configuration}{
 
 
@@ -67,6 +90,13 @@ used to map package names to their appropriate configuration. For example:\prefo
 configure.args = c(RNetCDF = "--with-netcdf-include=/usr/include/udunits2"))
 options(configure.args = configure.args)
 renv::install("RNetCDF")
+}
+
+Similarly, additional flags that should be passed to \verb{R CMD INSTALL} can
+be set via the \code{install.opts} \R option:\preformatted{# installation of R packages using the Windows Subsystem for Linux
+# may require the `--no-lock` flag to be set during install
+options(install.opts = "--no-lock")
+renv::install("xml2")
 }
 }
 
@@ -81,6 +111,13 @@ renv::install("digest@0.6.18")
 
 # install 'digest' from GitHub (latest dev. version)
 renv::install("eddelbuettel/digest")
+
+# install a package from GitHub, using specific commit
+renv::install("eddelbuettel/digest@df55b00bff33e945246eff2586717452e635032f")
+
+# install a package from Bioconductor
+# (note: requires the BiocManager package)
+renv::install("bioc::Biobase")
 
 # install a package from local sources
 renv::install("~/path/to/package")

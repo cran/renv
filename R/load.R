@@ -125,7 +125,7 @@ renv_load_r_repos <- function(repos) {
 renv_load_path <- function(project) {
 
   # only required when running in RStudio
-  if (identical(.Platform$GUI, "RStudio"))
+  if (!renv_rstudio_available())
     return(FALSE)
 
   # on macOS, read paths from /etc/paths and friends
@@ -312,35 +312,44 @@ renv_load_python_env <- function(fields, loader) {
 
 renv_load_switch <- function(project) {
 
+  # safety check: avoid recursive unload attempts
   unloading <- getOption("renv.unloading")
   if (identical(unloading, TRUE)) {
     fmt <- "ignoring recursive attempt to load project '%s'"
-    warningf(fmt, shQuote(aliased_path(project), type = "cmd"))
+    warningf(fmt, renv_path_pretty(project))
     return(project)
   }
 
+  # validate that this project has an activate script
   script <- file.path(project, "renv/activate.R")
   if (!file.exists(script)) {
     fmt <- "project %s has no activate script and so cannot be activated"
-    stopf(fmt, shQuote(aliased_path(project), type = "cmd"))
+    stopf(fmt, renv_path_pretty(project))
   }
 
+  # signal that we're unloading now
   renv_scope_options(renv.unloading = TRUE)
 
+  # perform the unload
   unload()
 
+  # unload the current version of renv (but keep track of position
+  # on search path in case we need to revert later)
   path <- renv_namespace_path("renv")
   pos <- match("package:renv", search())
   unloadNamespace("renv")
 
+  # move to new project directory
   owd <- setwd(project)
   on.exit(setwd(owd), add = TRUE)
 
+  # source the activate script
   source("renv/activate.R")
 
+  # check and see if renv was successfully loaded
   if (!"renv" %in% loadedNamespaces()) {
     fmt <- "could not load renv from project %s; reloading previously-loaded renv"
-    warningf(fmt, shQuote(aliased_path(project), type = "cmd"))
+    warningf(fmt, renv_path_pretty(project))
     loadNamespace("renv", lib.loc = dirname(path))
     if (!is.na(pos)) {
       args <- list(package = "renv", pos = pos, character.only = TRUE)
@@ -374,6 +383,7 @@ renv_load_finish <- function(project, lockfile) {
   renv_load_report_project(project)
   renv_load_report_updates(project)
   renv_load_report_synchronized(project, lockfile)
+  renv_snapshot_auto_update(project = project)
 
 }
 
@@ -393,23 +403,18 @@ renv_load_report_project <- function(project) {
 renv_load_report_updates <- function(project) {
 
   # nocov start
-  if (!is.na(Sys.getenv("RSTUDIO", unset = NA))) {
-    update <- function() renv_load_report_updates_impl(project = project)
-    setHook("rstudio.sessionInit", update)
-    return(TRUE)
-  }
-  # nocov end
+  enabled <- interactive() && config$updates.check()
+  if (!enabled)
+    return(FALSE)
 
-  renv_load_report_updates_impl(project = project)
+  callback <- function(...) renv_load_report_updates_impl(project = project)
+  renv_load_invoke(callback)
+  # nocov end
 
 }
 
 # nocov start
 renv_load_report_updates_impl <- function(project) {
-
-  enabled <- config$updates.check()
-  if (!enabled)
-    return(FALSE)
 
   if (!file.exists(file.path(project, "renv.lock")))
     return(FALSE)
@@ -430,10 +435,25 @@ renv_load_report_updates_impl <- function(project) {
 
 renv_load_report_synchronized <- function(project, lockfile) {
 
+  # nocov start
   enabled <- interactive() && config$synchronized.check()
   if (!enabled)
     return(FALSE)
 
-  renv_project_synchronized_check(project, lockfile)
+  callback <- function(...) renv_project_synchronized_check(project, lockfile)
+  renv_load_invoke(callback)
+  # nocov end
 
 }
+
+renv_load_invoke <- function(callback) {
+
+  # helper function for running code that might need to
+  # wait until RStudio has finished initializing
+  if (renv_rstudio_loading())
+    setHook("rstudio.sessionInit", callback, action = "append")
+  else
+    callback()
+
+}
+

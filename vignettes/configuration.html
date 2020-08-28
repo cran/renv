@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Kevin Ushey" />
+
+<meta name="date" content="2020-07-24" />
+
+<title>Configuring renv</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    for (var j = 0; j < rules.length; j++) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") continue;
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') continue;
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Configuring renv</h1>
+<h4 class="author">Kevin Ushey</h4>
+<h4 class="date">2020-07-24</h4>
+
+
+
+<p><code>renv</code> is a tool, and we acknowledge that different users will want to use <code>renv</code> in different ways. To this end, it’s possible to configure <code>renv</code> in a variety of ways – either through project-specific settings, or user-specific configuration.</p>
+<div id="project-settings" class="section level2">
+<h2>Project Settings</h2>
+<p>Project-specific settings can be accessed and set through the <code>renv::settings</code> helper object. For example, we can instruct <code>renv</code> to ignore the package <code>dplyr</code> in a project by setting:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a>renv<span class="op">::</span>settings<span class="op">$</span><span class="kw">ignored.packages</span>(<span class="st">&quot;dplyr&quot;</span>)</span></code></pre></div>
+<p>You can then query the set of ignored packages by calling the same function without arguments:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true"></a>renv<span class="op">::</span>settings<span class="op">$</span><span class="kw">ignored.packages</span>()</span></code></pre></div>
+<p>Please see the documentation in <code>?renv::settings</code> for more information.</p>
+</div>
+<div id="user-configuration" class="section level2">
+<h2>User Configuration</h2>
+<p>The options available are documented in <code>?renv::config</code>, but are repeated here for reference. Configuration options can be set either via environment variables; typically set within an appropriate <code>.Renviron</code> start-up file:</p>
+<pre><code># check whether renv.lock + project library are synchronized on startup
+RENV_CONFIG_SYNCHRONIZED_CHECK = TRUE</code></pre>
+<p>Alternatively, these options can be set via an R option:</p>
+<pre><code># check whether renv.lock + project library are synchronized on startup
+options(renv.config.synchronized.check = TRUE)</code></pre>
+<p>The options available in <code>renv</code> 0.11.0-5 are:</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">name</th>
+<th align="left">type</th>
+<th align="left">default</th>
+<th align="left">description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">auto.snapshot</td>
+<td align="left">logical[1]</td>
+<td align="left">FALSE</td>
+<td align="left">Automatically snapshot changes to the project library after a new package is installed with <code>renv::install()</code>, or removed with <code>renv::remove()</code>?</td>
+</tr>
+<tr class="even">
+<td align="left">bitbucket.host</td>
+<td align="left">character[1]</td>
+<td align="left">api.bitbucket.org/2.0</td>
+<td align="left">The default Bitbucket host to be used during package retrieval.</td>
+</tr>
+<tr class="odd">
+<td align="left">copy.method</td>
+<td align="left">*</td>
+<td align="left">auto</td>
+<td align="left">The method to use when attempting to copy directories. See <strong>Copy Methods</strong> for more information.</td>
+</tr>
+<tr class="even">
+<td align="left">connect.timeout</td>
+<td align="left">integer[1]</td>
+<td align="left">20</td>
+<td align="left">The amount of time to spend (in seconds) when attempting to download a file. Only used when the <code>curl</code> downloader is used.</td>
+</tr>
+<tr class="odd">
+<td align="left">connect.retry</td>
+<td align="left">integer[1]</td>
+<td align="left">3</td>
+<td align="left">The number of times to attempt re-downloading a file, when transient errors occur. Only used when the <code>curl</code> downloader is used.</td>
+</tr>
+<tr class="even">
+<td align="left">dependency.errors</td>
+<td align="left">character[1]</td>
+<td align="left">reported</td>
+<td align="left">Many <code>renv</code> APIs require the enumeration of your project’s package dependencies. This option controls how errors that occur during this enumeration are handled. By default, errors are reported but are non-fatal. Set this to <code>&quot;fatal&quot;</code> to force errors to be fatal, and <code>&quot;ignored&quot;</code> to ignore errors altogether. See [dependencies] for more details.</td>
+</tr>
+<tr class="odd">
+<td align="left">external.libraries</td>
+<td align="left">character[*]</td>
+<td align="left">NULL</td>
+<td align="left">A character vector of external libraries, to be used in tandem with your projects. Be careful when using external libraries: it’s possible that things can break within a project if the version(s) of packages used in your project library happen to be incompatible with packages in your external libraries; for example, if your project required <code>xyz 1.0</code> but <code>xyz 1.1</code> was present and loaded from an external library. Can also be an function that provides the paths to external libraries. Library paths will be expanded through [.expand_R_libs_env_var] as necessary.</td>
+</tr>
+<tr class="even">
+<td align="left">filebacked.cache</td>
+<td align="left">logical[1]</td>
+<td align="left">TRUE</td>
+<td align="left">Enable the <code>renv</code> file-backed cache? When enabled, <code>renv</code> will cache the contents of files that are read (e.g. DESCRIPTION files) in memory, thereby avoiding re-reading the file contents from the filesystem if the file has not changed. <code>renv</code> uses the file <code>mtime</code> to determine if the file has changed; consider disabling this if <code>mtime</code> is unreliable on your system.</td>
+</tr>
+<tr class="odd">
+<td align="left">github.host</td>
+<td align="left">character[1]</td>
+<td align="left">api.github.com</td>
+<td align="left">The default GitHub host to be used during package retrieval.</td>
+</tr>
+<tr class="even">
+<td align="left">gitlab.host</td>
+<td align="left">character[1]</td>
+<td align="left">gitlab.com</td>
+<td align="left">The default GitLab host to be used during package retrieval.</td>
+</tr>
+<tr class="odd">
+<td align="left">hydrate.libpaths</td>
+<td align="left">character[*]</td>
+<td align="left">NULL</td>
+<td align="left">A character vector of library paths, to be used by <code>renv::hydrate()</code> when attempting to hydrate projects. When empty, the default set of library paths (as specified in <code>?hydrate</code>) are used instead. See [<code>hydrate</code>] for more details.</td>
+</tr>
+<tr class="even">
+<td align="left">install.staged</td>
+<td align="left">logical[1]</td>
+<td align="left">TRUE</td>
+<td align="left">DEPRECATED: Please use <code>install.transactional</code> instead.</td>
+</tr>
+<tr class="odd">
+<td align="left">install.transactional</td>
+<td align="left">logical[1]</td>
+<td align="left">TRUE</td>
+<td align="left">Perform a transactional install of packages during install and restore? When enabled, <code>renv</code> will first install packages into a temporary library, and later copy or move those packages back into the project library only if all packages were successfully downloaded and installed. This can be useful if you’d like to avoid mutating your project library if installation of one or more packages fails.</td>
+</tr>
+<tr class="even">
+<td align="left">mran.enabled</td>
+<td align="left">logical[1]</td>
+<td align="left">TRUE</td>
+<td align="left">Attempt to download binaries from <a href="https://mran.microsoft.com/">MRAN</a> during restore? See <code>vignette(&quot;mran&quot;, package = &quot;renv&quot;)</code> for more details.</td>
+</tr>
+<tr class="odd">
+<td align="left">repos.override</td>
+<td align="left">character[*]</td>
+<td align="left">NULL</td>
+<td align="left">Override the R package repositories used during [<code>restore</code>]. Primarily useful for deployment / continuous integration, where you might want to enforce the usage of some set of repositories over what is defined in <code>renv.lock</code> or otherwise set by the R session.</td>
+</tr>
+<tr class="even">
+<td align="left">rspm.enabled</td>
+<td align="left">logical[1]</td>
+<td align="left">TRUE</td>
+<td align="left">Boolean; enable RSPM integration for <code>renv</code> projects? When <code>TRUE</code>, <code>renv</code> will attempt to transform the repository URLs used by RSPM into binary URLs as appropriate for the current platform. Set this to <code>FALSE</code> if you’d like to continue using source-only RSPM URLs, or if you find that <code>renv</code> is improperly transforming your repository URLs.</td>
+</tr>
+<tr class="odd">
+<td align="left">sandbox.enabled</td>
+<td align="left">logical[1]</td>
+<td align="left">TRUE</td>
+<td align="left">Enable sandboxing for <code>renv</code> projects? When active, <code>renv</code> will attempt to sandbox the system library, preventing non-system packages installed in the system library from becoming available in <code>renv</code> projects. (That is, only packages with priority <code>&quot;base&quot;</code> or <code>&quot;recommended&quot;</code>, as reported by <code>installed.packages()</code>, are made available.)</td>
+</tr>
+<tr class="even">
+<td align="left">shims.enabled</td>
+<td align="left">logical[1]</td>
+<td align="left">TRUE</td>
+<td align="left">Should <code>renv</code> shims be installed on package load? When enabled, <code>renv</code> will install its own shims over the functions <code>install.packages()</code>, <code>update.packages()</code> and <code>remove.packages()</code>, delegating these functions to <code>renv::install()</code>, <code>renv::update()</code> and <code>renv::remove()</code> as appropriate.</td>
+</tr>
+<tr class="odd">
+<td align="left">snapshot.validate</td>
+<td align="left">logical[1]</td>
+<td align="left">TRUE</td>
+<td align="left">Validate package dependencies when calling snapshot? When <code>TRUE</code>, <code>renv</code> will attempt to diagnose potential issues in the project library before creating <code>renv.lock</code> – for example, if a package installed in the project library depends on a package which is not currently installed.</td>
+</tr>
+<tr class="even">
+<td align="left">synchronized.check</td>
+<td align="left">logical[1]</td>
+<td align="left">FALSE</td>
+<td align="left">Check that the project library is synchronized with the lockfile on load?</td>
+</tr>
+<tr class="odd">
+<td align="left">updates.check</td>
+<td align="left">logical[1]</td>
+<td align="left">FALSE</td>
+<td align="left">Check for package updates when the session is initialized? This can be useful if you’d like to ensure that your project lockfile remains up-to-date with packages as they are released on CRAN.</td>
+</tr>
+<tr class="even">
+<td align="left">updates.parallel</td>
+<td align="left">*</td>
+<td align="left">2</td>
+<td align="left">Check for package updates in parallel? This can be useful when a large number of packages installed from non-CRAN remotes are installed, as these packages can then be checked for updates in parallel.</td>
+</tr>
+<tr class="odd">
+<td align="left">user.library</td>
+<td align="left">logical[1]</td>
+<td align="left">FALSE</td>
+<td align="left">Include the user library on the library paths for your projects? Note that this risks breaking project encapsulation and is not recommended for projects which you intend to share or collaborate on with other users. See also the caveats for the <code>external.libraries</code> option.</td>
+</tr>
+<tr class="even">
+<td align="left">user.profile</td>
+<td align="left">logical[1]</td>
+<td align="left">FALSE</td>
+<td align="left">Load the user R profile (typically located at <code>~/.Rprofile</code>) when <code>renv</code> is loaded? Consider disabling this if you require extra encapsulation in your projects; e.g. if your <code>.Rprofile</code> attempts to load packages that you might not install in your projects.</td>
+</tr>
+</tbody>
+</table>
+<div id="project-settings-1" class="section level3">
+<h3>Project Settings</h3>
+<p>Project settings are used to control project-specific options, and are appropriate for settings that should:</p>
+<ol style="list-style-type: decimal">
+<li>Be tied to a particular project, and</li>
+<li>Apply to all users of a particular project.</li>
+</ol>
+<p>See the documentation in <code>?renv::settings</code> for more details.</p>
+</div>
+<div id="user-configuration-1" class="section level3">
+<h3>User Configuration</h3>
+<p>User-specific configuration can be used to control settings that should apply for a particular user (e.g. yourself) across multiple <code>renv</code> project. See the documentation in <code>?renv::config</code> for more details.</p>
+</div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

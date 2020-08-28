@@ -238,10 +238,6 @@ renv_tests_init <- function() {
 
 }
 
-renv_tests_report <- function() {
-  Sys.getenv()
-}
-
 renv_testing <- function() {
   getOption("renv.testing", default = FALSE)
 }
@@ -340,10 +336,75 @@ renv_tests_diagnostics <- function() {
     "The following packages are available in the test repositories:",
   )
 
-  envvars <- c("R_LIBS", "R_LIBS_SITE", "R_LIBS_USER")
+  path <- Sys.getenv("PATH")
+  splat <- strsplit(path, .Platform$path.sep, fixed = TRUE)[[1]]
+
+  renv_pretty_print(
+    paste("-", splat),
+    "The following PATH is set:",
+    wrap = FALSE
+  )
+
+  envvars <- c(
+    "HOME",
+    "R_ARCH", "R_HOME",
+    "R_LIBS", "R_LIBS_SITE", "R_LIBS_USER", "R_USER",
+    "R_ZIPCMD",
+    "TAR", "TEMP", "TMP", "TMPDIR"
+  )
+
   keys <- format(envvars)
-  vals <- Sys.getenv(keys, unset = "<NA>")
+  vals <- Sys.getenv(envvars, unset = "<NA>")
   vals[vals != "<NA>"] <- shQuote(vals[vals != "<NA>"], type = "cmd")
-  renv_pretty_print(paste(keys, vals, sep = " : "), wrap = FALSE)
+
+  renv_pretty_print(
+    paste(keys, vals, sep = " : "),
+    "The following environment variables of interest are set:",
+    wrap = FALSE
+  )
+
+}
+
+renv_tests_report <- function(test, elapsed, expectations) {
+
+  # figure out overall test result
+  status <- "PASS"
+  for (expectation in expectations) {
+
+    errors <- c("expectation_error", "expectation_failure")
+    if (inherits(expectation, errors)) {
+      status <- "FAIL"
+      break
+    }
+
+    if (inherits(expectation, "expectation_skip")) {
+      status <- "SKIP"
+      break
+    }
+
+  }
+
+  # get console width
+  width <- max(getOption("width"), 78L)
+
+  # write out text with line
+  left <- trunc(test, width - 23L)
+
+  # figure out how long tests took to run
+  time <- if (elapsed < 0.1)
+    "<0.1s"
+  else
+    format(renv_difftime_format_short(elapsed), width = 5L, justify = "right")
+
+  # write formatted
+  fmt <- "[%s / %s]"
+  right <- sprintf(fmt, status, time)
+
+  # fill space between with dots
+  dots <- rep.int(".", max(0L, width - nchar(left) - nchar(right) - 4L))
+  all <- paste(left, paste(dots, collapse = ""), right)
+
+  # write it out
+  cli::cat_bullet(all)
 
 }

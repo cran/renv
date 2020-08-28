@@ -12,6 +12,31 @@
 #' Note that this interface is subject to change -- the goal is to hook into
 #' separate package installation backends in the future.
 #'
+#'
+#' @section Bioconductor:
+#'
+#' Packages from Bioconductor can be installed by using the `bioc::` prefix.
+#' For example,
+#'
+#' ```
+#' renv::install("bioc::Biobase")
+#' ```
+#'
+#' will install the latest-available version of `Biobase` from Bioconductor.
+#'
+#' `renv` depends on `BiocManager` (or, for older versions of \R, `BiocInstaller`)
+#' for the installation of packages from Bioconductor. If these packages are
+#' not available, `renv` will attempt to automatically install them before
+#' fulfilling the installation request.
+#'
+#'
+#' @section Remotes Syntax:
+#'
+#' `renv` supports a subset of the `remotes` syntax used for package installation,
+#' as described in <https://remotes.r-lib.org/articles/dependencies.html>. See
+#' the examples below for more details.
+#'
+#'
 #' @section Package Configuration:
 #'
 #' Many \R packages have a `configure` script that needs to be run to prepare
@@ -25,6 +50,16 @@
 #' configure.args = c(RNetCDF = "--with-netcdf-include=/usr/include/udunits2"))
 #' options(configure.args = configure.args)
 #' renv::install("RNetCDF")
+#' ```
+#'
+#' Similarly, additional flags that should be passed to `R CMD INSTALL` can
+#' be set via the `install.opts` \R option:
+#'
+#' ```
+#' # installation of R packages using the Windows Subsystem for Linux
+#' # may require the `--no-lock` flag to be set during install
+#' options(install.opts = "--no-lock")
+#' renv::install("xml2")
 #' ```
 #'
 #' @inherit renv-params
@@ -45,6 +80,13 @@
 #'
 #' # install 'digest' from GitHub (latest dev. version)
 #' renv::install("eddelbuettel/digest")
+#'
+#' # install a package from GitHub, using specific commit
+#' renv::install("eddelbuettel/digest@@df55b00bff33e945246eff2586717452e635032f")
+#'
+#' # install a package from Bioconductor
+#' # (note: requires the BiocManager package)
+#' renv::install("bioc::Biobase")
 #'
 #' # install a package from local sources
 #' renv::install("~/path/to/package")
@@ -114,10 +156,6 @@ install <- function(packages = NULL,
   # retrieve packages
   records <- renv_retrieve(packages)
   renv_install(records, library)
-
-  # perform auto snapshot
-  if (library[[1]] == renv_paths_library(project = project))
-    renv_snapshot_auto(project = project)
 
   # check loaded packages and inform user if out-of-sync
   renv_install_postamble(names(records))
@@ -250,11 +288,18 @@ renv_install_impl <- function(record) {
     }
   )
 
-  type <- renv_package_type(record$Path, quiet = TRUE)
-  feedback <- if (type == "binary")
-    "installed binary"
-  else
+  path <- record$Path
+  type <- renv_package_type(path, quiet = TRUE)
+
+  feedback <- if (type == "binary") {
+    if (renv_file_type(path, symlinks = FALSE) == "directory") {
+      "copied local binary"
+    } else {
+      "installed binary"
+    }
+  } else {
     "built from source"
+  }
 
   vwritef("\tOK [%s]", feedback)
 
@@ -286,7 +331,7 @@ renv_install_package_cache <- function(record, cache, linker) {
     identical(linker, renv_file_link) ~ "linked"
   )
 
-  vwritef("\tOK (%s cache)", type)
+  vwritef("\tOK [%s cache]", type)
 
   return(TRUE)
 
@@ -332,9 +377,8 @@ renv_install_package_local <- function(record, quiet = TRUE) {
   # for source packages downloaded as zips,
   # we need to extract before install
   unpack <-
-    renv_archive_type(path) == "zip" &&
-    renv_package_type(path) == "source" ||
-    nzchar(subdir)
+    renv_archive_type(path) %in% c("tar", "zip") &&
+    (renv_package_type(path) == "source" || nzchar(subdir))
 
   if (unpack) {
 
@@ -380,9 +424,22 @@ renv_install_package_local <- function(record, quiet = TRUE) {
 }
 
 renv_install_package_local_impl <- function(package, path, library) {
+
+  # normalize paths
   library <- renv_path_normalize(library, winslash = "/", mustWork = TRUE)
   path <- renv_path_normalize(path, winslash = "/", mustWork = TRUE)
-  r_cmd_install(package, path, library)
+
+  # if this is the path to an unpacked binary archive,
+  # we can just copy the folder over
+  copyable <-
+    renv_file_type(path, symlinks = FALSE) == "directory" &&
+    renv_package_type(path, quiet = TRUE) == "binary"
+
+  if (copyable)
+    renv_file_copy(path, file.path(library, package), overwrite = TRUE)
+  else
+    r_cmd_install(package, path, library)
+
 }
 
 renv_install_package_options <- function(package) {

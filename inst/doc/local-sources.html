@@ -336,7 +336,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <p>Once this is done, <code>renv</code> will consult these directories during future attempts to restore packages installed from unknown sources.</p>
 <p>Note that packages placed in one of these local sources will override any default source recorded in the lockfile. For example, if <code>skeleton 1.0.0</code> was also available on CRAN, <code>renv::restore()</code> would still use the locally-provided tarball rather than the version available from CRAN.</p>
 <p>If you want to see what directory is being used by <code>renv</code> for local package sources, you can execute:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a>renv<span class="op">:::</span><span class="kw">renv_paths_local</span>()</span></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true"></a>renv<span class="op">:::</span><span class="kw">renv_paths_local</span>()</span></code></pre></div>
 <p>See <code>?paths</code> for more details.</p>
 <div id="explicit-sources" class="section level2">
 <h2>Explicit Sources</h2>

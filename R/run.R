@@ -50,7 +50,7 @@ run <- function(script, ..., job = NULL, name = NULL, project = NULL) {
   # run as a job when possible in RStudio
   jobbable <-
     !identical(job, FALSE) &&
-    identical(.Platform$GUI, "RStudio") &&
+    renv_rstudio_available() &&
     renv_package_installed("rstudioapi") &&
     renv_package_version("rstudioapi") >= "0.10" &&
     rstudioapi::verifyAvailable("1.2.1335")
@@ -89,5 +89,5 @@ renv_run_job <- function(script, name, project) {
 renv_run_impl <- function(script, name, project) {
   owd <- setwd(project)
   on.exit(setwd(owd), add = TRUE)
-  system2(R(), c("--slave", "-f", shQuote(script)))
+  system2(R(), c("-s", "-f", shQuote(script)))
 }

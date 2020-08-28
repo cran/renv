@@ -3,8 +3,10 @@
 #'
 #' Call `snapshot()` to create a **lockfile** capturing the state of a project's
 #' \R package dependencies. The lockfile can be used to later restore these
-#' project's dependencies as required. See the [lockfile] documentation for more
-#' details on the structure of a lockfile.
+#' project's dependencies as required.
+#'
+#' See the [lockfile] documentation for more details on the structure of a
+#' lockfile.
 #'
 #' @section Snapshot Type:
 #'
@@ -680,48 +682,6 @@ renv_snapshot_report_actions <- function(actions, old, new) {
     rhs[names(rhs) %in% names(actions)],
     "The following package(s) will be updated in the lockfile:"
   )
-
-}
-# nocov end
-
-# nocov start
-renv_snapshot_auto <- function(project) {
-
-  # don't auto-snapshot if disabled by user
-  enabled <- config$auto.snapshot()
-  if (!enabled)
-    return(FALSE)
-
-  # only automatically snapshot the current project
-  if (!identical(project, renv_project(default = NULL)))
-    return(FALSE)
-
-  # don't auto-snapshot if the project hasn't been initialized
-  if (!renv_project_initialized(project = project))
-    return(FALSE)
-
-  # don't auto-snapshot if we don't have a library
-  library <- renv_paths_library(project = project)
-  if (!file.exists(library))
-    return(FALSE)
-
-  # don't auto-snapshot unless the active library is the project library
-  if (!renv_file_same(renv_libpaths_default(), library))
-    return(FALSE)
-
-  # passed pre-flight checks; snapshot the library
-  # validation messages can be noisy; turn off for auto snapshot
-  status <- local({
-    renv_scope_options(renv.config.snapshot.validate = FALSE, renv.verbose = FALSE)
-    catch(snapshot(project = project, prompt = FALSE))
-  })
-
-  if (inherits(status, "error"))
-    return(FALSE)
-
-  lockfile <- file.path(project, "renv.lock")
-  vwritef("* Lockfile written to '%s'.", aliased_path(lockfile))
-  TRUE
 
 }
 # nocov end
