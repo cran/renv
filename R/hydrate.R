@@ -59,7 +59,9 @@ hydrate <- function(packages = NULL,
   renv_dots_check(...)
 
   project <- renv_project_resolve(project)
-  library <- library %||% renv_libpaths_default()
+  renv_scope_lock(project = project)
+
+  library <- renv_path_normalize(library %||% renv_libpaths_default())
   packages <- packages %||% renv_hydrate_packages(project, sources)
 
   # find packages used in this project, and the dependencies of those packages
@@ -78,7 +80,8 @@ hydrate <- function(packages = NULL,
 
   # copy packages from user library to cache
   linkable <-
-    settings$use.cache(project = project) &&
+    renv_cache_config_enabled(project = project) &&
+    renv_cache_config_symlinks(project = project) &&
     renv_path_same(library, renv_paths_library(project = project))
 
   if (linkable)

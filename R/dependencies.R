@@ -132,6 +132,10 @@ renv_dependencies_impl <- function(
   errors = c("reported", "fatal", "ignored"),
   dev = FALSE)
 {
+  # special case: if 'path' is a function, parse its body for dependencies
+  if (is.function(path))
+    return(renv_dependencies_discover_r(expr = body(path)))
+
   path <- renv_path_normalize(path, winslash = "/", mustWork = TRUE)
   root <- root %||% renv_dependencies_root(path)
 
@@ -573,6 +577,16 @@ renv_dependencies_discover_chunks <- function(path) {
     if (identical(chunk$params$renv.ignore, TRUE))
       return(character())
 
+    # skip learnr exercises
+    if (identical(chunk$params$exercise, TRUE))
+      return(character())
+
+    # skip chunks whose labels end in '-display'
+    label <- chunk$params$label %||% ""
+    if (grepl("-display$", label))
+      return(character())
+
+    # okay, now we can discover deps
     deps <- catch(renv_dependencies_discover_r(path = path, text = chunk$code))
     if (inherits(deps, "error"))
       return(renv_dependencies_error(path, error = deps))
@@ -666,18 +680,24 @@ renv_dependencies_discover_rproj <- function(path) {
 
 }
 
-renv_dependencies_discover_r <- function(path = NULL, text = NULL) {
+renv_dependencies_discover_r <- function(path = NULL,
+                                         text = NULL,
+                                         expr = NULL)
+{
 
-  parsed <- if (is.character(text))
-    catch(renv_parse_text(text))
-  else
-    catch(renv_parse_file(path))
+  expr <- case(
+    is.function(expr)  ~ body(expr),
+    is.language(expr)  ~ expr,
+    is.character(text) ~ catch(renv_parse_text(text)),
+    is.character(path) ~ catch(renv_parse_file(path)),
+    ~ stop("internal error")
+  )
 
-  if (inherits(parsed, "error")) {
+  if (inherits(expr, "error")) {
     # workaround for an R bug where parse-related state could be
     # leaked if an error occurred
     Sys.setlocale()
-    return(renv_dependencies_error(path, error = parsed))
+    return(renv_dependencies_error(path, error = expr))
   }
 
   methods <- c(
@@ -693,7 +713,7 @@ renv_dependencies_discover_r <- function(path = NULL, text = NULL) {
   )
 
   discoveries <- new.env(parent = emptyenv())
-  recurse(parsed, function(node, stack) {
+  recurse(expr, function(node, stack) {
     if (is.call(node))
       for (method in methods)
         method(node, stack, discoveries)

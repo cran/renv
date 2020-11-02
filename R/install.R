@@ -108,7 +108,9 @@ install <- function(packages = NULL,
   packages <- c(packages, dots[!nzchar(names(dots))])
 
   project <- renv_project_resolve(project)
-  library <- library %||% renv_libpaths_all()
+  renv_scope_lock(project = project)
+
+  library <- renv_path_normalize(library %||% renv_libpaths_all())
 
   type <- type %||% getOption("pkgType")
   renv_scope_options(pkgType = type)
@@ -258,13 +260,14 @@ renv_install_impl <- function(record) {
   libpaths <- renv_global_get("library.paths") %||% renv_libpaths_all()
   library <- libpaths[[1]]
   linkable <-
-    settings$use.cache(project = project) &&
+    renv_cache_config_enabled(project = project) &&
+    renv_cache_config_symlinks(project = project) &&
     renv_path_same(library, renv_paths_library(project = project))
 
   linker <- if (linkable) renv_file_link else renv_file_copy
 
   cacheable <-
-    settings$use.cache(project = project) &&
+    renv_cache_config_enabled(project = project) &&
     renv_record_cacheable(record) &&
     !renv_restore_rebuild_required(record)
 
@@ -304,7 +307,7 @@ renv_install_impl <- function(record) {
   vwritef("\tOK [%s]", feedback)
 
   # link into cache
-  if (settings$use.cache(project = project))
+  if (renv_cache_config_enabled(project = project))
     renv_cache_synchronize(record, linkable = linkable)
 
 }
@@ -563,26 +566,7 @@ renv_install_postamble <- function(packages) {
 }
 
 renv_install_preflight_unknown_source <- function(records) {
-
-  unknown <- filter(records, function(record) {
-    renv_record_source(record) == "unknown"
-  })
-
-  if (empty(unknown))
-    return(TRUE)
-
-  # nocov start
-  if (renv_verbose()) {
-    renv_pretty_print_records(
-      unknown,
-      "The following package(s) were installed from an unknown source:",
-      "renv may be unable to restore these packages."
-    )
-  }
-  # nocov end
-
-  FALSE
-
+  renv_check_unknown_source(records)
 }
 
 renv_install_preflight_permissions <- function(library) {

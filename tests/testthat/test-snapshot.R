@@ -209,10 +209,12 @@ test_that("snapshot warns about unsatisfied dependencies", {
   toast$Depends <- "bread (> 1.0.0)"
   renv_dcf_write(toast, file = descpath)
 
-  expect_condition(
+  condition <- tryCatch(
     snapshot(),
-    class = "renv.snapshot.unsatisfied_dependencies"
+    renv.snapshot.unsatisfied_dependencies = identity
   )
+
+  expect_s3_class(condition, "renv.snapshot.unsatisfied_dependencies")
 
 })
 
@@ -303,5 +305,50 @@ test_that(".renvignore works during snapshot without an explicit root", {
 
   lockfile <- snapshot(project = ".", lockfile = NULL)
   expect_true(is.null(lockfile$Packages$bread))
+
+})
+
+test_that("snapshot(packages = ...) captures package dependencies", {
+
+  renv_tests_scope("breakfast")
+
+  # init to install required packages
+  init()
+
+  # remove old lockfile
+  unlink("renv.lock")
+
+  # create lockfile
+  snapshot(packages = "breakfast")
+
+  # check for expected records
+  lockfile <- renv_lockfile_load(project = getwd())
+  records <- renv_records(lockfile)
+
+  expect_true(!is.null(records$breakfast))
+  expect_true(!is.null(records$bread))
+  expect_true(!is.null(records$toast))
+  expect_true(!is.null(records$oatmeal))
+
+})
+
+test_that("snapshot() accepts relative library paths", {
+
+  renv_tests_scope("breakfast")
+
+  # initialize project
+  init()
+
+  # remove lockfile
+  unlink("renv.lock")
+
+  # form relative path to library
+  library <- substring(.libPaths()[1], nchar(getwd()) + 2)
+
+  # try to snapshot with relative library path
+  snapshot(library = library)
+
+  # test that snapshot succeeded
+  expect_true(file.exists("renv.lock"))
 
 })

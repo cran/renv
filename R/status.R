@@ -26,9 +26,11 @@ status <- function(project = NULL,
   renv_dots_check(...)
 
   project <- renv_project_resolve(project)
+  renv_scope_lock(project = project)
+
   renv_dependencies_scope(project, action = "status")
 
-  library <- library %||% renv_libpaths_all()
+  library <- renv_path_normalize(library %||% renv_libpaths_all())
   lockpath <- lockfile %||% renv_lockfile_path(project)
 
   invisible(renv_status_impl(project, library, lockpath))
@@ -128,43 +130,8 @@ renv_status_check_used_packages <- function(project, libstate) {
 }
 
 renv_status_check_unknown_sources <- function(project, lockfile) {
-
   records <- renv_records(lockfile)
-  if (empty(records))
-    return(TRUE)
-
-  unknown <- filter(records, function(record) {
-
-    source <- renv_record_source(record)
-    if (source != "unknown")
-      return(FALSE)
-
-    localpath <- tryCatch(
-      renv_retrieve_local_find(record),
-      error = function(e) ""
-    )
-
-    if (file.exists(localpath))
-      return(FALSE)
-
-    TRUE
-
-  })
-
-  if (empty(unknown))
-    return(TRUE)
-
-  renv_pretty_print_records(
-    unknown,
-    "The following package(s) were installed from an unknown source:",
-    c(
-      "renv may be unable to restore these packages.",
-      "Consider reinstalling these packages from a known source if possible."
-    )
-  )
-
-  FALSE
-
+  renv_check_unknown_source(records, project)
 }
 
 renv_status_check_synchronized <- function(project,
@@ -273,7 +240,7 @@ renv_status_check_synchronized <- function(project,
 
 renv_status_check_cache <- function(project) {
 
-  if (settings$use.cache(project = project))
+  if (renv_cache_config_enabled(project = project))
     renv_cache_diagnose()
 
 }

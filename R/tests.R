@@ -18,6 +18,9 @@ renv_tests_scope <- function(packages = character()) {
   # set as active project
   Sys.setenv(RENV_PROJECT = dir)
 
+  # create empty renv directory
+  dir.create(file.path(dir, "renv"))
+
   # create file with dependencies
   code <- sprintf("library(%s)", packages)
   writeLines(code, "dependencies.R")
@@ -174,20 +177,57 @@ renv_tests_init_repos <- function(repos = NULL) {
 
 renv_tests_init_packages <- function() {
 
-  # eagerly load packages that we'll need during tests
-  # (as the sandbox will otherwise 'hide' these packages)
-  packages <- c(
-    "packrat",
-    "knitr",
-    "rappdirs",
-    "reticulate",
-    "rmarkdown",
-    "uuid",
-    "yaml"
-  )
+  packages <- renv_tests_init_packages_find()
+  renv_tests_init_packages_load(packages)
 
-  for (package in packages)
-    requireNamespace(package, quietly = TRUE)
+}
+
+renv_tests_init_packages_find <- function() {
+  fields <- c("Depends", "Imports", "Suggests", "LinkingTo")
+  descpath <- system.file("DESCRIPTION", package = "renv")
+  deps <- renv_dependencies_discover_description(descpath, fields = fields)
+  deps[["Package"]]
+}
+
+renv_tests_init_packages_load <- function(packages) {
+
+  # environment capturing packages which have already been loaded
+  envir <- new.env(parent = emptyenv())
+
+  # load packages and their dependencies eagerly, since we'll munge the
+  # library paths and this could affect load of dependent packages
+  for (package in packages) {
+    tryCatch(
+      renv_tests_init_packages_load_impl(package, envir),
+      error = warning
+    )
+  }
+
+}
+
+renv_tests_init_packages_load_impl <- function(package, envir) {
+
+  # if we've already tried to load this package, skip it
+  if (visited(package, envir))
+    return()
+
+  # try to load the package
+  requireNamespace(package, quietly = TRUE)
+
+  # try to find this package
+  pkgpath <- renv_package_find(package)
+  if (!file.exists(pkgpath))
+    return()
+
+  # try to read the package DESCRIPTION and load its dependencies
+  descpath <- file.path(pkgpath, "DESCRIPTION")
+  deps <- dependencies(path = descpath, progress = FALSE)
+  for (dep in deps$Package) {
+    tryCatch(
+      renv_tests_init_packages_load_impl(dep, envir),
+      error = warning
+    )
+  }
 
 }
 

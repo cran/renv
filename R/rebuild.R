@@ -44,7 +44,9 @@ rebuild <- function(packages  = NULL,
   renv_dots_check(...)
 
   project <- renv_project_resolve(project)
-  library <- library %||% renv_libpaths_all()
+  renv_scope_lock(project = project)
+
+  library <- renv_path_normalize(library %||% renv_libpaths_all())
 
   # get collection of packages currently installed
   records <- renv_snapshot_r_packages(library = library, project = project)

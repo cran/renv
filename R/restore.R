@@ -69,7 +69,9 @@ restore <- function(project  = NULL,
   renv_dots_check(...)
 
   project  <- renv_project_resolve(project)
-  library  <- library %||% renv_libpaths_all()
+  renv_scope_lock(project = project)
+
+  library  <- renv_path_normalize(library %||% renv_libpaths_all())
   lockfile <- lockfile %||% renv_lockfile_load(project = project)
   lockfile <- renv_lockfile_resolve(lockfile)
 
@@ -86,6 +88,9 @@ restore <- function(project  = NULL,
 
   # inject overrides (if any)
   lockfile <- renv_lockfile_override(lockfile)
+
+  # repair potential issues in the lockfile
+  lockfile <- renv_lockfile_repair(lockfile)
 
   # override repositories if requested
   repos <- repos %||% config$repos.override() %||% lockfile$R$Repositories

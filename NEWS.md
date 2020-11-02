@@ -1,5 +1,59 @@
 
-# renv 0.12.0 (UNRELEASED)
+# renv 0.12.1
+
+* `renv` now ensures all of its dependencies are loaded eagerly when running
+  tests, to avoid issues with missing + lazily-loaded packages.
+
+* `renv::snapshot()` now accepts library paths specified with a relative
+  path. (#562)
+
+* `renv::snapshot()` no longer excludes the project itself, for `R` package
+  projects that use [golem](https://engineering-shiny.org/). (#538)
+  
+* The `renv` configuration option `cache.symlinks` can now be used to control
+  whether `renv` used symlinks into the cache, as opposed to full package
+  copies. Please see `?renv::config` for more details. (#556)
+
+* `renv::snapshot()` gains the `packages` argument, to be used when creating a
+  lockfile that captures a specific set of packages and their dependencies.
+  `renv` will use the currently-installed versions of those packages when
+  determining the package records to be written to the lockfile. (#554)
+  
+* `renv::dependencies()` now accepts an R function as the first argument,
+  for finding the packages used by a particular function. Currently,
+  package usages must be prefixed with `::` to be detected. (#554)
+
+* `renv::record(<package>)` now ensures that the latest-available version of
+  that package is recorded in the lockfile. Previously, a package record
+  without any specified version was added instead. For existing records
+  without a recorded version, the latest-available version on the package
+  repositories will be used during `restore()` instead. (#540)
+
+* `renv` now reads the default branch tagged for repositories created on GitHub,
+  ensuring that calls of the form `renv::install("<user>/<repo>")` resolve to
+  the declared default branch, rather than always defaulting to `"master"`.
+  (#557)
+
+* `renv` now only installs packages from sources if it detects that build tools
+  are available. This determination is done by checking whether `make` is
+  available on the `PATH`. (#552)
+  
+* Warnings related to unknown sources can now be suppressed by setting
+  `options(renv.warnings.unknown_sources = FALSE)`. (#546)
+
+* `renv` now ignores chunks with the parameter `exercise=TRUE` set, under the
+  assumption that such chunks might contain errors and so otherwise be
+  un-parsable.
+
+* `renv` now warns if sandbox generation takes a long time (> 30 seconds).
+
+* `renv` now provides an optional locking mechanism, to help minimize the
+  chance of interprocess conflicts when multiple R processes need to use the
+  same `renv` project. The option is currently disabled by default; it can be
+  enabled by setting `options(renv.config.locking.enabled = TRUE)` in an
+  appropriate R startup file. (#525)
+
+# renv 0.12.0
 
 * `renv` now uses R's internal tar implementation by default on Windows. This is
   done to avoid issues that may occur when a version of `tar.exe` on the `PATH`

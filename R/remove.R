@@ -23,8 +23,11 @@ remove <- function(packages,
 {
   renv_scope_error_handler()
   renv_dots_check(...)
+
   project <- renv_project_resolve(project)
-  library <- library %||% renv_libpaths_default()
+  renv_scope_lock(project = project)
+
+  library <- renv_path_normalize(library %||% renv_libpaths_default())
 
   descpaths <- file.path(library, packages, "DESCRIPTION")
   records <- lapply(descpaths, renv_snapshot_description)

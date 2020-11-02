@@ -12,7 +12,7 @@ remote <- function(spec) {
 }
 
 # take a short-form remotes entry, and generate a package record
-renv_remotes_resolve <- function(entry) {
+renv_remotes_resolve <- function(entry, latest = FALSE) {
 
   # check for already-resolved lists
   if (is.list(entry))
@@ -43,13 +43,13 @@ renv_remotes_resolve <- function(entry) {
 
   # attempt the parse
   withCallingHandlers(
-    renv_remotes_resolve_impl(entry),
+    renv_remotes_resolve_impl(entry, latest),
     error = error
   )
 
 }
 
-renv_remotes_resolve_impl <- function(entry) {
+renv_remotes_resolve_impl <- function(entry, latest = FALSE) {
 
   parsed <- renv_remotes_parse(entry)
 
@@ -58,7 +58,7 @@ renv_remotes_resolve_impl <- function(entry) {
     bitbucket  = renv_remotes_resolve_bitbucket(parsed),
     gitlab     = renv_remotes_resolve_gitlab(parsed),
     github     = renv_remotes_resolve_github(parsed),
-    repository = renv_remotes_resolve_repository(parsed),
+    repository = renv_remotes_resolve_repository(parsed, latest),
     stopf("unknown remote type '%s'", parsed$type %||% "<NA>")
   )
 
@@ -211,7 +211,7 @@ renv_remotes_resolve_bitbucket <- function(entry) {
 
 }
 
-renv_remotes_resolve_repository <- function(entry) {
+renv_remotes_resolve_repository <- function(entry, latest) {
 
   package <- entry$package
   if (package %in% rownames(renv_installed_packages_base()))
@@ -219,6 +219,11 @@ renv_remotes_resolve_repository <- function(entry) {
 
   version <- entry$version
   repository <- entry$repository
+
+  if (latest && is.null(version)) {
+    entry <- renv_available_packages_latest(package)
+    version <- entry$Version
+  }
 
   list(
     Package    = package,
@@ -298,22 +303,52 @@ renv_remotes_resolve_github_description <- function(host, user, repo, subdir, sh
 
 }
 
+renv_remotes_resolve_github_ref <- function(host, user, repo) {
+
+  tryCatch(
+    renv_remotes_resolve_github_ref_impl(host, user, repo),
+    error = function(e) {
+      warning(e)
+      "master"
+    }
+  )
+
+}
+
+renv_remotes_resolve_github_ref_impl <- function(host, user, repo) {
+
+  # build url to repos endpoint
+  fmt <- "%s/repos/%s/%s"
+  origin <- renv_retrieve_origin(host)
+  url <- sprintf(fmt, origin, user, repo)
+
+  # download JSON data at endpoint
+  jsonfile <- renv_tempfile("renv-github-ref-", fileext = ".json")
+  download(url, destfile = jsonfile, type = "github", quiet = TRUE)
+  json <- renv_json_read(jsonfile)
+
+  # read default branch
+  json$default_branch %||% "master"
+
+}
+
 renv_remotes_resolve_github <- function(entry) {
 
-  user   <- entry$user
-  repo   <- entry$repo
-  subdir <- entry$subdir
-  pull   <- entry$pull %||% ""
-  ref    <- entry$ref %||% "master"
-
+  # resolve the reference associated with this repository
   host <- entry$host %||% config$github.host()
+  user <- entry$user
+  repo <- entry$repo
+  ref  <- entry$ref %||% renv_remotes_resolve_github_ref(host, user, repo)
 
   # resolve the sha associated with the ref / pull
+  pull   <- entry$pull %||% ""
   sha <- case(
     nzchar(pull) ~ renv_remotes_resolve_github_sha_pull(host, user, repo, pull),
     nzchar(ref)  ~ renv_remotes_resolve_github_sha_ref(host, user, repo, ref)
   )
 
+  # read DESCRIPTION
+  subdir <- entry$subdir
   desc <- renv_remotes_resolve_github_description(host, user, repo, subdir, sha)
 
   list(

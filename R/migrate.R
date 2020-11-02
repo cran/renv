@@ -61,6 +61,7 @@ migrate <- function(
   renv_scope_error_handler()
 
   project <- renv_project_resolve(project)
+  renv_scope_lock(project = project)
 
   project <- renv_path_normalize(project, winslash = "/", mustWork = TRUE)
   if (file.exists(file.path(project, "packrat/packrat.lock"))) {
@@ -247,7 +248,7 @@ renv_migrate_packrat_library <- function(project) {
   vwritef("Done!")
 
   # move packages into the cache
-  if (settings$use.cache(project = project)) {
+  if (renv_cache_config_enabled(project = project)) {
     vprintf("* Moving packages into the renv cache ... ")
     records <- lapply(targets, renv_description_read)
     sync <- renv_progress(renv_cache_synchronize, length(targets))
@@ -293,7 +294,7 @@ renv_migrate_packrat_cache <- function(project) {
   }
 
   # cache each installed package
-  if (settings$use.cache(project = project))
+  if (renv_cache_config_enabled(project = project))
     renv_migrate_packrat_cache_impl(targets)
 
   TRUE

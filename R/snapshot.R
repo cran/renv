@@ -55,6 +55,10 @@
 #' configured on a project-specific basis using the `renv` project [settings]
 #' mechanism.
 #'
+#' When the `packages` argument is set, `type` is ignored, and instead only the
+#' requested set of packages, and their recursive dependencies, will be written
+#' to the lockfile.
+#'
 #' @inherit renv-params
 #'
 #' @param library The \R libraries to snapshot. When `NULL`, the active \R
@@ -68,6 +72,12 @@
 #' @param type The type of snapshot to perform. See **Snapshot Type** for
 #'   more details. When `NULL` (the default), an "implicit"-style snapshot
 #'   is performed.
+#'
+#' @param packages A vector of packages to be included in the lockfile. When
+#'   `NULL` (the default), all packages relevant for the type of snapshot being
+#'   performed will be included. When set, the `type` argument is ignored.
+#'   Recursive dependencies of the specified packages will be added to the
+#'   lockfile as well.
 #'
 #' @param force Boolean; force generation of a lockfile even when pre-flight
 #'   validation checks have failed?
@@ -85,6 +95,7 @@ snapshot <- function(project  = NULL,
                      library  = NULL,
                      lockfile = file.path(project, "renv.lock"),
                      type     = settings$snapshot.type(project = project),
+                     packages = NULL,
                      prompt   = interactive(),
                      force    = FALSE)
 {
@@ -93,12 +104,27 @@ snapshot <- function(project  = NULL,
   renv_dots_check(...)
 
   project <- renv_project_resolve(project)
-  library <- library %||% renv_libpaths_all()
+  renv_scope_lock(project = project)
+
+  library <- renv_path_normalize(library %||% renv_libpaths_all())
 
   if (config$snapshot.validate())
     renv_snapshot_preflight(project, library)
 
-  alt <- new <- renv_lockfile_create(project, library, type)
+  # when packages is set, we treat this as an 'all' type snapshot, but
+  # with explicit package filters turned on
+  if (!is.null(packages)) {
+
+    if (!missing(type)) {
+      fmt <- "packages argument is set; type argument %s will be ignored"
+      warningf(fmt, renv_deparse(type))
+    }
+
+    type <- "packages"
+
+  }
+
+  alt <- new <- renv_lockfile_create(project, library, type, packages)
   if (is.null(lockfile))
     return(new)
 
@@ -457,49 +483,31 @@ renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, li
 }
 
 renv_snapshot_validate_sources <- function(project, lockfile, library) {
-
   records <- renv_records(lockfile)
-
-  if (renv_testing())
-    records$renv <- NULL
-
-  unknown <- filter(records, function(record) {
-    renv_record_source(record) == "unknown"
-  })
-
-  if (empty(unknown))
-    return(TRUE)
-
-  # nocov start
-  if (!renv_testing()) {
-    renv_pretty_print(
-      names(unknown),
-      "The following package(s) were installed from an unknown source:",
-      c(
-        "renv may be unable to restore these packages in the future.",
-        "Consider re-installing these packages from a known source (e.g. CRAN)."
-      )
-    )
-  }
-  # nocov end
-
-  FALSE
-
+  renv_check_unknown_source(records, project)
 }
 
 # NOTE: if packages are found in multiple libraries,
 # then the first package found in the library paths is
 # kept and others are discarded
-renv_snapshot_r_packages <- function(library = NULL, project = NULL) {
-  records <- uapply(library, renv_snapshot_r_packages_impl, project = project)
+renv_snapshot_r_packages <- function(library = NULL,
+                                     project = NULL)
+{
+  records <- uapply(
+    library,
+    renv_snapshot_r_packages_impl,
+    project = project
+  )
+
   dupes <- duplicated(names(records))
   records[!dupes]
 }
 
-renv_snapshot_r_packages_impl <- function(library = NULL, project = NULL) {
-
+renv_snapshot_r_packages_impl <- function(library = NULL,
+                                          project = NULL)
+{
   # list packages in the library
-  library <- library %||% renv_libpaths_default()
+  library <- renv_path_normalize(library %||% renv_libpaths_default())
   paths <- list.files(library, full.names = TRUE)
 
   # remove 'base' packages
@@ -706,7 +714,7 @@ renv_snapshot_dependencies <- function(project, source) {
 
 }
 
-renv_snapshot_filter <- function(project, records, type) {
+renv_snapshot_filter <- function(project, records, type, packages) {
 
   start <- Sys.time()
 
@@ -720,6 +728,7 @@ renv_snapshot_filter <- function(project, records, type) {
     custom   = renv_snapshot_filter_custom(project, records),
     explicit = renv_snapshot_filter_explicit(project, records),
     implicit = renv_snapshot_filter_implicit(project, records),
+    packages = renv_snapshot_filter_packages(project, records, packages),
     stopf("unknown snapshot type '%s'", type)
   )
 
@@ -802,6 +811,26 @@ renv_snapshot_filter_explicit <- function(project, records) {
   }
 
   renv_snapshot_filter_impl(project, records, descpath)
+
+}
+
+renv_snapshot_filter_packages <- function(project, records, packages) {
+
+  # include transitive dependencies
+  paths <- renv_package_dependencies(packages, project = project)
+  all <- as.character(names(paths))
+  kept <- keep(records, all)
+
+  # add in bioconductor infrastructure packages
+  # if any other bioconductor packages detected
+  sources <- extract_chr(kept, "Source")
+  if ("Bioconductor" %in% sources) {
+    packages <- c("BiocManager", "BiocInstaller", "BiocVersion")
+    for (package in packages)
+      kept[[package]] <- records[[package]]
+  }
+
+  kept
 
 }
 
