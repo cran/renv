@@ -1,7 +1,7 @@
-6b26c0a8ef5f93355f5401f74a43fac6 *DESCRIPTION
+20fc73037e34579ab0bdbb80755cc6c5 *DESCRIPTION
 44b42abf175150c1e37a8d871caac748 *LICENSE
 6a21a08c60c1db6d44dfc0965b1a9b4e *NAMESPACE
-49ce2d3ebe7be9781cef6809a2e2a49d *NEWS.md
+5e7d71781195311b5636bff2726fed00 *NEWS.md
 d9424cce635646c2a462ba86d43cc1b4 *R/R.R
 f2b153b182226cf3527ac572edccb741 *R/actions.R
 a5a6ac290860869e41d8ee7d45f35fd0 *R/activate.R
@@ -12,7 +12,7 @@ ac11f27d90e826c68f96842048c555ee *R/archive.R
 d8390639a8ee1d1ad36209e68cfab79c *R/backports.R
 cd1621cd9068c7e7a46905e393421d31 *R/base64.R
 070f7d6607424a80853adb99337e9a65 *R/binding.R
-5feea6ae37a3c128919d4eae1854559b *R/bioconductor.R
+7059a30676dff1719966b2c013556ab1 *R/bioconductor.R
 f3c4a9df11120fe49f042c55f01258f8 *R/bootstrap.R
 0b48717b45ab18135280d43a60a50cd9 *R/cache.R
 e01f04691b0318d5a776cfc2d2c49706 *R/call.R
@@ -81,7 +81,7 @@ cea813aac1667b3417262fcf8fc378ff *R/mran.R
 ad41352579b5fd080ed1b93540d9b057 *R/namespace.R
 f7fe87a825cc5cf3cfc32ff62c72f915 *R/once.R
 f2e9ba75c129fa24fa9d045fd7c3363b *R/options.R
-52c38cf0bcd080874c7bed5a66e946dc *R/packages.R
+bc6cfed2986ea2873914b644f758fa2a *R/packages.R
 2aa642a4990553b5519685442c32bff5 *R/parallel.R
 90af3458f9686b1cb52736a03d7662c5 *R/parse.R
 e87ea464afbbfd91dac8bfe892062893 *R/patch.R
@@ -133,9 +133,9 @@ c9fa65daa3421cca4a8b2a704190d5e8 *R/shims.R
 93b5cad9d21fb2dc3490e01223d6353b *R/temp.R
 75ff460fee517a7ca12aeafb9b51ac83 *R/template.R
 ef7bc9c11bc77782f923ab5f19a8ea3f *R/test.R
-ca9a490eccc31ccd2ed7688328e6caf5 *R/tests.R
+4cc0a83921c0da9be197a88d054a1171 *R/tests.R
 b540fc1a80664bfa87e97343f9cf80bd *R/testthat-helpers.R
-d88c9fd9e626d400f36eeaa442aa3417 *R/testthat-reporter.R
+942becaf1dd8271d785e5fb7eca92de2 *R/testthat-reporter.R
 b7df4dacad06cdeaf3f64cf62ff4fe62 *R/timecache.R
 4f71723d2f9e6aa7409763f67ff96d03 *R/unload.R
 489242ee93cea2aac52cb8dac6f9d13a *R/update.R
@@ -164,7 +164,7 @@ fef9302a2b187424a62785d85072c5e7 *inst/doc/ci.html
 1e8c1805bd7d1c18ec586df592391138 *inst/doc/collaborating.html
 93ffc0547f0ada0112c817257b565232 *inst/doc/docker.R
 5dcdbb68c2f9234e79491574d829b958 *inst/doc/docker.Rmd
-3ba65f734d2b406e31d8ae390e06b653 *inst/doc/docker.html
+88b9f4c6f38079ee2927820582df6bf7 *inst/doc/docker.html
 3c9e2d06e8560272e30c98b0c827478b *inst/doc/faq.R
 35b729997d43b34ece9ad0ae317951d2 *inst/doc/faq.Rmd
 e53764dfc1ee198c3710b3e0b1b9506c *inst/doc/faq.html
@@ -185,7 +185,7 @@ da762337da715bcfea35ea71a46c73e5 *inst/doc/packages.html
 8f7d38e1dd2a7bf0a5223b5f337665ac *inst/doc/python.html
 d97cfbd22ddbca139ae18988e7ee718c *inst/doc/renv.R
 e82b2934496f1638662fd730577b9c81 *inst/doc/renv.Rmd
-09a9c3f0ff743427b5d48282d8d337cf *inst/doc/renv.html
+6377e3153b9fe474cc2eff0a92ab7ea8 *inst/doc/renv.html
 27cd492934a619d14a260135badd382c *inst/resources/WELCOME
 ca23d77c79ea1007a8ae848d1a0d03d9 *inst/resources/activate.R
 0f28660d57f2dd9dad52380e812e83d5 *inst/resources/scripts-git-askpass.sh

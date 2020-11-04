@@ -1,4 +1,8 @@
 
+# renv 0.12.2
+
+* `renv` no longer errs when running tests with `_R_CHECK_SUGGESTS_ONLY_=false`.
+
 # renv 0.12.1
 
 * `renv` now ensures all of its dependencies are loaded eagerly when running
