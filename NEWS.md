@@ -1,4 +1,43 @@
 
+# renv 0.12.3
+
+* Fixed an issue where `renv::dependencies()` could give an error if called
+  with a `path` argument of length > 1.
+
+* `renv::restore()` gains the `rebuild` argument, allowing users to control
+  whether packages should be rebuilt on `restore()` rather than installed
+  via links or copies from the cache, or other sources providing
+  already-installed packages.
+
+* `renv` will now attempt to bootstrap itself from CRAN, in addition to any
+  repositories declared via `getOption("repos")`. If you'd prefer to disable
+  this behavior, you can set `options(renv.bootstrap.repos = character())`.
+
+* The `renv` setting `r.version` has been added. This can be set if you'd like
+  to associate a particular project with a specific version of R, independent
+  of the version of R actually used when subsequent lockfiles are created via
+  `renv::snapshot()`. For example, setting `renv::settings$r.version("4.0")`
+  will ensure that R version `"4.0"` is encoded in the lockfile for future
+  calls to `renv::snapshot()` in a project. (#254)
+
+* `renv::dependencies()` now detects the usage of R packages within dotfiles;
+  e.g. the project `.Rprofile`. (#569)
+
+* `renv::status()` gains the `cache` argument, used to control whether
+  `renv::status()` also performs diagnostics on the global package cache. (#570)
+
+* Fixed an issue where `renv::status()` would make an un-necessary call to
+  `renv::dependencies()`. (#570)
+
+* Fixed an issue where `renv::install("bioc::<package>", rebuild = TRUE)` would
+  fail to install the requested package. (#565)
+
+* Fixed an issue where the repository name for a package installed from
+  an R package repository was sometimes incorrect. (#402)
+
+* When `RENV_PATHS_LIBRARY_ROOT` is set, `renv` will now disambiguate library
+  paths based on a hash of the project's path. (#564)
+
 # renv 0.12.2
 
 * `renv` no longer errs when running tests with `_R_CHECK_SUGGESTS_ONLY_=false`.

@@ -39,3 +39,19 @@ test_that("packages can be installed, restored from Bioconductor", {
   expect_true(renv_package_installed("Biobase"))
 
 })
+
+test_that("renv::install(<bioc>, rebuild = TRUE) works", {
+
+  skip_on_cran()
+  skip_on_appveyor()
+  skip_if(getRversion() < "3.5.0")
+  skip_if(R.version$nickname == "Unsuffered Consequences")
+  skip_if_not_installed("BiocManager")
+
+  requireNamespace("BiocManager", quietly = TRUE)
+  on.exit(unloadNamespace("BiocManager"), add = TRUE)
+
+  renv_tests_scope()
+  install("bioc::Biobase", rebuild = TRUE)
+
+})

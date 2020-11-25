@@ -5,7 +5,7 @@ renv_package_installed <- function(package, lib.loc = renv_libpaths_all()) {
 }
 
 renv_package_available <- function(package) {
-  renv_package_installed(package, lib.loc = NULL)
+  package %in% loadedNamespaces() || renv_package_installed(package)
 }
 
 renv_package_version <- function(package) {
@@ -278,4 +278,11 @@ renv_package_reload_impl_searchpath <- function(package, library, pos) {
 renv_package_reload_impl_namespace <- function(package, library) {
   unloadNamespace(package)
   loadNamespace(package, lib.loc = library)
+}
+
+renv_package_hook <- function(package, hook) {
+  if (package %in% loadedNamespaces())
+    hook()
+  else
+    setHook(packageEvent(package, "onLoad"), hook)
 }

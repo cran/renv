@@ -72,19 +72,12 @@ renv_bootstrap_download <- function(version) {
 
 renv_bootstrap_download_cran_latest <- function(version) {
 
-  # check for renv on CRAN matching this version
-  db <- as.data.frame(available.packages(), stringsAsFactors = FALSE)
-
-  entry <- db[db$Package %in% "renv" & db$Version %in% version, ]
-  if (nrow(entry) == 0) {
-    fmt <- "renv %s is not available from your declared package repositories"
-    stop(sprintf(fmt, version))
-  }
+  repos <- renv_bootstrap_download_cran_latest_find(version)
 
   message("* Downloading renv ", version, " from CRAN ... ", appendLF = FALSE)
 
   info <- tryCatch(
-    download.packages("renv", destdir = tempdir(), quiet = TRUE),
+    download.packages("renv", repos = repos, destdir = tempdir(), quiet = TRUE),
     condition = identity
   )
 
@@ -95,6 +88,37 @@ renv_bootstrap_download_cran_latest <- function(version) {
 
   message("OK")
   info[1, 2]
+
+}
+
+renv_bootstrap_download_cran_latest_find <- function(version) {
+
+  # check for renv on CRAN matching this version
+  all <- unique(c(
+    getOption("repos"),
+    getOption("renv.bootstrap.repos", default = "https://cloud.r-project.org")
+  ))
+
+  for (repos in all) {
+
+    db <- tryCatch(
+      as.data.frame(available.packages(repos = repos), stringsAsFactors = FALSE),
+      error = identity
+    )
+
+    if (inherits(db, "error"))
+      next
+
+    entry <- db[db$Package %in% "renv" & db$Version %in% version, ]
+    if (nrow(entry) == 0)
+      next
+
+    return(repos)
+
+  }
+
+  fmt <- "renv %s is not available from your declared package repositories"
+  stop(sprintf(fmt, version))
 
 }
 
@@ -231,8 +255,11 @@ renv_bootstrap_library_root <- function(project) {
     return(path)
 
   path <- Sys.getenv("RENV_PATHS_LIBRARY_ROOT", unset = NA)
-  if (!is.na(path))
-    return(file.path(path, basename(project)))
+  if (!is.na(path)) {
+    id <- substring(renv_bootstrap_hash_text(project), 1L, 8L)
+    name <- paste(basename(project), id, sep = "-")
+    return(file.path(path, name))
+  }
 
   file.path(project, "renv/library")
 
@@ -263,6 +290,16 @@ renv_bootstrap_validate_version <- function(version) {
   warning(msg, call. = FALSE)
 
   FALSE
+
+}
+
+renv_bootstrap_hash_text <- function(text) {
+
+  hashfile <- tempfile("renv-hash-")
+  on.exit(unlink(hashfile), add = TRUE)
+
+  writeLines(text, con = hashfile)
+  tools::md5sum(hashfile)
 
 }
 
