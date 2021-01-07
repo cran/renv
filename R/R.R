@@ -5,24 +5,21 @@ R <- function() {
   file.path(bin, exe)
 }
 
-r_exec <- function(package, args, label) {
+r_exec <- function(args, ...) {
 
   # ensure R_LIBS is set
+  #
+  # TODO: on Windows, if R_LIBS_USER is empty or unset, R will automatically
+  # set R_LIBS_USER to the user-specific package directory. do we want that
+  # behavior here? if not, we have to set it to a non-existent path
   rlibs <- paste(renv_libpaths_all(), collapse = .Platform$path.sep)
   renv_scope_envvars(R_LIBS = rlibs, R_LIBS_USER = "", R_LIBS_SITE = "")
 
   # ensure Rtools is on the PATH for Windows
   renv_scope_rtools()
 
-  # do the install
-  output <- suppressWarnings(system2(R(), args, stdout = TRUE, stderr = TRUE))
-
-  # check for successful install
-  status <- attr(output, "status") %||% 0L
-  if (!identical(status, 0L))
-    r_exec_error(package, output, label)
-
-  output
+  # invoke r
+  suppressWarnings(system2(R(), args, ...))
 
 }
 
@@ -142,42 +139,61 @@ r_exec_error_diagnostics <- function(package, output) {
 
 }
 
-r_cmd_install <- function(package, path, library, ...) {
+# install package called 'package' located at path 'path'
+r_cmd_install <- function(package, path, ...) {
 
+  # normalize path to package
   path <- renv_path_normalize(path, winslash = "/", mustWork = TRUE)
 
-  # prefer using a short path name for the library on Windows,
-  # to help avoid issues caused by overly-long paths
-  library <- if (renv_platform_windows())
-    utils::shortPathName(library)
-  else
-    renv_path_normalize(library, winslash = "/", mustWork = TRUE)
+  # resolve default library path
+  library <- renv_libpaths_default()
 
   # validate that we have command line tools installed and
   # available for e.g. macOS
   if (renv_platform_macos() && renv_package_type(path) == "source")
     renv_xcode_check()
 
+  # perform platform-specific pre-install checks
   renv_scope_install()
 
+  # perform the install
   args <- c(
     "--vanilla",
     "CMD", "INSTALL", "--preclean", "--no-multiarch",
     r_cmd_install_option(package, "configure.args", TRUE),
     r_cmd_install_option(package, "configure.vars", TRUE),
     r_cmd_install_option(package, "install.opts", FALSE),
-    "-l", shQuote(library),
     ...,
     shQuote(path)
   )
 
-  output <- r_exec(package, args, "install")
+  if (config$install.verbose()) {
 
-  installpath <- file.path(library, package)
-  if (!file.exists(installpath))
-    r_exec_error(package, output, "install")
+    status <- r_exec(args, stdout = "", stderr = "")
+    if (!identical(status, 0L))
+      stopf("install of package '%s' failed", package)
 
-  installpath
+    installpath <- file.path(library, package)
+    if (!file.exists(installpath))
+      stopf("install of package '%s' failed [unknown reason]", package)
+
+    installpath
+
+  } else {
+
+    output <- r_exec(args, stdout = TRUE, stderr = TRUE)
+    status <- attr(output, "status") %||% 0L
+    if (!identical(status, 0L))
+      r_exec_error(package, output, "install")
+
+    installpath <- file.path(library, package)
+    if (!file.exists(installpath))
+      r_exec_error(package, output, "install")
+
+    installpath
+
+  }
+
 
 }
 
@@ -185,7 +201,11 @@ r_cmd_build <- function(package, path, ...) {
 
   path <- renv_path_normalize(path, winslash = "/", mustWork = TRUE)
   args <- c("--vanilla", "CMD", "build", "--md5", ..., shQuote(path))
-  output <- r_exec(package, args, "build")
+
+  output <- r_exec(args, stdout = TRUE, stderr = TRUE)
+  status <- attr(output, "status") %||% 0L
+  if (!identical(status, 0L))
+    r_exec_error(package, output, "build")
 
   pasted <- paste(output, collapse = "\n")
   pattern <- "[*] building .([a-zA-Z0-9_.-]+)."

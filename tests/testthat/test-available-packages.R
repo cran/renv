@@ -24,7 +24,7 @@ test_that("renv handles multiple available source packages", {
   dbs <- renv_available_packages(type = "source")
   cran <- dbs[["CRAN"]]
   entries <- cran[cran$Package == "breakfast", ]
-  expect_true(nrow(entries) == 2)
+  expect_true(nrow(entries) == 3)
 
   entry <- renv_available_packages_entry(
     package = "breakfast",
@@ -66,5 +66,36 @@ test_that("renv_available_packages_latest() respects pkgType option", {
   # NOTE: this fails because we don't populate binary repositories during tests
   renv_scope_options(pkgType = "binary")
   expect_error(renv_available_packages_latest("breakfast"))
+
+})
+
+test_that("local sources are preferred when available", {
+
+  skip_on_cran()
+  renv_tests_scope()
+
+  root <- renv_tests_root()
+  renv_scope_envvars(RENV_PATHS_LOCAL = file.path(root, "local"))
+
+  record <- renv_available_packages_latest(package = "skeleton", type = "source")
+  expect_identical(record$Source, "Repository")
+  expect_identical(record$Repository, "Local")
+
+})
+
+test_that("available packages database refreshed on http_proxy change", {
+
+  skip_on_cran()
+  skip_on_os("windows")
+
+  count <- 0L
+  renv_scope_trace(
+    what   = renv:::renv_available_packages_impl,
+    tracer = function() { count <<- count + 1L }
+  )
+
+  Sys.setenv("https_proxy" = "")
+  renv_available_packages(type = "source")
+  expect_identical(count, 1L)
 
 })

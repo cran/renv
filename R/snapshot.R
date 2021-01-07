@@ -106,10 +106,9 @@ snapshot <- function(project  = NULL,
   project <- renv_project_resolve(project)
   renv_scope_lock(project = project)
 
-  library <- renv_path_normalize(library %||% renv_libpaths_all())
-
+  libpaths <- library %||% renv_libpaths_all()
   if (config$snapshot.validate())
-    renv_snapshot_preflight(project, library)
+    renv_snapshot_preflight(project, libpaths)
 
   # when packages is set, we treat this as an 'all' type snapshot, but
   # with explicit package filters turned on
@@ -124,7 +123,7 @@ snapshot <- function(project  = NULL,
 
   }
 
-  alt <- new <- renv_lockfile_create(project, library, type, packages)
+  alt <- new <- renv_lockfile_create(project, libpaths, type, packages)
   if (is.null(lockfile))
     return(new)
 
@@ -154,7 +153,7 @@ snapshot <- function(project  = NULL,
   # check for missing dependencies and warn if any are discovered
   # (note: use 'new' rather than 'alt' here as we don't want to attempt
   # validation on uninstalled packages)
-  validated <- renv_snapshot_validate(project, new, library)
+  validated <- renv_snapshot_validate(project, new, libpaths)
   if (!validated && !force) {
     if (prompt && !proceed()) {
       message("* Operation aborted.")
@@ -213,8 +212,8 @@ renv_snapshot_preserve_impl <- function(record) {
 
 }
 
-renv_snapshot_preflight <- function(project, library) {
-  lapply(library, renv_snapshot_preflight_impl, project = project)
+renv_snapshot_preflight <- function(project, libpaths) {
+  lapply(libpaths, renv_snapshot_preflight_impl, project = project)
 }
 
 renv_snapshot_preflight_impl <- function(project, library) {
@@ -246,7 +245,7 @@ renv_snapshot_preflight_library_exists <- function(project, library) {
 
 }
 
-renv_snapshot_validate <- function(project, lockfile, library) {
+renv_snapshot_validate <- function(project, lockfile, libpaths) {
 
   # allow user to disable snapshot validation, just in case
   enabled <- config$snapshot.validate()
@@ -262,7 +261,7 @@ renv_snapshot_validate <- function(project, lockfile, library) {
 
   ok <- map_lgl(methods, function(method) {
     tryCatch(
-      method(project, lockfile, library),
+      method(project, lockfile, libpaths),
       error = function(e) { warning(e); FALSE }
     )
   })
@@ -272,7 +271,7 @@ renv_snapshot_validate <- function(project, lockfile, library) {
 }
 
 # nocov start
-renv_snapshot_validate_bioconductor <- function(project, lockfile, library) {
+renv_snapshot_validate_bioconductor <- function(project, lockfile, libpaths) {
 
   ok <- TRUE
 
@@ -294,7 +293,7 @@ renv_snapshot_validate_bioconductor <- function(project, lockfile, library) {
       ""
     )
 
-    if (!renv_testing())
+    if (!renv_tests_running())
       writeLines(sprintf(text, package))
 
     ok <- FALSE
@@ -339,7 +338,7 @@ renv_snapshot_validate_bioconductor <- function(project, lockfile, library) {
     fmt <- "%s [installed %s != latest %s]"
     msg <- sprintf(fmt, format(bad$Package), format(bad$Version), bad$Latest)
 
-    if (!renv_testing()) {
+    if (!renv_tests_running()) {
       renv_pretty_print(
         msg,
         "The following Bioconductor packages appear to be from a separate Bioconductor release:",
@@ -359,12 +358,12 @@ renv_snapshot_validate_bioconductor <- function(project, lockfile, library) {
 }
 # nocov end
 
-renv_snapshot_validate_dependencies_available <- function(project, lockfile, library) {
+renv_snapshot_validate_dependencies_available <- function(project, lockfile, libpaths) {
 
   # use library to collect package dependency versions
   records <- renv_records(lockfile)
   packages <- extract_chr(records, "Package")
-  locs <- find.package(packages, lib.loc = library, quiet = TRUE)
+  locs <- find.package(packages, lib.loc = libpaths, quiet = TRUE)
   deps <- bapply(locs, renv_dependencies_discover_description)
   if (empty(deps))
     return(TRUE)
@@ -400,7 +399,7 @@ renv_snapshot_validate_dependencies_available <- function(project, lockfile, lib
 
   })
 
-  if (!renv_testing()) {
+  if (!renv_tests_running()) {
     renv_pretty_print(
       sprintf("%s  [required by %s]", format(missing), usedby),
       "The following required packages are not installed:",
@@ -413,12 +412,12 @@ renv_snapshot_validate_dependencies_available <- function(project, lockfile, lib
 
 }
 
-renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, library) {
+renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, libpaths) {
 
   # use library to collect package dependency versions
   records <- renv_records(lockfile)
   packages <- extract_chr(records, "Package")
-  locs <- find.package(packages, lib.loc = library, quiet = TRUE)
+  locs <- find.package(packages, lib.loc = libpaths, quiet = TRUE)
   deps <- bapply(locs, renv_dependencies_discover_description)
   if (empty(deps))
     return(TRUE)
@@ -468,7 +467,7 @@ renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, li
   fmt <- "'%s' requires '%s', but version '%s' will be snapshotted"
   txt <- sprintf(fmt, format(package), format(requires), format(request))
 
-  if (!renv_testing()) {
+  if (!renv_tests_running()) {
     renv_pretty_print(
       txt,
       "The following package(s) have unsatisfied dependencies:",
@@ -482,7 +481,7 @@ renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, li
 
 }
 
-renv_snapshot_validate_sources <- function(project, lockfile, library) {
+renv_snapshot_validate_sources <- function(project, lockfile, libpaths) {
   records <- renv_records(lockfile)
   renv_check_unknown_source(records, project)
 }
@@ -490,11 +489,11 @@ renv_snapshot_validate_sources <- function(project, lockfile, library) {
 # NOTE: if packages are found in multiple libraries,
 # then the first package found in the library paths is
 # kept and others are discarded
-renv_snapshot_r_packages <- function(library = NULL,
-                                     project = NULL)
+renv_snapshot_r_packages <- function(libpaths = NULL,
+                                     project  = NULL)
 {
   records <- uapply(
-    library,
+    libpaths,
     renv_snapshot_r_packages_impl,
     project = project
   )
@@ -511,8 +510,7 @@ renv_snapshot_r_packages_impl <- function(library = NULL,
   paths <- list.files(library, full.names = TRUE)
 
   # remove 'base' packages
-  ip <- renv_installed_packages_base()
-  paths <- paths[!basename(paths) %in% c(ip$Package, "translations")]
+  paths <- paths[!basename(paths) %in% renv_packages_base()]
 
   # remove ignored packages
   ignored <- renv_project_ignored_packages(project = project)
@@ -546,7 +544,7 @@ renv_snapshot_r_packages_impl <- function(library = NULL,
       "These packages will likely need to be repaired and / or reinstalled."
     )
 
-    stopf("snapshot of library %s failed", shQuote(aliased_path(library)))
+    stopf("snapshot of library %s failed", renv_path_pretty(library))
 
   }
 
@@ -558,6 +556,7 @@ renv_snapshot_r_packages_impl <- function(library = NULL,
 
 renv_snapshot_r_library_diagnose <- function(library, pkgs) {
 
+  pkgs <- grep("00LOCK", pkgs, invert = TRUE, value = TRUE)
   pkgs <- renv_snapshot_r_library_diagnose_broken_link(library, pkgs)
   pkgs <- renv_snapshot_r_library_diagnose_tempfile(library, pkgs)
   pkgs <- renv_snapshot_r_library_diagnose_missing_description(library, pkgs)
@@ -661,13 +660,32 @@ renv_snapshot_description_source <- function(dcf) {
   if (is.null(package))
     return(list(Source = "unknown"))
 
+  # NOTE: this is sort of a hack that allows renv to declare packages which
+  # appear to be installed from sources, but are actually available on the
+  # active R package repositories, as though they were retrieved from that
+  # repository. however, this is often what users intend, especially if
+  # they haven't configured their repository to tag the packages it makes
+  # available with the 'Repository:' field in the DESCRIPTION file.
+  #
+  # still, this has the awkward side-effect of a package's source potentially
+  # depending on what repositories happen to be active at the time of snapshot,
+  # so it'd be nice to tighten up the logic here if possible
   entry <- local({
     renv_scope_options(renv.verbose = FALSE)
-    catch(renv_available_packages_latest(package))
+    catch(renv_available_packages_latest(package, type = "source"))
   })
 
-  if (!inherits(entry, "error"))
-    return(list(Source = "Repository", Repository = entry[["Repository"]]))
+  if (!inherits(entry, "error")) {
+
+    # check for and handle local repositories
+    repos <- entry[["Repository"]]
+    if (identical(repos, "Local"))
+      return(list(Source = "Local"))
+
+    # otherwise, treat as regular entry
+    return(list(Source = "Repository", Repository = repos))
+
+  }
 
   location <- catch(renv_retrieve_local_find(dcf))
   if (!inherits(location, "error"))
@@ -871,7 +889,7 @@ renv_snapshot_fixup <- function(records) {
 
 renv_snapshot_fixup_renv <- function(records) {
 
-  if (renv_testing())
+  if (renv_tests_running())
     return(records)
 
   # nocov start

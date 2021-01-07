@@ -108,11 +108,11 @@ renv_python_virtualenv_restore <- function(project, python) {
   }
 
   diff <- renv_vector_diff(before, after)
-  file <- renv_tempfile("renv-requirements-", fileext = ".txt")
+  file <- renv_tempfile_path("renv-requirements-", fileext = ".txt")
   writeLines(diff, con = file)
   suffix <- paste("-m pip install --upgrade -r", shQuote(file))
   command <- paste(shQuote(python), suffix)
-  ignore <- renv_testing()
+  ignore <- renv_tests_running()
   system(command, ignore.stdout = ignore, ignore.stderr = ignore)
 
   vwritef("* Restored Python packages from '%s'.", aliased_path(path))

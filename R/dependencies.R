@@ -18,6 +18,17 @@
 #' will also be discovered. Note that the `rmarkdown` package is required in
 #' order to crawl dependencies in R Markdown files.
 #'
+#' @section Suppressing Errors:
+#'
+#' Depending on how you've structured your code, `renv` may emit errors when
+#' attempting to enumerate dependencies within `.Rmd` / `.Rnw` documents.
+#' For code chunks that you'd explicitly like `renv` to ignore, you can
+#' include `renv.ignore=FALSE` in the chunk header. For example:
+#'
+#'     ```{r chunk-label, renv.ignore=FALSE}
+#'     # code in this chunk will be ignored by renv
+#'     ```
+#'
 #' @section Ignoring Files:
 #'
 #' By default, `renv` will read your project's `.gitignore`s (if any) to
@@ -138,6 +149,10 @@ renv_dependencies_impl <- function(
 
   path <- renv_path_normalize(path, winslash = "/", mustWork = TRUE)
   root <- root %||% renv_dependencies_root(path)
+
+  # ignore errors when testing unless explicitly asked for
+  if (renv_tests_running() && missing(errors))
+    errors <- "ignored"
 
   # check and see if we've pre-computed dependencies for this path, and
   # retrieve those pre-computed dependencies if so
@@ -589,8 +604,12 @@ renv_dependencies_discover_chunks <- function(path) {
     if (grepl("-display$", label))
       return(character())
 
+    # remove reused chunk placeholders
+    pattern <- "<<[^>]+>>"
+    code <- gsub(pattern, "", chunk$code)
+
     # okay, now we can discover deps
-    deps <- catch(renv_dependencies_discover_r(path = path, text = chunk$code))
+    deps <- catch(renv_dependencies_discover_r(path = path, text = code))
     if (inherits(deps, "error"))
       return(renv_dependencies_error(path, error = deps))
 
@@ -1079,6 +1098,10 @@ renv_dependencies_discover_parse_params <- function(header, type) {
   names(params) <- names(params) %||% rep.int("", length(params))
   if (length(params) > 1 && names(params)[[2L]] == "")
     names(params)[[2L]] <- "label"
+
+  # fix up 'label' if it's a missing value
+  if (identical(params[["label"]], quote(expr = )))
+    params[["label"]] <- NULL
 
   if (is.null(params[["label"]]) && nzchar(label))
     params[["label"]] <- label

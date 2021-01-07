@@ -138,6 +138,15 @@ config <- list(
     )
   },
 
+  install.verbose = function(..., default = FALSE) {
+    renv_config_get(
+      name    = "install.verbose",
+      type    = "logical[1]",
+      default = default,
+      args    = list(...)
+    )
+  },
+
   locking.enabled = function(..., default = FALSE) {
     renv_config_get(
       name    = "locking.enabled",
@@ -195,6 +204,15 @@ config <- list(
   snapshot.validate = function(..., default = TRUE) {
     renv_config_get(
       name    = "snapshot.validate",
+      type    = "logical[1]",
+      default = default,
+      args    = list(...)
+    )
+  },
+
+  startup.quiet = function(..., default = NULL) {
+    renv_config_get(
+      name    = "startup.quiet",
       type    = "logical[1]",
       default = default,
       args    = list(...)

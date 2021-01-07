@@ -8,7 +8,7 @@ test_that("we avoid downloading files twice", {
     skip("required downloader not available")
 
   url <- "https://cloud.r-project.org/src/contrib/Archive/sourcetools/sourcetools_0.1.0.tar.gz"
-  destfile <- renv_tempfile("renv-download-", fileext = ".tar.gz")
+  destfile <- renv_tempfile_path("renv-download-", fileext = ".tar.gz")
 
   # download once and check file metadata
   download(url, destfile, quiet = TRUE)
@@ -51,7 +51,7 @@ test_that("we can successfully tweak the user agent string", {
 
 test_that("we can successfully download files with different downloaders", {
   skip_on_cran()
-  skip_on_appveyor()
+  skip_on_os("windows")
 
   # download a small sample file
   url <- "https://cloud.r-project.org/src/base/THANKS"
@@ -148,7 +148,7 @@ test_that("downloads work with UNC paths on Windows", {
   unc <- sub("^([a-zA-Z]):", "//localhost/\\1$", norm)
   expect_true(file.exists(unc))
 
-  destfile <- renv_tempfile("packages-")
+  destfile <- renv_tempfile_path("packages-")
 
   urls <- c(unc, paste0("file:", unc))
   for (url in urls) {
@@ -157,4 +157,9 @@ test_that("downloads work with UNC paths on Windows", {
     unlink(destfile)
   }
 
+})
+
+test_that("we can check that a URL is available", {
+  skip_on_cran()
+  expect_true(renv_download_available("https://www.google.com"))
 })

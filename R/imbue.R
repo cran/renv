@@ -37,7 +37,7 @@ imbue <- function(project = NULL,
 renv_imbue_impl <- function(project, version = NULL, force = FALSE) {
 
   # don't imbue during tests unless explicitly requested
-  if (renv_testing() && !force)
+  if (renv_tests_running() && !force)
     return(NULL)
 
   # NULL version means imbue this version of renv
@@ -52,6 +52,7 @@ renv_imbue_impl <- function(project, version = NULL, force = FALSE) {
 
   renv_scope_restore(
     project = project,
+    library = renv_libpaths_default(),
     records = records,
     packages = "renv",
     recursive = FALSE

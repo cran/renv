@@ -25,6 +25,11 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
   if (quiet)
     renv_scope_options(renv.verbose = FALSE)
 
+  # normalize separators (file URIs should normally use forward
+  # slashes, even on Windows where the native separator is backslash)
+  url      <- chartr("\\", "/", url)
+  destfile <- chartr("\\", "/", destfile)
+
   # notify user we're about to try downloading
   vwritef("Retrieving '%s' ...", url)
 
@@ -49,9 +54,10 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
 
   # if the file already exists, compare its size with
   # the server's reported size for that file
-  size <- renv_download_size(url, type, headers)
-  if (size != -1 && file.exists(destfile)) {
-    if (file.size(destfile) == size) {
+  info <- file.info(destfile, extra_cols = FALSE)
+  if (identical(info$isdir, FALSE)) {
+    size <- renv_download_size(url, type, headers)
+    if (info$size == size) {
       vwritef("\tOK [file is up to date]")
       return(destfile)
     }
@@ -62,17 +68,17 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
   on.exit(callback(), add = TRUE)
 
   # form path to temporary file
-  tempfile <- renv_tempfile(tmpdir = dirname(destfile))
+  tempfile <- renv_tempfile_path(tmpdir = dirname(destfile))
 
   # request the download
   before <- Sys.time()
 
   status <- renv_download_impl(
-    url = url,
+    url      = url,
     destfile = tempfile,
-    type = type,
-    request = "GET",
-    headers = headers
+    type     = type,
+    request  = "GET",
+    headers  = headers
   )
 
   after <- Sys.time()
@@ -86,10 +92,6 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
 
   if (!file.exists(tempfile))
     stopf("download failed [unknown reason]")
-
-  # double-check that the reported size is correct
-  if (size != -1 && file.size(tempfile) != size)
-    stopf("download failed [file was truncated]")
 
   # double-check archives are readable
   status <- renv_download_check_archive(tempfile)
@@ -112,6 +114,12 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
 # each downloader should return 0 on success
 renv_download_impl <- function(url, destfile, type = NULL, request = "GET", headers = NULL) {
 
+  # normalize separators (file URIs should normally use forward
+  # slashes, even on Windows where the native separator is backslash)
+  url      <- chartr("\\", "/", url)
+  destfile <- chartr("\\", "/", destfile)
+
+  # select the appropriate downloader
   downloader <- switch(
     renv_download_file_method(),
     curl = renv_download_curl,
@@ -119,6 +127,7 @@ renv_download_impl <- function(url, destfile, type = NULL, request = "GET", head
     renv_download_default
   )
 
+  # run downloader, catching errors
   catch(downloader(url, destfile, type, request, headers))
 
 }
@@ -130,7 +139,7 @@ renv_download_default_mode <- function(url, method) {
   fixup <-
     renv_platform_windows() &&
     identical(method, "wininet") &&
-    substring(url, 1, 5) == "file:"
+    substring(url, 1L, 5L) == "file:"
 
   if (fixup)
     mode <- "w+b"
@@ -219,7 +228,7 @@ renv_download_default_agent_scope_impl <- function(headers, envir = NULL) {
 
 renv_download_curl <- function(url, destfile, type, request, headers) {
 
-  file <- renv_tempfile("renv-download-config-")
+  file <- renv_tempfile_path("renv-download-config-")
 
   fields <- c(
     "user-agent" = renv_http_useragent(),
@@ -288,8 +297,15 @@ renv_download_curl <- function(url, destfile, type, request, headers) {
   )
 
   status <- attr(output, "status", exact = TRUE) %||% 0L
-  if (status != 0L)
+  if (status != 0L) {
     warning(output, call. = FALSE)
+    if (renv_tests_running() && renv_tests_verbose()) {
+      writeLines("")
+      writeLines(text)
+      writeLines(output)
+      writeLines("")
+    }
+  }
 
   status
 
@@ -333,7 +349,7 @@ renv_download_curl_config <- function() {
 
 renv_download_wget <- function(url, destfile, type, request, headers) {
 
-  config <- renv_tempfile("renv-download-config-")
+  config <- renv_tempfile_path("renv-download-config-")
 
   fields <- c(
     "user-agent" = renv_http_useragent(),
@@ -484,7 +500,7 @@ renv_download_headers <- function(url, type, headers) {
     return(list())
 
   # perform the download
-  file <- renv_tempfile("renv-headers-")
+  file <- renv_tempfile_path("renv-headers-")
 
   status <- renv_download_impl(
     url      = url,
@@ -525,7 +541,7 @@ renv_download_headers <- function(url, type, headers) {
 
 }
 
-renv_download_size <- function(url, type, headers = NULL) {
+renv_download_size <- function(url, type = NULL, headers = NULL) {
 
   headers <- catch(renv_download_headers(url, type, headers))
   if (inherits(headers, "error"))
@@ -557,22 +573,25 @@ renv_download_file_method <- function() {
   if (!is.na(method))
     return(method)
 
-  method <- getOption("download.file.method", default = "auto")
-  if (method %in% c("curl", "wget"))
-    return(method)
-
+  # prefer curl if available
   if (nzchar(Sys.which("curl")))
     return("curl")
 
+  # if curl is not available, use libcurl if available
   libcurl <- capabilities("libcurl")
   if (length(libcurl) && libcurl)
     return("libcurl")
 
+  # on windows, just use wininet here
+  if (renv_platform_windows())
+    return("wininet")
+
+  # if neither curl nor libcurl is available, prefer wget
   if (nzchar(Sys.which("wget")))
     return("wget")
 
-  # fall back to default method
-  method
+  # all else fails, use the internal downloader
+  "internal"
 
 }
 
@@ -617,11 +636,6 @@ renv_download_local <- function(url, destfile, headers) {
   if (!ok)
     return(FALSE)
 
-  # normalize separators (file URIs should normally use forward
-  # slashes, even on Windows where the native separator is backslash)
-  url <- gsub("\\", "/", url, fixed = TRUE)
-  destfile <- gsub("\\", "/", destfile, fixed = TRUE)
-
   methods <- list(
     renv_download_local_copy,
     renv_download_local_default
@@ -632,7 +646,7 @@ renv_download_local <- function(url, destfile, headers) {
     # perform the copy
     before <- Sys.time()
     status <- catch(method(url, destfile, headers))
-    after <- Sys.time()
+    after  <- Sys.time()
 
     # check for success
     if (!identical(status, TRUE))
@@ -667,6 +681,7 @@ renv_download_local_copy <- function(url, destfile, headers) {
   }
 
   # attempt to copy
+  ensure_parent_directory(destfile)
   status <- catchall(renv_file_copy(url, destfile, overwrite = TRUE))
   if (!identical(status, TRUE))
     return(FALSE)
@@ -707,5 +722,66 @@ renv_download_custom_headers <- function(url) {
     stop("invocation of 'renv.download.headers' did not return a named character vector")
 
   headers
+
+}
+
+renv_download_available <- function(url) {
+
+  # normalize separators (file URIs should normally use forward
+  # slashes, even on Windows where the native separator is backslash)
+  url <- chartr("\\", "/", url)
+
+  # add custom headers as appropriate for the URL
+  headers <- renv_download_custom_headers(url)
+
+  # on Windows, try using our local curl binary if available
+  renv_scope_downloader()
+
+  # provide download path
+  destfile <- renv_tempfile_path("renv-download-")
+
+  # if we're not using curl, then use fallback method
+  method <- renv_download_file_method()
+  if (!identical(method, "curl"))
+    return(renv_download_available_fallback(url, destfile, headers))
+
+  # instruct curl to request only first byte
+  extra <- c(getOption("download.file.extra"), "-r 0-0")
+  renv_scope_options(download.file.extra = paste(extra, collapse = " "))
+
+  status <- catchall(
+    renv_download_curl(
+      url      = url,
+      destfile = destfile,
+      type     = NULL,
+      request  = "GET",
+      headers  = NULL
+    )
+  )
+
+  if (inherits(status, "condition"))
+    return(FALSE)
+
+  identical(status, 0L)
+
+}
+
+renv_download_available_fallback <- function(url, destfile, headers) {
+
+  # just try downloading it
+  status <- catchall(
+    renv_download_impl(
+      url      = url,
+      destfile = destfile,
+      type     = NULL,
+      request  = "GET",
+      headers  = headers
+    )
+  )
+
+  if (inherits(status, "condition"))
+    return(FALSE)
+
+  identical(status, 0L)
 
 }

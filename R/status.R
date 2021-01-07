@@ -34,13 +34,13 @@ status <- function(project = NULL,
   project <- renv_project_resolve(project)
   renv_scope_lock(project = project)
 
-  library <- renv_path_normalize(library %||% renv_libpaths_all())
+  libpaths <- renv_libpaths_resolve(library)
   lockpath <- lockfile %||% renv_lockfile_path(project)
 
-  invisible(renv_status_impl(project, library, lockpath, cache))
+  invisible(renv_status_impl(project, libpaths, lockpath, cache))
 }
 
-renv_status_impl <- function(project, library, lockpath, cache) {
+renv_status_impl <- function(project, libpaths, lockpath, cache) {
 
   # check to see if we've initialized this project
   if (!renv_project_initialized(project)) {
@@ -48,13 +48,13 @@ renv_status_impl <- function(project, library, lockpath, cache) {
     return(list())
   }
 
-  libstate <- renv_status_check_missing_library(project, library)
+  libstate <- renv_status_check_missing_library(project, libpaths)
   lockfile <- renv_status_check_missing_lockfile(project, lockpath)
 
   renv_status_check_synchronized(
     project  = project,
     lockfile = lockfile,
-    library  = library,
+    libpaths = libpaths,
     libstate = libstate
   )
 
@@ -84,13 +84,13 @@ renv_status_check_missing_lockfile <- function(project, lockpath) {
 
 }
 
-renv_status_check_missing_library <- function(project, library) {
+renv_status_check_missing_library <- function(project, libpaths) {
 
-  projlib <- library[[1]]
+  projlib <- nth(libpaths, 1L)
   if (file.exists(projlib)) {
     renv_scope_options(renv.verbose = FALSE)
     snapshotted <- snapshot(project  = project,
-                            library  = library,
+                            library  = libpaths,
                             lockfile = NULL,
                             force    = TRUE)
     return(snapshotted)
@@ -110,13 +110,16 @@ renv_status_check_missing_library <- function(project, library) {
 
 renv_status_check_used_packages <- function(project, libstate) {
 
-  db <- renv_installed_packages_base()
-
   deps <- dependencies(project, progress = FALSE)
   used <- sort(unique(deps$Package))
   records <- renv_records(libstate)
 
-  ignored <- c("R", db$Package, renv_project_ignored_packages(project), names(records))
+  ignored <- c(
+    renv_packages_base(),
+    renv_project_ignored_packages(project),
+    names(records)
+  )
+
   missing <- setdiff(used, ignored)
   if (empty(missing))
     return(TRUE)
@@ -142,7 +145,7 @@ renv_status_check_unknown_sources <- function(project, lockfile) {
 
 renv_status_check_synchronized <- function(project,
                                            lockfile,
-                                           library,
+                                           libpaths,
                                            libstate)
 {
   # diff packages
@@ -156,7 +159,7 @@ renv_status_check_synchronized <- function(project,
 
     records <- renv_records_select(libstate, actions, "install")
 
-    if (renv_testing()) {
+    if (renv_tests_running()) {
       condition <- "renv.status.installed_but_not_recorded"
       renv_condition_signal(condition, records)
     }
@@ -181,14 +184,14 @@ renv_status_check_synchronized <- function(project,
       deps <- dependencies(project, progress = FALSE)
       pkgpaths <- renv_package_dependencies(
         packages = unique(deps$Package),
-        project = project,
-        libpaths = library
+        project  = project,
+        libpaths = libpaths
       )
 
       used <- intersect(names(records), names(pkgpaths))
       unused <- setdiff(names(records), used)
 
-      if (renv_testing()) {
+      if (renv_tests_running()) {
         condition <- "renv.status.recorded_but_no_longer_used"
         renv_condition_signal(condition, records[unused])
       }
@@ -203,7 +206,7 @@ renv_status_check_synchronized <- function(project,
 
     }
 
-    if (renv_testing()) {
+    if (renv_tests_running()) {
       condition <- "renv.status.recorded_but_not_installed"
       renv_condition_signal(condition, records)
     }

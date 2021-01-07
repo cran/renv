@@ -121,6 +121,13 @@
     were successfully downloaded and installed. This can be useful if you'd like to
     avoid mutating your project library if installation of one or more packages fails.
 
+- name: "install.verbose"
+  type: "logical[1]"
+  default: false
+  description: >
+    Be verbose when installing R packages from sources? When `TRUE`, `renv` will
+    stream any output generated during package build + installation to the console.
+
 - name: "locking.enabled"
   type: "logical[1]"
   default: false
@@ -190,6 +197,13 @@
     `renv` will attempt to diagnose potential issues in the project library before
     creating `renv.lock` -- for example, if a package installed in the project library
     depends on a package which is not currently installed.
+
+- name: "startup.quiet"
+  type: "logical[1]"
+  default: ~
+  description: >
+    Be quiet during startup? When set, `renv` will not display the typical
+    `Project <path> loaded. [renv <version>]` banner on startup.
 
 - name: "synchronized.check"
   type: "logical[1]"

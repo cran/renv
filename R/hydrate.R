@@ -71,9 +71,9 @@ hydrate <- function(packages = NULL,
   deps$renv <- NULL
 
   # remove base + missing packages
-  base <- renv_installed_packages_base()
+  base <- renv_packages_base()
   na <- deps[is.na(deps)]
-  packages <- deps[renv_vector_diff(names(deps), c(names(na), rownames(base)))]
+  packages <- deps[renv_vector_diff(names(deps), c(names(na), base))]
 
   # get and construct path to library
   ensure_directory(library)
@@ -101,7 +101,7 @@ renv_hydrate_packages <- function(project, libpaths = NULL) {
 
   deps <- dependencies(project, quiet = TRUE, dev = TRUE)
 
-  if (!renv_testing() && file.exists("~/.Rprofile")) {
+  if (!renv_tests_running() && file.exists("~/.Rprofile")) {
     profdeps <- dependencies("~/.Rprofile", quiet = TRUE, dev = TRUE)
     if (length(deps))
       deps <- bind_list(list(deps, profdeps))
@@ -134,7 +134,7 @@ renv_hydrate_libpaths <- function() {
   if (is.character(conf) && length(conf))
     conf <- unlist(strsplit(conf, ":", fixed = TRUE))
 
-  libpaths <- if (renv_testing())
+  libpaths <- if (renv_tests_running())
     renv_libpaths_all()
   else if (length(conf))
     conf
@@ -195,10 +195,14 @@ renv_hydrate_copy_packages <- function(packages, library) {
 
 renv_hydrate_resolve_missing <- function(project, na) {
 
+  # resolve library paths
+  library <- renv_paths_library(project = project)
+  libpaths <- renv_libpaths_resolve(library)
+  renv_scope_libpaths(libpaths)
+
   # figure out which packages are missing (if any)
   packages <- names(na)
-  library <- renv_paths_library(project = project)
-  installed <- renv_installed_packages(lib.loc = library)
+  installed <- renv_installed_packages(lib.loc = libpaths)
   if (all(packages %in% installed$Package))
     return()
 
@@ -215,13 +219,14 @@ renv_hydrate_resolve_missing <- function(project, na) {
 
   # perform the restore
   renv_scope_restore(
-    project = project,
+    project  = project,
+    library  = library,
     packages = packages,
-    handler = handler
+    handler  = handler
   )
 
   records <- renv_retrieve(packages)
-  renv_install(records, library)
+  renv_install(records)
 
   # if we failed to restore anything, warn the user
   data <- errors$data()

@@ -226,7 +226,7 @@ test_that("empty fields are handled in DESCRIPTION", {
 test_that("recursive symlinks are handled", {
   skip_on_os("windows")
 
-  project <- renv_tempfile()
+  project <- renv_tempfile_path()
   ensure_directory(project)
 
   owd <- setwd(project)
@@ -271,4 +271,14 @@ test_that("dependencies in dotfiles are discovered", {
   expect_true(nrow(deps) == 1L)
   expect_true(basename(deps$Source) == ".Rprofile")
   expect_true(deps$Package == "A")
+})
+
+test_that("reused knitr chunks are handled", {
+  deps <- dependencies("resources/knitr-reused-chunks.Rmd")
+  expect_true(all(c("A", "B") %in% deps$Package))
+})
+
+test_that("empty / missing labels are handled", {
+  deps <- dependencies("resources/empty-label.Rmd", progress = FALSE)
+  expect_true(all(c("A", "B") %in% deps$Package))
 })

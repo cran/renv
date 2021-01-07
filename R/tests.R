@@ -101,14 +101,14 @@ renv_tests_init_options <- function() {
   )
 }
 
-renv_tests_init_repos <- function(repos = NULL) {
+renv_tests_init_repos <- function(repopath = NULL) {
 
   # find root directory
   root <- renv_tests_root()
 
   # generate our dummy repository
-  repos <- repos %||% tempfile("renv-repos-")
-  contrib <- file.path(repos, "src/contrib")
+  repopath <- repopath %||% tempfile("renv-repos-")
+  contrib <- file.path(repopath, "src/contrib")
   ensure_directory(contrib)
 
   # save current directory
@@ -138,6 +138,9 @@ renv_tests_init_repos <- function(repos = NULL) {
 
   }
 
+  # just in case?
+  renv_scope_options(renv.config.filebacked.cache = FALSE)
+
   # copy in packages
   paths <- list.files(getwd(), full.names = TRUE)
   subdirs <- file.path(getRversion(), "Recommended")
@@ -152,6 +155,16 @@ renv_tests_init_repos <- function(repos = NULL) {
     # generate an 'old' version of the packages
     descpath <- file.path(path, "DESCRIPTION")
     desc <- renv_description_read(descpath)
+    desc$Version <- "0.0.1"
+    write.dcf(desc, file = descpath)
+
+    # place packages at top level (simulating packages with multiple
+    # versions at the top level of the repository)
+    upload(path, contrib, subdir = FALSE)
+
+    # generate an 'old' version of the packages
+    descpath <- file.path(path, "DESCRIPTION")
+    desc <- renv_description_read(descpath)
     desc$Version <- "0.1.0"
     write.dcf(desc, file = descpath)
 
@@ -161,16 +174,22 @@ renv_tests_init_repos <- function(repos = NULL) {
   }
 
   # update PACKAGES metadata
-  tools::write_PACKAGES(contrib, subdirs = subdirs, type = "source")
+  tools::write_PACKAGES(
+    dir = contrib,
+    subdirs = subdirs,
+    type = "source",
+    latestOnly = FALSE
+  )
 
-  # set repository URL (for tests)
-  options(renv.tests.repos = c(CRAN = repos))
-
-  # and update our repos option
+  # update our repos option
   fmt <- if (renv_platform_windows()) "file:///%s" else "file://%s"
+  repos <- c(CRAN = sprintf(fmt, repopath))
+
   options(
-    pkgType = "source",
-    repos = c(CRAN = sprintf(fmt, repos))
+    pkgType             = "source",
+    repos               = repos,
+    renv.tests.repos    = repos,
+    renv.tests.repopath = repopath
   )
 
 }
@@ -246,16 +265,24 @@ renv_tests_init_sandbox <- function() {
 }
 
 renv_tests_init_finish <- function() {
-  options(renv.testing = TRUE)
+
+  # don't perform transactional installs by default for now
+  # (causes strange CI failures, especially on Windows?)
+  options(renv.config.install.transactional = FALSE)
+
+  # mark tests as running
+  options(renv.tests.running = TRUE)
+
 }
 
 renv_tests_init <- function() {
 
-  if (renv_testing())
+  if (renv_tests_running())
     return()
 
   Sys.unsetenv("RENV_PATHS_LIBRARY")
   Sys.unsetenv("RENV_PATHS_LIBRARY_ROOT")
+  Sys.unsetenv("RENV_CONFIG_CACHE_ENABLED")
 
   Sys.unsetenv("RENV_PYTHON")
   Sys.unsetenv("RETICULATE_PYTHON")
@@ -272,8 +299,21 @@ renv_tests_init <- function() {
 
 }
 
-renv_testing <- function() {
-  getOption("renv.testing", default = FALSE)
+renv_tests_running <- function() {
+  getOption("renv.tests.running", default = FALSE)
+}
+
+renv_tests_verbose <- function() {
+
+  # if we're not running tests, mark as true
+  running <- renv_tests_running()
+  if (!running)
+    return(TRUE)
+
+  # otherwise, respect option
+  # (we might set this to FALSE to silence output from expected errors)
+  getOption("renv.tests.verbose", default = TRUE)
+
 }
 
 renv_test_code <- function(code, fileext = ".R") {
@@ -294,21 +334,21 @@ renv_test_retrieve <- function(record) {
   names(records) <- package
 
   # prepare dummy library
-  templib <- renv_tempfile("renv-library-")
+  templib <- renv_tempfile_path("renv-library-")
   ensure_directory(templib)
   renv_scope_libpaths(c(templib, .libPaths()))
 
   # attempt a restore into that library
   renv_scope_restore(
     project = getwd(),
+    library = templib,
     records = records,
     packages = package,
     recursive = FALSE
   )
 
   records <- renv_retrieve(record$Package)
-  library <- renv_libpaths_all()
-  renv_install(records, library)
+  renv_install(records)
 
   descpath <- file.path(templib, package)
   if (!file.exists(descpath))
@@ -351,24 +391,16 @@ renv_tests_diagnostics <- function() {
     wrap = FALSE
   )
 
-  # check packages in repository
-  db <- as.data.frame(
-    available.packages(type = "source"),
-    stringsAsFactors = FALSE
-  )
+  writeLines("The following packages are available in the test repositories:")
 
-  # avoid printing too many
-  n <- 10L
-  packages <- head(db$Package, n = n)
-  if (length(db$Package) > n) {
-    rest <- paste("and", length(db$Package) - n, "more")
-    packages <- c(packages, rest)
-  }
+  dbs <-
+    renv_available_packages(type = "source", quiet = TRUE) %>%
+    map(function(db) {
+      rownames(db) <- NULL
+      db[c("Package", "Version", "Path")]
+    })
 
-  renv_pretty_print(
-    packages,
-    "The following packages are available in the test repositories:",
-  )
+  print(dbs)
 
   path <- Sys.getenv("PATH")
   splat <- strsplit(path, .Platform$path.sep, fixed = TRUE)[[1]]

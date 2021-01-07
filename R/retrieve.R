@@ -1,4 +1,6 @@
 
+`_renv_repos_archive` <- new.env(parent = emptyenv())
+
 # this routine retrieves a package + its dependencies, and as a side
 # effect populates the restore state's `retrieved` member with a
 # list of package records which can later be used for install
@@ -80,6 +82,16 @@ renv_retrieve_impl <- function(package) {
   if (renv_retrieve_incompatible(record))
     record <- renv_available_packages_latest(package)
 
+  # if the record doesn't declare the package version,
+  # treat it as a request for the latest version on CRAN
+  # TODO: should make this behavior configurable
+  uselatest <-
+    source %in% c("repository", "bioconductor") &&
+    is.null(record$Version)
+
+  if (uselatest)
+    record <- renv_available_packages_latest(record$Package)
+
   if (!renv_restore_rebuild_required(record)) {
 
     # if we have an installed package matching the requested record, finish early
@@ -95,12 +107,7 @@ renv_retrieve_impl <- function(package) {
 
     if (cacheable) {
 
-      # for packages from a repository without a tagged version,
-      # attempt to tag that version now
-      if (identical(record$Source, "Repository") && is.null(record$Version))
-        record <- renv_available_packages_latest(record$Package)
-
-      # now try to find the record in the cache
+      # try to find the record in the cache
       path <- renv_cache_find(record)
       if (renv_cache_package_validate(path))
         return(renv_retrieve_successful(record, path))
@@ -113,23 +120,13 @@ renv_retrieve_impl <- function(package) {
   if (file.exists(path))
     return(renv_retrieve_successful(record, path))
 
-  # if the record doesn't declare the package version,
-  # treat it as a request for the latest version on CRAN
-  # TODO: should make this behavior configurable
-  uselatest <-
-    source %in% c("repository", "bioconductor") &&
-    is.null(record$Version)
-
-  if (uselatest)
-    record <- renv_available_packages_latest(record$Package)
-
   if (!renv_restore_rebuild_required(record)) {
 
     # try some early shortcut methods
     shortcuts <- c(
       renv_retrieve_explicit,
       renv_retrieve_local,
-      if (!renv_testing())
+      if (!renv_tests_running())
         renv_retrieve_libpaths
     )
 
@@ -201,7 +198,7 @@ renv_retrieve_bitbucket <- function(record) {
   fmt <- "%s/repositories/%s/%s"
   url <- sprintf(fmt, origin, username, repo)
 
-  destfile <- renv_tempfile("renv-bitbucket-")
+  destfile <- renv_tempfile_path("renv-bitbucket-")
   download(url, destfile = destfile, quiet = TRUE)
   json <- renv_json_read(destfile)
 
@@ -348,10 +345,8 @@ renv_retrieve_local_report <- function(record) {
   if (source == "local")
     return(record)
 
-  record$Source <- "Local"
-  rather <- if (source == "unknown") "" else paste(" rather than", renv_alias(source))
-  fmt <- "* Package %s [%s] will be installed from local sources%s."
-  with(record, vwritef(fmt, Package, Version, rather))
+  fmt <- "* Package %s [%s] will be installed from local sources."
+  with(record, vwritef(fmt, Package, Version))
 
   record
 
@@ -433,16 +428,51 @@ renv_retrieve_repos <- function(record) {
     methods <- c(renv_retrieve_repos_binary, methods)
   }
 
+  # capture errors for reporting
+  errors <- stack()
+
   for (method in methods) {
 
-    status <- catch(method(record))
+    status <- catch(
+      withCallingHandlers(
+        method(record),
+        renv.retrieve.error = function(error) {
+          errors$push(error)
+        }
+      )
+    )
+
     if (inherits(status, "error"))
       warning(status)
 
     if (identical(status, TRUE))
       return(TRUE)
 
+    if (!is.logical(status)) {
+      fmt <- "internal error: unexpected status code '%s'"
+      warningf(fmt, renv_deparse(status))
+    }
+
   }
+
+  # if we couldn't download the package, report the errors we saw
+  data <- errors$data()
+  if (length(data)) {
+
+    fmt <- "The following error(s) occurred while retrieving '%s':"
+    preamble <- sprintf(fmt, record$Package)
+
+    messages <- extract(errors$data(), "message")
+    renv_pretty_print(
+      values   = paste("-", messages),
+      preamble = preamble,
+      wrap     = FALSE
+    )
+
+  }
+
+  if (renv_tests_running() && renv_tests_verbose())
+    str(data)
 
   stopf("failed to retrieve package '%s'", record$Package)
 
@@ -524,15 +554,69 @@ renv_retrieve_repos_source <- function(record) {
 
 renv_retrieve_repos_archive <- function(record) {
 
-  name <- sprintf("%s_%s.tar.gz", record$Package, record$Version)
   for (repo in getOption("repos")) {
-    repo <- file.path(repo, "src/contrib/Archive", record$Package)
-    status <- catch(renv_retrieve_repos_impl(record, "source", name, repo))
+
+    # try to determine path to package in archive
+    url <- renv_retrieve_repos_archive_path(repo, record)
+    if (is.null(url))
+      next
+
+    # attempt download
+    name <- renv_retrieve_name(record, ext = ".tar.gz")
+    status <- catch(renv_retrieve_repos_impl(record, "source", name, url))
     if (identical(status, TRUE))
       return(TRUE)
+
   }
 
   return(FALSE)
+
+}
+
+renv_retrieve_repos_archive_path <- function(repo, record) {
+
+  # allow users to provide a custom archive path for a record,
+  # in case they're using a repository that happens to archive
+  # packages with a different format than regular CRAN network
+  # https://github.com/rstudio/renv/issues/602
+  override <- getOption("renv.retrieve.repos.archive.path")
+  if (is.function(override)) {
+    result <- override(repo, record)
+    if (!is.null(result))
+      return(result)
+  }
+
+  # if we already know the format of the repository, use that
+  if (exists(repo, envir = `_renv_repos_archive`)) {
+    formatter <- get(repo, envir = `_renv_repos_archive`)
+    root <- formatter(repo, record)
+    return(root)
+  }
+
+  # otherwise, try determining the archive paths with a couple
+  # custom locations, and cache the version that works for the
+  # associated repository
+  formatters <- list(
+
+    function(repo, record) {
+      with(record, file.path(repo, "src/contrib/Archive", Package))
+    },
+
+    function(repo, record) {
+      with(record, file.path(repo, "src/contrib/Archive", Package, Version))
+    }
+
+  )
+
+  name <- renv_retrieve_repos_archive_name(record, "source")
+  for (formatter in formatters) {
+    root <- formatter(repo, record)
+    url <- file.path(root, name)
+    if (renv_download_available(url)) {
+      assign(repo, formatter, envir = `_renv_repos_archive`)
+      return(root)
+    }
+  }
 
 }
 
@@ -541,6 +625,9 @@ renv_retrieve_repos_impl <- function(record,
                                      name = NULL,
                                      repo = NULL)
 {
+  package <- record$Package
+  version <- record$Version
+
   type <- type %||% attr(record, "type", exact = TRUE)
   name <- name %||% renv_retrieve_repos_archive_name(record, type)
   repo <- repo %||% attr(record, "url", exact = TRUE)
@@ -550,14 +637,17 @@ renv_retrieve_repos_impl <- function(record,
 
     entry <- catch(
       renv_available_packages_entry(
-        package = record$Package,
+        package = package,
         type    = type,
-        filter  = record$Version
+        filter  = version
       )
     )
 
-    if (inherits(entry, "error"))
+    if (inherits(entry, "error")) {
+      attr(entry, "record") <- record
+      renv_condition_signal("renv.retrieve.error", entry)
       return(FALSE)
+    }
 
     # add in the path if available
     repo <- entry$Repository
@@ -583,6 +673,13 @@ renv_retrieve_package <- function(record, url, path) {
     catch(download(url, destfile = path, type = type))
   })
 
+  # report error for logging upstream
+  if (inherits(status, "error")) {
+    attr(status, "record") <- record
+    renv_condition_signal("renv.retrieve.error", status)
+  }
+
+  # handle failures
   if (inherits(status, "error") || identical(status, FALSE))
     return(status)
 

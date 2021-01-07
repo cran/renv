@@ -2,24 +2,27 @@
 # tools for querying information about packages available on CRAN.
 # note that this does _not_ merge package entries from multiple repositories;
 # rather, a list of databases is returned (one for each repository)
-renv_available_packages <- function(type, limit = NULL, quiet = FALSE) {
+renv_available_packages <- function(type, repos = NULL, limit = NULL, quiet = FALSE) {
 
   limit <- limit %||% Sys.getenv("R_AVAILABLE_PACKAGES_CACHE_CONTROL_MAX_AGE", "3600")
+  repos <- renv_repos_normalize(repos %||% getOption("repos"))
 
-  # force a CRAN mirror when needed
-  repos <- getOption("repos") %||% character()
-  repos[repos == "@CRAN@"] <- "https://cloud.r-project.org"
-  options(repos = convert(repos, "character"))
+  # invalidate cache if http_proxy or https_proxy environment variables change,
+  # since those could effect (or even re-direct?) repository URLs
+  envkeys <- c("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY")
+  envvals <- Sys.getenv(envkeys, unset = NA)
+  key <- list(repos = repos, type = type, envvals)
 
   renv_timecache(
-    list(repos = getOption("repos"), type = type),
-    renv_available_packages_impl(type, quiet),
-    limit = as.integer(limit),
+    key     = key,
+    value   = renv_available_packages_impl(type, repos, quiet),
+    limit   = as.integer(limit),
     timeout = renv_available_packages_timeout
   )
+
 }
 
-renv_available_packages_impl <- function(type, quiet = FALSE) {
+renv_available_packages_impl <- function(type, repos, quiet = FALSE) {
 
   if (quiet)
     renv_scope_options(renv.verbose = FALSE)
@@ -28,7 +31,6 @@ renv_available_packages_impl <- function(type, quiet = FALSE) {
   vprintf(fmt, type)
 
   # request repositories
-  repos <- getOption("repos")
   urls <- contrib.url(repos, type)
   errors <- new.env(parent = emptyenv())
   dbs <- lapply(urls, renv_available_packages_query, errors = errors)
@@ -222,7 +224,14 @@ renv_available_packages_record <- function(entry, type) {
 
 renv_available_packages_latest_impl <- function(package, type) {
 
+  # get available packages
   dbs <- renv_available_packages(type = type, quiet = TRUE)
+
+  # prepend local sources if available
+  local <- renv_available_packages_local(type = type)
+  if (!is.null(local))
+    dbs <- c(list(Local = local), dbs)
+
   fields <- c("Package", "Version", "OS_type", "NeedsCompilation", "Repository")
   entries <- bapply(dbs, function(db) {
 
@@ -279,15 +288,17 @@ renv_available_packages_latest_impl <- function(package, type) {
   # sort based on version
   version <- numeric_version(entries$Version)
   ordered <- order(version, decreasing = TRUE)
+
+  # return newest-available version
   entries[ordered[[1]], ]
 
 }
 
-renv_available_packages_latest <- function(package) {
+renv_available_packages_latest <- function(package, type = NULL) {
 
   # if we're not using binary repositories,
   # then just take the latest available from source repositories
-  types <- renv_package_pkgtypes()
+  types <- type %||% renv_package_pkgtypes()
   if (!"binary" %in% types) {
 
     entry <- renv_available_packages_latest_impl(package, "source")
@@ -361,5 +372,62 @@ renv_available_packages_latest_select <- function(src, bin) {
 
   # take the source version
   renv_available_packages_record(src, "source")
+
+}
+
+renv_available_packages_local <- function(type, project = NULL) {
+
+  project <- renv_project_resolve(project)
+
+  # list files recursively in the local sources paths
+  roots <- c(
+    renv_paths_project("renv/local", project = project),
+    renv_paths_local()
+  )
+
+  # find all files used in the locals folder
+  all <- list.files(
+    path         = roots,
+    all.files    = TRUE,
+    full.names   = TRUE,
+    recursive    = TRUE,
+    include.dirs = FALSE
+  )
+
+  # keep only files with matching extensions
+  ext <- renv_package_ext(type = type)
+  keep <- all[fileext(all) %in% ext]
+
+  # read the DESCRIPTION files within the archive
+  descs <- lapply(keep, function(path) {
+
+    # read the DESCRIPTION
+    desc <- renv_description_read(path)
+
+    # set the Repository field
+    prefix <- if (renv_platform_windows()) "file:///" else "file://"
+    uri <- paste0(prefix, dirname(path))
+    desc[["Repository"]] <- uri
+
+    # return it
+    desc
+
+  })
+
+  # extract DESCRIPTION fields of interest
+  fields <- c("Package", "Version", "OS_type", "NeedsCompilation", "Repository")
+  records <- map(descs, function(desc) {
+
+    # ensure missing fields are set as NA
+    missing <- setdiff(fields, names(desc))
+    desc[missing] <- NA
+
+    # return record with requested fields
+    desc[fields]
+
+  })
+
+  # bind into data.frame for lookup
+  bind_list(records)
 
 }

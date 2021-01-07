@@ -34,7 +34,7 @@ test_that("installation failure is well-reported", {
   on.exit(setwd(owd), add = TRUE)
 
   # init dummy library
-  library <- renv_tempfile("renv-library-")
+  library <- renv_tempfile_path("renv-library-")
   ensure_directory(library)
 
   # dummy environment
@@ -271,4 +271,71 @@ test_that("renv can install packages from GitHub using remotes subdir syntax", {
   install("kevinushey/skeleton/subdir")
   expect_true(renv_package_installed("skeleton"))
   expect_true(renv_package_version("skeleton") == "1.1.0")
+})
+
+test_that("install via version succeeds", {
+  skip_on_cran()
+  renv_tests_scope()
+
+  install("bread@0.0.1")
+  expect_true(renv_package_installed("bread"))
+  expect_true(renv_package_version("bread") == "0.0.1")
+
+})
+
+test_that("install() installs inferred dependencies", {
+
+  skip_on_cran()
+  renv_tests_scope("breakfast")
+
+  # use dummy library path
+  templib <- renv_tempfile_path("renv-library-")
+  ensure_directory(templib)
+  renv_scope_libpaths(templib)
+
+  # try installing packages
+  install()
+
+  # validate that we've installed breakfast + deps
+  expect_true(renv_package_installed("breakfast"))
+
+  # try calling install once more; nothing should happen
+  records <- install()
+  expect_length(records, 0L)
+
+})
+
+test_that("install() prefers local sources when available", {
+
+  skip_on_cran()
+  renv_tests_scope()
+
+  root <- renv_tests_root()
+  renv_scope_envvars(RENV_PATHS_LOCAL = file.path(root, "local"))
+
+  records <- install("skeleton")
+
+  record <- records$skeleton
+  expect_equal(record$Repository, "Local")
+
+  prefix <- if (renv_platform_windows()) "file:///" else "file://"
+  uri <- paste0(prefix, root, "/local/skeleton")
+  expect_equal(attr(record, "url"), uri)
+
+})
+
+test_that("packages can be installed from the archive w/libcurl", {
+  skip_on_cran()
+
+  # validate that we have libcurl
+  ok <- identical(capabilities("libcurl"), c(libcurl = TRUE))
+  skip_if(!ok, "libcurl is not available")
+
+  # perform test
+  renv_tests_scope()
+  renv_scope_envvars(RENV_DOWNLOAD_FILE_METHOD = "libcurl")
+  install("bread@0.1.0")
+  expect_true(renv_package_installed("bread"))
+  expect_equal(renv_package_version("bread"), "0.1.0")
+
 })
