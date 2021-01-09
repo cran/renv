@@ -13,6 +13,10 @@ bootstrap <- function(version, library) {
 
 }
 
+renv_bootstrap_tests_running <- function() {
+  getOption("renv.tests.running", default = FALSE)
+}
+
 renv_bootstrap_repos <- function() {
 
   # check for repos override
@@ -21,7 +25,7 @@ renv_bootstrap_repos <- function() {
     return(repos)
 
   # if we're testing, re-use the test repositories
-  if (renv_tests_running())
+  if (renv_bootstrap_tests_running())
     return(getOption("renv.tests.repos"))
 
   # retrieve current repos
@@ -81,7 +85,7 @@ renv_bootstrap_download_impl <- function(url, destfile) {
   if (fixup)
     mode <- "w+b"
 
-  download.file(
+  utils::download.file(
     url      = url,
     destfile = destfile,
     mode     = mode,
@@ -97,7 +101,12 @@ renv_bootstrap_download_cran_latest <- function(version) {
   message("* Downloading renv ", version, " from CRAN ... ", appendLF = FALSE)
 
   info <- tryCatch(
-    download.packages("renv", repos = repos, destdir = tempdir(), quiet = TRUE),
+    utils::download.packages(
+      pkgs = "renv",
+      repos = repos,
+      destdir = tempdir(),
+      quiet = TRUE
+    ),
     condition = identity
   )
 
@@ -118,7 +127,10 @@ renv_bootstrap_download_cran_latest_find <- function(version) {
   for (repos in all) {
 
     db <- tryCatch(
-      as.data.frame(available.packages(repos = repos), stringsAsFactors = FALSE),
+      as.data.frame(
+        x = utils::available.packages(repos = repos),
+        stringsAsFactors = FALSE
+      ),
       error = identity
     )
 
@@ -204,7 +216,7 @@ renv_bootstrap_download_github <- function(version) {
     return(FALSE)
   }
 
-  message("Done!")
+  message("OK")
   return(destfile)
 
 }
