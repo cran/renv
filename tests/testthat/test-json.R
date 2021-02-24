@@ -18,6 +18,16 @@ test_that("sample JSON strings can be read", {
     list(list(a = 1.0), list(b = -1E5))
   )
 
+  expect_identical(
+    renv_json_read(text = '[{}, [], {}]'),
+    list(list(), list(), list())
+  )
+
+  expect_identical(
+    renv_json_read(text = '[{"]": "["}]'),
+    list(list("]" = "["))
+  )
+
 })
 
 test_that("sample R objects can be converted to JSON", {
@@ -42,7 +52,9 @@ test_that("empty R lists are converted as expected", {
 })
 
 test_that("we can parse a GitHub remotes specification", {
+
   skip_on_cran()
+  skip_sometimes()
 
   data <- renv_remotes_resolve("rstudio/renv")
   expect_true(data$Source == "GitHub")

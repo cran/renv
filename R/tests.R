@@ -1,5 +1,5 @@
 
-renv_tests_scope <- function(packages = character()) {
+renv_tests_scope <- function(packages = character(), project = NULL) {
 
   renv_tests_init()
 
@@ -10,7 +10,7 @@ renv_tests_scope <- function(packages = character()) {
   Sys.setenv(RENV_PATHS_LOCAL = file.path(renv_tests_root(), "local"))
 
   # move to own test directory
-  dir <- tempfile("renv-test-")
+  dir <- project %||% tempfile("renv-test-")
   ensure_directory(dir)
   dir <- renv_path_normalize(dir, winslash = "/")
   owd <- setwd(dir)
@@ -46,6 +46,12 @@ renv_tests_root <- function(path = getwd()) {
 }
 
 renv_tests_root_impl <- function(path = getwd()) {
+
+  # if we're working in an RStudio project, we can cheat
+  if (exists(".rs.getProjectDirectory")) {
+    projroot <- get(".rs.getProjectDirectory")
+    return(file.path(projroot(), "tests/testthat"))
+  }
 
   # construct set of paths we'll hunt through
   slashes <- gregexpr("(?:/|$)", path)[[1]]
@@ -195,8 +201,14 @@ renv_tests_init_repos <- function(repopath = NULL) {
 }
 
 renv_tests_init_packages <- function() {
+
+  # find packages to load
   packages <- renv_tests_init_packages_find()
-  renv_tests_init_packages_load(packages, new.env(parent = emptyenv()))
+
+  # load those packages
+  envir <- new.env(parent = emptyenv())
+  renv_tests_init_packages_load(packages, envir)
+
 }
 
 renv_tests_init_packages_find <- function() {
@@ -217,12 +229,17 @@ renv_tests_init_packages_load <- function(packages, envir) {
 
 renv_tests_init_packages_load_impl <- function(package, envir) {
 
+  # skip the 'R' package
+  if (identical(package, "R"))
+    return()
+
   # if we've already tried to load this package, skip it
   if (visited(package, envir = envir))
     return()
 
   # try to load the package
-  requireNamespace(package, quietly = TRUE)
+  if (!package %in% loadedNamespaces())
+    loadNamespace(package)
 
   # try to find this package
   pkgpath <- renv_package_find(package)
@@ -280,6 +297,7 @@ renv_tests_init <- function() {
   if (renv_tests_running())
     return()
 
+  Sys.unsetenv("RENV_PROFILE")
   Sys.unsetenv("RENV_PATHS_LIBRARY")
   Sys.unsetenv("RENV_PATHS_LIBRARY_ROOT")
   Sys.unsetenv("RENV_CONFIG_CACHE_ENABLED")
@@ -287,6 +305,7 @@ renv_tests_init <- function() {
   Sys.unsetenv("RENV_PYTHON")
   Sys.unsetenv("RETICULATE_PYTHON")
   Sys.unsetenv("RETICULATE_PYTHON_ENV")
+  Sys.unsetenv("RETICULATE_PYTHON_FALLBACK")
 
   renv_tests_init_workarounds()
   renv_tests_init_working_dir()
@@ -328,6 +347,9 @@ renv_test_retrieve <- function(record) {
 
   renv_scope_error_handler()
 
+  # avoid using cache
+  renv_scope_envvars(RENV_PATHS_CACHE = tempfile())
+
   # construct records
   package <- record$Package
   records <- list(record)
@@ -356,7 +378,11 @@ renv_test_retrieve <- function(record) {
 
   desc <- renv_description_read(descpath)
   fields <- grep("^Remote", names(record), value = TRUE)
-  testthat::expect_identical(as.list(desc[fields]), as.list(record[fields]))
+
+  testthat::expect_identical(
+    as.list(desc[fields]),
+    as.list(record[fields])
+  )
 
 }
 
@@ -474,4 +500,9 @@ renv_tests_report <- function(test, elapsed, expectations) {
   # write it out
   cli::cat_bullet(all)
 
+}
+
+renv_tests_path <- function(path) {
+  root <- renv_tests_root()
+  file.path(root, path)
 }

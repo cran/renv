@@ -3,12 +3,13 @@ actions <- function(action = c("snapshot", "restore"),
                     ...,
                     project = NULL,
                     library = NULL,
-                    lockfile = file.path(project, "renv.lock"),
+                    lockfile = NULL,
                     type = settings$snapshot.type(project = project),
                     clean = FALSE)
 {
-  action  <- match.arg(action)
-  project <- renv_project_resolve(project)
+  action   <- match.arg(action)
+  project  <- renv_project_resolve(project)
+  lockfile <- lockfile %||% renv_lockfile_path(project = project)
 
   renv_scope_lock(project = project)
 
@@ -104,7 +105,7 @@ renv_actions_restore_clean <- function(actions, clean, project) {
 
   # otherwise, only process removals in the project library
   projlib <- renv_paths_library(project = project)
-  locations <- renv_package_find_impl(actions$Package)
+  locations <- renv_package_find(actions$Package)
 
   keep <- actions$Action != "remove" | dirname(locations) == projlib
   actions[keep, ]

@@ -24,7 +24,7 @@ test_that("usages of library, etc. are properly handled", {
 test_that("parse errors are okay in .Rmd documents", {
   skip_if_not_installed("knitr")
   skip_if_not_installed("rmarkdown")
-  deps <- dependencies("resources/chunk-errors.Rmd")
+  deps <- dependencies("resources/chunk-errors.Rmd", quiet = TRUE)
   pkgs <- deps$Package
   expect_setequal(pkgs, c("rmarkdown", "dplyr"))
 })
@@ -68,6 +68,11 @@ test_that("import:: usages are understood", {
   deps <- dependencies("resources/import.R")
   packages <- setdiff(deps$Package, "import")
   expect_setequal(packages, letters[1:length(packages)])
+})
+
+test_that("box::use() usages are handled", {
+  deps <- dependencies("resources/box.R")
+  expect_setequal(deps$Package, c("A", "B", "C", "D", "box"))
 })
 
 test_that("renv warns when large number of files found", {
@@ -281,4 +286,17 @@ test_that("reused knitr chunks are handled", {
 test_that("empty / missing labels are handled", {
   deps <- dependencies("resources/empty-label.Rmd", progress = FALSE)
   expect_true(all(c("A", "B") %in% deps$Package))
+})
+
+test_that("only dependencies in a top-level DESCRIPTION file are used", {
+  renv_tests_scope()
+
+  dir.create("a")
+  writeLines("Depends: toast", con = "DESCRIPTION")
+  writeLines("Depends: oatmeal", con = "a/DESCRIPTION")
+
+  deps <- dependencies(quiet = TRUE)
+  expect_true("toast" %in% deps$Package)
+  expect_false("oatmeal" %in% deps$Package)
+
 })

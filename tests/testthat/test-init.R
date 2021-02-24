@@ -1,5 +1,14 @@
 context("Init")
 
+test_that("init() automatically installs referenced packages", {
+  skip_on_cran()
+
+  renv_tests_scope("bread")
+  init()
+  expect_true(renv_package_installed("bread"))
+
+})
+
 test_that("we can initialize a project using 'breakfast'", {
   skip_on_cran()
   skip_on_covr()
@@ -113,5 +122,34 @@ test_that("init() restores project containing only a lockfile", {
   expect_true(file.exists(".Rprofile"))
   expect_true(file.exists("renv/activate.R"))
   expect_true(renv_package_installed("breakfast"))
+
+})
+
+test_that("init() works in path containing accented characters", {
+
+  # ensure the project path can be represented in native encoding
+  project <- enc2utf8("pr\u{00f8}ject")
+
+  roundtrip <- tryCatch(
+    enc2utf8(enc2native(project)),
+    condition = identity
+  )
+
+  if (!identical(project, roundtrip))
+    skip("project cannot be represented in native encoding")
+
+  native <- enc2native(project)
+  renv_tests_scope(project = paste(tempdir(), native, sep = "/"))
+
+  init()
+
+  install("toast")
+  expect_true(renv_package_installed("bread"))
+  expect_true(renv_package_installed("toast"))
+
+  snapshot(library = paths$library(), type = "all")
+  lockfile <- renv_lockfile_load(project = getwd())
+  expect_true(!is.null(lockfile$Packages$bread))
+  expect_true(!is.null(lockfile$Packages$toast))
 
 })

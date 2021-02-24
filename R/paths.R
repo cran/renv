@@ -1,8 +1,4 @@
 
-renv_prefix_platform <- function() {
-  renv_bootstrap_prefix()
-}
-
 renv_paths_common <- function(name, prefixes = NULL, ...) {
 
   # check for single absolute path supplied by user
@@ -16,6 +12,14 @@ renv_paths_common <- function(name, prefixes = NULL, ...) {
   root <-
     Sys.getenv(envvar, unset = NA) %NA%
     renv_paths_root(name)
+
+  # check if the cache consists of multiple paths, if yes then split the paths
+  # this allows mixing read-only and read+write cache directories.
+  # https://github.com/rstudio/renv/issues/628
+  if (identical(name, "cache")) {
+    pattern <- if (renv_platform_windows()) "[;]" else "[;:]"
+    root <- strsplit(root, pattern)[[1L]]
+  }
 
   # form rest of path
   prefixed <- if (length(prefixes))
@@ -39,7 +43,19 @@ renv_paths_library_root <- function(project) {
 renv_paths_library <- function(..., project = NULL) {
   project <- renv_project_resolve(project)
   root <- renv_paths_library_root(project)
-  file.path(root, renv_prefix_platform(), ...) %||% ""
+  file.path(root, renv_platform_prefix(), ...) %||% ""
+}
+
+renv_paths_lockfile <- function(project = NULL) {
+  project <- renv_project_resolve(project)
+  components <- c(project, renv_profile_prefix(), "renv.lock")
+  paste(components, collapse = "/")
+}
+
+renv_paths_settings <- function(project = NULL) {
+  project <- renv_project_resolve(project)
+  components <- c(project, renv_profile_prefix(), "renv/settings.dcf")
+  paste(components, collapse = "/")
 }
 
 renv_paths_local <- function(...) {
@@ -51,11 +67,11 @@ renv_paths_source <- function(...) {
 }
 
 renv_paths_binary <- function(...) {
-  renv_paths_common("binary", c(renv_prefix_platform()), ...)
+  renv_paths_common("binary", c(renv_platform_prefix()), ...)
 }
 
 renv_paths_cache <- function(..., version = NULL) {
-  platform <- renv_prefix_platform()
+  platform <- renv_platform_prefix()
   version <- version %||% renv_cache_version()
   renv_paths_common("cache", c(version, platform), ...)
 }
@@ -115,8 +131,8 @@ renv_paths_root_default <- function() {
   if (consenting)
     return(path)
 
-  consent <- identical(getOption("renv.consent"), TRUE)
-  if (consent) {
+  consented <- renv_consent_check()
+  if (consented) {
     ensure_directory(path)
     return(path)
   }
@@ -153,7 +169,7 @@ renv_paths_init <- function() {
   envvars <- Sys.getenv()
 
   keys <- grep("^RENV_PATHS_", names(envvars), value = TRUE)
-  keys <- setdiff(keys, "RENV_PATHS_PREFIX")
+  keys <- setdiff(keys, c("RENV_PATHS_PREFIX", "RENV_PATHS_PREFIX_AUTO"))
 
   if (empty(keys))
     return(character())
@@ -235,6 +251,17 @@ renv_paths_init <- function() {
 #' located at `file.path(R.home("etc"), "Renviron.site")`, so that it can be
 #' active for any \R sessions launched on that machine.
 #'
+#' Starting from `renv 0.13.0`, you can also instruct `renv` to auto-generate
+#' an OS-specific component to include as part of library and cache paths,
+#' by setting the environment variable:
+#'
+#' ```
+#' RENV_PATHS_PREFIX_AUTO = TRUE
+#' ```
+#'
+#' The prefix will be constructed based on fields within the system's
+#' `/etc/os-release` file.
+#'
 #' If reproducibility of a project is desired on a particular machine, it is
 #' highly recommended that the `renv` cache of installed packages + binary
 #' packages is backed up and persisted, so that packages can be easily restored
@@ -292,7 +319,9 @@ renv_paths_init <- function() {
 #' # get the path to the project library
 #' path <- renv::paths$library()
 paths <- list(
-  root    = renv_paths_root,
-  library = renv_paths_library,
-  cache   = renv_paths_cache
+  root     = renv_paths_root,
+  library  = renv_paths_library,
+  lockfile = renv_paths_lockfile,
+  settings = renv_paths_settings,
+  cache    = renv_paths_cache
 )

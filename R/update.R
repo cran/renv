@@ -1,15 +1,39 @@
 
+`_renv_update_errors` <- new.env(parent = emptyenv())
+
 renv_update_find_repos <- function(records) {
-  lapply(records, renv_update_find_repos_impl)
+
+  results <- lapply(records, function(record) {
+    catch(renv_update_find_repos_impl(record))
+  })
+
+  failed <- map_lgl(results, inherits, "error")
+  if (any(failed))
+    renv_update_errors_set("repos", results[failed])
+
+  results[!failed]
+
 }
 
 renv_update_find_repos_impl <- function(record) {
 
-  latest <- renv_available_packages_latest(record$Package)
-  if (version_compare(latest$Version, record$Version) == 1)
-    return(latest)
+  # retrieve latest-available package
+  package <- record$Package
+  latest <- catch(renv_available_packages_latest(package))
+  if (inherits(latest, "error"))
+    return(NULL)
 
-  NULL
+  # validate our versions
+  if (empty(latest$Version) || empty(record$Version))
+    return(NULL)
+
+  # compare the versions; return NULL if the 'latest' version
+  # is older
+  compare <- version_compare(latest$Version, record$Version)
+  if (compare != 1)
+    return(NULL)
+
+  latest
 
 }
 
@@ -31,7 +55,16 @@ renv_update_find_github <- function(records) {
 
   }
 
-  renv_parallel_exec(records, renv_update_find_github_impl)
+  names(records) <- map_chr(records, `[[`, "Package")
+  results <- renv_parallel_exec(records, function(record) {
+    catch(renv_update_find_github_impl(record))
+  })
+
+  failed <- map_lgl(results, inherits, "error")
+  if (any(failed))
+    renv_update_errors_set("github", results[failed])
+
+  results[!failed]
 
 }
 
@@ -42,7 +75,7 @@ renv_update_find_github_impl <- function(record) {
     return(NULL)
 
   # construct and parse record entry
-  host   <- record$RemoteHost
+  host   <- record$RemoteHost %||% config$github.host()
   user   <- record$RemoteUsername
   repo   <- record$RemoteRepo
   subdir <- record$RemoteSubdir
@@ -247,8 +280,10 @@ update <- function(packages = NULL,
   updates <- renv_update_find(selected)
   vwritef("Done!")
 
+  renv_update_errors_emit()
+
   if (empty(updates)) {
-    vwritef("* All packages are up-to-date.")
+    vwritef("* All packages appear to be up-to-date.")
     return(invisible(TRUE))
   }
 
@@ -288,3 +323,71 @@ update <- function(packages = NULL,
   )
 
 }
+
+renv_update_errors_set <- function(key, errors) {
+  assign(key, errors, envir = `_renv_update_errors`)
+}
+
+renv_update_errors_clear <- function() {
+  rm(
+    list = ls(envir = `_renv_update_errors`, all.names = TRUE),
+    envir = `_renv_update_errors`
+  )
+}
+
+renv_update_errors_emit <- function() {
+
+  # clear errors when we're done
+  on.exit(renv_update_errors_clear(), add = TRUE)
+
+  # if we have any errors, start by emitting a single newline
+  all <- ls(envir = `_renv_update_errors`, all.names = TRUE)
+  if (!empty(all))
+    writef()
+
+  # then emit errors for each class
+  renv_update_errors_emit_repos()
+  renv_update_errors_emit_github()
+
+}
+
+renv_update_errors_emit_impl <- function(key, preamble, postamble) {
+
+  errors <- `_renv_update_errors`[[key]]
+  if (empty(errors))
+    return()
+
+  messages <- enumerate(errors, function(package, error) {
+    errmsg <- paste(conditionMessage(error), collapse = "; ")
+    sprintf("%s: %s", format(package), errmsg)
+  })
+
+  renv_pretty_print(
+    values = messages,
+    preamble = preamble,
+    postamble = postamble,
+    wrap = FALSE
+  )
+
+}
+
+renv_update_errors_emit_repos <- function() {
+
+  renv_update_errors_emit_impl(
+    key       = "repos",
+    preamble  = "One or more errors occurred while finding updates for the following packages:",
+    postamble = "Ensure that these packages are available from your active package repositories."
+  )
+
+}
+
+renv_update_errors_emit_github <- function() {
+
+  renv_update_errors_emit_impl(
+    key       = "github",
+    preamble  = "One or more errors occurred while finding updates for the following GitHub packages:",
+    postamble = "Ensure that these packages were installed from an accessible GitHub remote."
+  )
+
+}
+

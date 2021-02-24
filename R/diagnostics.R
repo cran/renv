@@ -36,7 +36,7 @@ diagnostics <- function(project = NULL) {
     renv_diagnostics_cache
   )
 
-  fmt <- "Diagnostics Report -- renv [%s]"
+  fmt <- "Diagnostics Report [renv %s]"
   title <- sprintf(fmt, renv_package_version("renv"))
   lines <- paste(rep.int("=", nchar(title)), collapse = "")
   vwritef(c(title, lines, ""))
@@ -156,7 +156,7 @@ renv_diagnostics_packages_sources <- function(lockfile, all) {
 
 renv_diagnostics_packages_lockfile <- function(project) {
 
-  lockpath <- file.path(project, "renv.lock")
+  lockpath <- renv_lockfile_path(project = project)
   if (!file.exists(lockpath)) {
     vwritef("This project has not yet been snapshotted: 'renv.lock' does not exist.")
     return(list())
@@ -214,9 +214,22 @@ renv_diagnostics_settings <- function(project) {
 }
 
 renv_diagnostics_options <- function(project) {
+
   vwritef(header("Options"))
-  matches <- grep("^renv[.]", names(.Options))
-  str(.Options[matches])
+
+  keys <- c(
+    "defaultPackages",
+    "download.file.method",
+    "download.file.extra",
+    "repos",
+    grep("^renv[.]", names(.Options), value = TRUE)
+  )
+
+  vals <- .Options[keys]
+  names(vals) <- keys
+
+  str(vals)
+
 }
 
 renv_diagnostics_envvars <- function(project) {

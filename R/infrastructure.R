@@ -1,14 +1,32 @@
 
 # tools for writing / removing renv-related infrastructure
-renv_infrastructure_write <- function(project = NULL, version = NULL) {
+renv_infrastructure_write <- function(project = NULL,
+                                      profile = NULL,
+                                      version = NULL)
+{
   project <- renv_project_resolve(project)
 
+  renv_infrastructure_write_profile(project, profile = profile)
   renv_infrastructure_write_rprofile(project)
   renv_infrastructure_write_rbuildignore(project)
   renv_infrastructure_write_gitignore(project)
   renv_infrastructure_write_activate(project, version = version)
 }
 
+renv_infrastructure_write_profile <- function(project, profile = NULL) {
+
+  path <- file.path(project, "renv/local/profile")
+  ensure_parent_directory(path)
+
+  profile <- renv_profile_normalize(profile)
+  if (is.null(profile))
+    unlink(path)
+  else
+    writeLines(profile, con = path)
+
+  invisible(path)
+
+}
 
 renv_infrastructure_write_rprofile <- function(project) {
 
@@ -46,7 +64,7 @@ renv_infrastructure_write_gitignore <- function(project) {
   stk <- if (settings$vcs.ignore.library()) add else remove
   stk$push("library/")
 
-  add$push("lock/", "python/", "staging/")
+  add$push("local/", "lock/", "python/", "staging/")
 
   renv_infrastructure_write_entry_impl(
     add    = as.character(add$data()),
@@ -57,12 +75,18 @@ renv_infrastructure_write_gitignore <- function(project) {
 
 }
 
-renv_infrastructure_write_activate <- function(project = NULL, version = NULL) {
+renv_infrastructure_write_activate <- function(project = NULL,
+                                               version = NULL,
+                                               create  = TRUE)
+{
   project <- renv_project_resolve(project)
   version <- version %||% renv_activate_version(project)
 
   source <- system.file("resources/activate.R", package = "renv")
   target <- file.path(project, "renv/activate.R")
+
+  if (!create && !file.exists(target))
+    return(FALSE)
 
   template <- renv_file_read(source)
   new <- renv_template_replace(template, list(VERSION = version))

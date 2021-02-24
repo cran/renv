@@ -114,6 +114,19 @@ renv_cache_synchronize <- function(record, linkable = FALSE) {
 
   # construct cache entry
   cache <- renv_cache_find(record)
+
+  copied <- FALSE
+  for (cachePath in cache) {
+    copied <- renv_cache_synchronize_inner(cachePath, record, linkable, path)
+    if (copied)
+      return(TRUE)
+  }
+  return(FALSE)
+
+}
+
+renv_cache_synchronize_inner <- function(cache, record, linkable, path) {
+
   if (!nzchar(cache))
     return(FALSE)
 
@@ -412,4 +425,13 @@ renv_cache_config_enabled <- function(project) {
 
 renv_cache_config_symlinks <- function(project) {
   config$cache.symlinks() && settings$use.cache()
+}
+
+renv_cache_linkable <- function(project, library) {
+  renv_cache_config_enabled(project = project) &&
+    renv_cache_config_symlinks(project = project) &&
+    getOption(
+      "renv.cache.linkable",
+      renv_path_same(library, renv_paths_library(project = project))
+    )
 }

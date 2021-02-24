@@ -162,6 +162,17 @@ install <- function(packages = NULL,
   # install retrieved records
   renv_install(records)
 
+  # a bit of extra test reporting
+  if (renv_tests_running()) {
+    fmt <- "Installed %i %s into library at path %s."
+    vwritef(
+      fmt,
+      length(records),
+      plural("package", length(records)),
+      renv_path_pretty(renv_libpaths_default())
+    )
+  }
+
   # check loaded packages and inform user if out-of-sync
   renv_install_postamble(names(records))
 
@@ -213,12 +224,34 @@ renv_install_staged <- function(records) {
 renv_install_staged_library_path_impl <- function() {
 
   # allow user configuration of staged library location
-  staging <- Sys.getenv("RENV_PATHS_LIBRARY_STAGING", unset = NA)
-  if (!is.na(staging))
-    return(staging)
 
-  # otherwise, just use a temporary file
-  tempfile("renv-staging-")
+  # retrieve current project, library path
+  staging <- Sys.getenv("RENV_PATHS_LIBRARY_STAGING", unset = NA)
+  project <- Sys.getenv("RENV_PROJECT", unset = NA)
+  libpath <- renv_libpaths_default()
+
+  # determine root directory for staging
+  root <- if (!is.na(staging))
+    staging
+  else if (!is.na(project))
+    file.path(project, "renv/staging")
+  else
+    file.path(libpath, ".renv")
+
+  # attempt to create it
+  ok <- catch(ensure_directory(root))
+  if (inherits(ok, "error"))
+    return(tempfile("renv-staging"))
+
+  # resolve a unique staging directory in this path
+  for (i in 1:100) {
+    path <- file.path(root, i)
+    if (dir.create(path, showWarnings = FALSE))
+      return(path)
+  }
+
+  # all else fails, use tempfile
+  tempfile("renv-staging")
 
 }
 
@@ -262,11 +295,7 @@ renv_install_impl <- function(record) {
   # use library path recorded in restore state as staged installs will have
   # mutated the library path, placing a staging library at the front
   library <- renv_restore_state("library")
-  linkable <-
-    renv_cache_config_enabled(project = project) &&
-    renv_cache_config_symlinks(project = project) &&
-    renv_path_same(library, renv_paths_library(project = project))
-
+  linkable <- renv_cache_linkable(project = project, library = library)
   linker <- if (linkable) renv_file_link else renv_file_copy
 
   cacheable <-
@@ -432,6 +461,18 @@ renv_install_package_local_impl <- function(package, path) {
   # normalize paths
   path <- renv_path_normalize(path, winslash = "/", mustWork = TRUE)
 
+  # get library path
+  library <- renv_libpaths_default()
+
+  # if a package already exists at that path, back it up first
+  # this avoids problems with older versions of R attempting to
+  # overwrite a pre-existing symlink
+  #
+  # https://github.com/rstudio/renv/issues/611
+  installpath <- file.path(library, package)
+  callback <- renv_file_backup(installpath)
+  on.exit(callback(), add = TRUE)
+
   # if this is the path to an unpacked binary archive,
   # we can just copy the folder over
   copyable <-
@@ -439,7 +480,6 @@ renv_install_package_local_impl <- function(package, path) {
     renv_package_type(path, quiet = TRUE) == "binary"
 
   # shortcut via copying a binary directory if possible
-  library <- renv_libpaths_default()
   if (copyable)
     return(renv_file_copy(path, file.path(library, package), overwrite = TRUE))
 

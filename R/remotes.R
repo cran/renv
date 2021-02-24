@@ -23,12 +23,11 @@ renv_remotes_resolve <- function(entry, latest = FALSE) {
     return(renv_remotes_resolve_url(entry, quiet = TRUE))
 
   # check for paths to existing local files
-  local <-
-    fileext(entry) %in% c(".tar.gz", ".tgz", ".zip") ||
-    renv_path_absolute(entry)
+  first <- substring(entry, 1L, 1L)
+  local <- first %in% c("~", "/", ".") || renv_path_absolute(entry)
 
   if (local) {
-    record <- catch(renv_remotes_resolve_local(entry))
+    record <- catch(renv_remotes_resolve_path(entry))
     if (!inherits(record, "error"))
       return(record)
   }
@@ -258,16 +257,29 @@ renv_remotes_resolve_github_sha_pull <- function(host, user, repo, pull) {
 
 renv_remotes_resolve_github_sha_ref <- function(host, user, repo, ref) {
 
+  # build url for github endpoint
   fmt <- "%s/repos/%s/%s/commits/%s"
   origin <- renv_retrieve_origin(host)
   url <- sprintf(fmt, origin, user, repo, ref %||% "master")
+
+  # prepare headers
   headers <- c(Accept = "application/vnd.github.v2.sha")
+
+  # make request to endpoint
   shafile <- renv_tempfile_path("renv-sha-")
-  download(url, destfile = shafile, type = "github", quiet = TRUE, headers = headers)
+  download(
+    url,
+    destfile = shafile,
+    type = "github",
+    quiet = TRUE,
+    headers = headers
+  )
+
+  # read downloaded content
   sha <- renv_file_read(shafile)
 
   # check for JSON response (in case our headers weren't sent)
-  if (nchar(sha) > 40) {
+  if (nchar(sha) > 40L) {
     json <- renv_json_read(text = sha)
     sha <- json$sha
   }
@@ -441,31 +453,33 @@ renv_remotes_resolve_url <- function(entry, quiet = FALSE) {
 
 }
 
-renv_remotes_resolve_local <- function(entry) {
+renv_remotes_resolve_path <- function(entry) {
 
   # check for existing path
   path <- renv_path_normalize(entry, winslash = "/", mustWork = TRUE)
 
   # first, check for a common extension
   if (renv_archive_type(entry) %in% c("tar", "zip"))
-    return(renv_remotes_resolve_local_impl(path))
+    return(renv_remotes_resolve_path_impl(path))
 
   # otherwise, if this is the path to a package project, use the sources as-is
   if (renv_project_type(path) == "package")
-    return(renv_remotes_resolve_local_impl(path))
+    return(renv_remotes_resolve_path_impl(path))
 
   stopf("there is no package at path '%s'", entry)
 
 }
 
-renv_remotes_resolve_local_impl <- function(path) {
+renv_remotes_resolve_path_impl <- function(path) {
 
   desc <- renv_description_read(path)
   list(
-    Package   = desc$Package,
-    Version   = desc$Version,
-    Source    = path,
-    Cacheable = FALSE
+    Package    = desc$Package,
+    Version    = desc$Version,
+    Source     = "Local",
+    RemoteType = "local",
+    RemoteUrl  = path,
+    Cacheable  = FALSE
   )
 
 }

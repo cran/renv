@@ -126,7 +126,7 @@ renv_retrieve_impl <- function(package) {
     shortcuts <- c(
       renv_retrieve_explicit,
       renv_retrieve_local,
-      if (!renv_tests_running())
+      if (!renv_tests_running() && config$install.shortcuts())
         renv_retrieve_libpaths
     )
 
@@ -191,7 +191,8 @@ renv_retrieve_bioconductor <- function(record) {
 renv_retrieve_bitbucket <- function(record) {
 
   # query repositories endpoint to find download URL
-  origin <- renv_retrieve_origin(record$RemoteHost %||% "api.bitbucket.org/2.0")
+  host <- record$RemoteHost %||% config$bitbucket.host()
+  origin <- renv_retrieve_origin(host)
   username <- record$RemoteUsername
   repo <- record$RemoteRepo
 
@@ -217,7 +218,8 @@ renv_retrieve_bitbucket <- function(record) {
 
 renv_retrieve_github <- function(record) {
 
-  origin <- renv_retrieve_origin(record$RemoteHost %||% "api.github.com")
+  host <- record$RemoteHost %||% config$github.host()
+  origin <- renv_retrieve_origin(host)
   username <- record$RemoteUsername
   repo <- record$RemoteRepo
   ref <- record$RemoteSha %||% record$RemoteRef
@@ -364,6 +366,7 @@ renv_retrieve_libpaths <- function(record) {
   for (libpath in libpaths)
     if (renv_retrieve_libpaths_impl(record, libpath))
       return(TRUE)
+
 }
 
 renv_retrieve_libpaths_impl <- function(record, libpath) {
@@ -377,8 +380,7 @@ renv_retrieve_libpaths_impl <- function(record, libpath) {
   desc <- renv_description_read(path = source)
 
   # check if it's compatible with the requested record
-  # TODO: what fields should we check against?
-  fields <- c("Package", "Version")
+  fields <- c("Package", "Version", grep("^Remote", names(record), value = TRUE))
   compatible <- identical(record[fields], desc[fields])
   if (!compatible)
     return(FALSE)
@@ -392,15 +394,15 @@ renv_retrieve_libpaths_impl <- function(record, libpath) {
 renv_retrieve_explicit <- function(record) {
 
   # try parsing as a local remote
-  source <- record$Source %||% record$RemoteUrl %||% ""
-  record <- catch(renv_remotes_resolve_local(source))
-  if (inherits(record, "error"))
+  source <- record$Path %||% record$RemoteUrl %||% ""
+  resolved <- catch(renv_remotes_resolve_path(source))
+  if (inherits(resolved, "error"))
     return(FALSE)
 
   # treat as 'local' source but extract path
   normalized <- renv_path_normalize(source, winslash = "/", mustWork = TRUE)
-  record$Source <- "Local"
-  renv_retrieve_successful(record, normalized)
+  resolved$Source <- "Local"
+  renv_retrieve_successful(resolved, normalized)
 
 }
 
@@ -456,25 +458,35 @@ renv_retrieve_repos <- function(record) {
   }
 
   # if we couldn't download the package, report the errors we saw
-  data <- errors$data()
-  if (length(data)) {
+  renv_retrieve_repos_error_report(record, errors$data())
+  stopf("failed to retrieve package '%s'", record$Package)
 
-    fmt <- "The following error(s) occurred while retrieving '%s':"
-    preamble <- sprintf(fmt, record$Package)
+}
 
-    messages <- extract(errors$data(), "message")
-    renv_pretty_print(
-      values   = paste("-", messages),
-      preamble = preamble,
-      wrap     = FALSE
-    )
+renv_retrieve_repos_error_report <- function(record, errors) {
 
-  }
+  if (empty(errors))
+    return()
+
+  messages <- extract(errors, "message")
+  if (empty(messages))
+    return()
+
+  messages <- unlist(messages, recursive = TRUE, use.names = FALSE)
+  if (empty(messages))
+    return()
+
+  fmt <- "The following error(s) occurred while retrieving '%s':"
+  preamble <- sprintf(fmt, record$Package)
+
+  renv_pretty_print(
+    values   = paste("-", messages),
+    preamble = preamble,
+    wrap     = FALSE
+  )
 
   if (renv_tests_running() && renv_tests_verbose())
-    str(data)
-
-  stopf("failed to retrieve package '%s'", record$Package)
+    str(errors)
 
 }
 

@@ -267,6 +267,7 @@ test_that("renv can install packages from Bitbucket", {
 
 test_that("renv can install packages from GitHub using remotes subdir syntax", {
   skip_on_cran()
+  skip_sometimes()
   renv_tests_scope()
   install("kevinushey/skeleton/subdir")
   expect_true(renv_package_installed("skeleton"))
@@ -338,4 +339,14 @@ test_that("packages can be installed from the archive w/libcurl", {
   expect_true(renv_package_installed("bread"))
   expect_equal(renv_package_version("bread"), "0.1.0")
 
+})
+
+test_that("issue #609", {
+  skip_on_cran()
+
+  renv_tests_scope()
+
+  options(configure.vars = c(breakfast = ""))
+  install("bread")
+  expect_true(renv_package_installed("bread"))
 })

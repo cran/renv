@@ -5,7 +5,7 @@
 \alias{paths}
 \title{Path Customization}
 \format{
-An object of class \code{list} of length 3.
+An object of class \code{list} of length 5.
 }
 \usage{
 paths
@@ -72,6 +72,14 @@ If this is required, it's strongly recommended that this environment
 variable is set in your \R installation's \code{Renviron.site} file, typically
 located at \code{file.path(R.home("etc"), "Renviron.site")}, so that it can be
 active for any \R sessions launched on that machine.
+
+Starting from \verb{renv 0.13.0}, you can also instruct \code{renv} to auto-generate
+an OS-specific component to include as part of library and cache paths,
+by setting the environment variable:\preformatted{RENV_PATHS_PREFIX_AUTO = TRUE
+}
+
+The prefix will be constructed based on fields within the system's
+\verb{/etc/os-release} file.
 
 If reproducibility of a project is desired on a particular machine, it is
 highly recommended that the \code{renv} cache of installed packages + binary

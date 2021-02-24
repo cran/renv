@@ -102,11 +102,12 @@ renv_lockfile_fini_bioconductor <- function(lockfile) {
 }
 
 renv_lockfile_path <- function(project) {
-  file.path(project, "renv.lock")
+  renv_paths_lockfile(project = project)
 }
 
 renv_lockfile_save <- function(lockfile, project) {
-  renv_lockfile_write(lockfile, file = renv_lockfile_path(project))
+  file <- renv_lockfile_path(project)
+  renv_lockfile_write(lockfile, file = file)
 }
 
 renv_lockfile_load <- function(project) {
@@ -170,5 +171,21 @@ renv_lockfile_modify <- function(lockfile, records) {
   })
 
   lockfile
+
+}
+
+renv_lockfile_compact <- function(lockfile) {
+
+  records <- renv_records(lockfile)
+  remotes <- map_chr(records, renv_record_format_remote)
+
+  renv_scope_locale("LC_COLLATE", "C")
+  remotes <- sort(remotes)
+
+  formatted <- sprintf("  \"%s\"", remotes)
+  joined <- paste(formatted, collapse = ",\n")
+
+  all <- c("renv::use(", joined, ")")
+  paste(all, collapse = "\n")
 
 }

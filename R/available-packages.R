@@ -6,6 +6,8 @@ renv_available_packages <- function(type, repos = NULL, limit = NULL, quiet = FA
 
   limit <- limit %||% Sys.getenv("R_AVAILABLE_PACKAGES_CACHE_CONTROL_MAX_AGE", "3600")
   repos <- renv_repos_normalize(repos %||% getOption("repos"))
+  if (empty(repos))
+    return(NULL)
 
   # invalidate cache if http_proxy or https_proxy environment variables change,
   # since those could effect (or even re-direct?) repository URLs
@@ -346,9 +348,11 @@ renv_available_packages_latest_mran <- function(package, type = NULL) {
   keys <- ls(envir = entry)
   pattern <- paste0("^", package, " ")
   matching <- grep(pattern, keys, perl = TRUE, value = TRUE)
-  entries <- unlist(mget(matching, envir = entry))
+  if (empty(matching))
+    stopf("package '%s' is not available from MRAN", package)
 
   # take the latest-available package
+  entries <- unlist(mget(matching, envir = entry))
   sorted <- sort(entries, decreasing = TRUE)
   key <- names(sorted)[[1L]]
   idate <- sorted[[1L]]
@@ -374,7 +378,7 @@ renv_available_packages_latest_mran <- function(package, type = NULL) {
   url <- file.path(base, name)
 
   # tag record with url + type
-  attr(record, "url")  <- url
+  attr(record, "url")  <- dirname(url)
   attr(record, "type") <- "binary"
 
   record

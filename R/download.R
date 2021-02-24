@@ -10,13 +10,18 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
   override <- getOption("renv.download.override")
   if (is.function(override)) {
 
-    result <- override(
-      url      = url,
-      destfile = destfile,
-      quiet    = quiet,
-      mode     = "wb",
-      headers  = headers
+    result <- catch(
+      override(
+        url      = url,
+        destfile = destfile,
+        quiet    = quiet,
+        mode     = "wb",
+        headers  = headers
+      )
     )
+
+    if (inherits(result, "error"))
+      renv_download_error(result, "%s", conditionMessage(result))
 
     return(destfile)
 
@@ -42,15 +47,6 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
 
   # on Windows, try using our local curl binary if available
   renv_scope_downloader()
-
-  # if this file is a zipfile or tarball, rather than attempting
-  # to download headers etc. to validate the file is okay, just
-  # check that the archive appears not to be damaged
-  status <- renv_download_check_archive(destfile)
-  if (identical(status, TRUE)) {
-    vwritef("\tOK [file is up to date]")
-    return(destfile)
-  }
 
   # if the file already exists, compare its size with
   # the server's reported size for that file
@@ -85,18 +81,18 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
 
   # check for failure
   if (inherits(status, "error"))
-    stopf("download failed [%s]", conditionMessage(status))
+    renv_download_error(url, "%s", conditionMessage(status))
 
   if (status != 0L)
-    stopf("download failed [error code %i]", status)
+    renv_download_error(url, "error code %i", status)
 
   if (!file.exists(tempfile))
-    stopf("download failed [unknown reason]")
+    renv_download_error(url, "%s", "unknown reason")
 
   # double-check archives are readable
   status <- renv_download_check_archive(tempfile)
   if (inherits(status, "error"))
-    stopf("download failed [archive cannot be read]")
+    renv_download_error(url, "%s", "archive cannot be read")
 
   # everything looks ok: report success
   renv_download_report(after - before, tempfile)
@@ -180,6 +176,10 @@ renv_download_default <- function(url, destfile, type, request, headers) {
   fmls <- formals(download.file)
   args <- keep(args, names(fmls))
 
+  renv_download_trace_begin(url, method)
+  if (renv_download_trace())
+    str(args)
+
   do.call(download.file, args)
 
 }
@@ -228,6 +228,8 @@ renv_download_default_agent_scope_impl <- function(headers, envir = NULL) {
 
 renv_download_curl <- function(url, destfile, type, request, headers) {
 
+  renv_download_trace_begin(url, "curl")
+
   file <- renv_tempfile_path("renv-download-config-")
 
   fields <- c(
@@ -271,16 +273,21 @@ renv_download_curl <- function(url, destfile, type, request, headers) {
   if (request == "HEAD")
     flags <- c(flags, "head", "include")
 
+  # put it all together
   text <- c(flags, text)
 
   writeLines(text, con = file)
+  renv_download_trace_request(text)
 
+  # generate the arguments to be passed to 'curl'
   args <- stack()
 
+  # include anything provided explicitly in 'download.file.extra' here
   extra <- getOption("download.file.extra")
   if (length(extra))
     args$push(extra)
 
+  # add in any user configuration files
   userconfig <- getOption(
     "renv.curl.config",
     renv_download_curl_config()
@@ -290,22 +297,20 @@ renv_download_curl <- function(url, destfile, type, request, headers) {
     if (file.exists(entry))
       args$push("--config", shQuote(entry))
 
+  # add in our own config file (the actual request)
   args$push("--config", shQuote(file))
 
+  # perform the download
   output <- suppressWarnings(
     system2("curl", args$data(), stdout = TRUE, stderr = TRUE)
   )
 
+  renv_download_trace_result(output)
+
+  # report non-zero status as warning
   status <- attr(output, "status", exact = TRUE) %||% 0L
-  if (status != 0L) {
+  if (status != 0L)
     warning(output, call. = FALSE)
-    if (renv_tests_running() && renv_tests_verbose()) {
-      writeLines("")
-      writeLines(text)
-      writeLines(output)
-      writeLines("")
-    }
-  }
 
   status
 
@@ -349,6 +354,8 @@ renv_download_curl_config <- function() {
 
 renv_download_wget <- function(url, destfile, type, request, headers) {
 
+  renv_download_trace_begin(url, "wget")
+
   config <- renv_tempfile_path("renv-download-config-")
 
   fields <- c(
@@ -374,6 +381,7 @@ renv_download_wget <- function(url, destfile, type, request, headers) {
   text <- paste(keys, vals, sep = " = ")
 
   writeLines(text, con = config)
+  renv_download_trace_request(text)
 
   args <- stack()
 
@@ -398,6 +406,8 @@ renv_download_wget <- function(url, destfile, type, request, headers) {
   output <- suppressWarnings(
     system2("wget", args$data(), stdout = TRUE, stderr = TRUE)
   )
+
+  renv_download_trace_result(output)
 
   status <- attr(output, "status", exact = TRUE) %||% 0L
   if (status != 0L)
@@ -731,31 +741,86 @@ renv_download_available <- function(url) {
   # slashes, even on Windows where the native separator is backslash)
   url <- chartr("\\", "/", url)
 
-  # add custom headers as appropriate for the URL
-  headers <- renv_download_custom_headers(url)
-
   # on Windows, try using our local curl binary if available
   renv_scope_downloader()
-
-  # provide download path
-  destfile <- renv_tempfile_path("renv-download-")
 
   # if we're not using curl, then use fallback method
   method <- renv_download_file_method()
   if (!identical(method, "curl"))
-    return(renv_download_available_fallback(url, destfile, headers))
+    return(renv_download_available_fallback(url))
+
+  # otherwise, try a couple candidate methods
+  methods <- list(
+    renv_download_available_headers,
+    renv_download_available_range
+  )
+
+  for (method in methods) {
+    result <- catch(method(url))
+    if (identical(result, TRUE))
+      return(TRUE)
+  }
+
+  FALSE
+
+}
+
+renv_download_available_headers <- function(url) {
+
+  status <- catchall(
+    renv_download_headers(
+      url     = url,
+      type    = NULL,
+      headers = renv_download_custom_headers(url)
+    )
+  )
+
+  if (inherits(status, "condition"))
+    return(FALSE)
+
+  is.list(status) && length(status)
+
+}
+
+renv_download_available_range <- function(url) {
+
+  destfile <- renv_tempfile_path("renv-download-")
 
   # instruct curl to request only first byte
   extra <- c(getOption("download.file.extra"), "-r 0-0")
   renv_scope_options(download.file.extra = paste(extra, collapse = " "))
 
+  # perform the download
   status <- catchall(
     renv_download_curl(
       url      = url,
       destfile = destfile,
       type     = NULL,
       request  = "GET",
-      headers  = NULL
+      headers  = renv_download_custom_headers(url)
+    )
+  )
+
+  if (inherits(status, "condition"))
+    return(FALSE)
+
+  # check for success
+  identical(status, 0L)
+
+}
+
+renv_download_available_fallback <- function(url) {
+
+  destfile <- renv_tempfile_path("renv-download-")
+
+  # just try downloading the requested URL
+  status <- catchall(
+    renv_download_impl(
+      url      = url,
+      destfile = destfile,
+      type     = NULL,
+      request  = "GET",
+      headers  = renv_download_custom_headers(url)
     )
   )
 
@@ -766,22 +831,51 @@ renv_download_available <- function(url) {
 
 }
 
-renv_download_available_fallback <- function(url, destfile, headers) {
+renv_download_error <- function(url, fmt, ...) {
+  msg <- sprintf(fmt, ...)
+  stopf("failed to retrieve '%s' [%s]", url, msg, call. = FALSE)
+}
 
-  # just try downloading it
-  status <- catchall(
-    renv_download_impl(
-      url      = url,
-      destfile = destfile,
-      type     = NULL,
-      request  = "GET",
-      headers  = headers
-    )
-  )
+renv_download_trace <- function() {
+  getOption("renv.download.trace", default = FALSE)
+}
 
-  if (inherits(status, "condition"))
-    return(FALSE)
+renv_download_trace_begin <- function(url, type) {
 
-  identical(status, 0L)
+  if (!renv_download_trace())
+    return()
+
+  fmt <- "Downloading '%s' [%s]"
+  msg <- sprintf(fmt, url, type)
+
+  title <- header(msg, n = 78L)
+  writeLines(c(title, ""))
+
+}
+
+renv_download_trace_request <- function(text) {
+
+  if (!renv_download_trace())
+    return()
+
+  title <- header("Request", n = 78L, prefix = "##")
+  writeLines(c(title, text, ""))
+
+}
+
+renv_download_trace_result <- function(output) {
+
+  if (!renv_download_trace())
+    return()
+
+  title <- header("Output", prefix = "##", n = 78L)
+  text <- if (empty(output)) "[no output generated]" else output
+  all <- c(title, text, "")
+  writeLines(all)
+
+  status <- attr(output, "status", exact = TRUE) %||% 0L
+  title <- header("Status", prefix = "##", n = 78L)
+  all <- c(title, status, "")
+  writeLines(all)
 
 }
