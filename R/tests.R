@@ -202,6 +202,9 @@ renv_tests_init_repos <- function(repopath = NULL) {
 
 renv_tests_init_packages <- function() {
 
+  # don't treat warnings as errors in this scope
+  renv_scope_options(warn = 1)
+
   # find packages to load
   packages <- renv_tests_init_packages_find()
 
@@ -505,4 +508,20 @@ renv_tests_report <- function(test, elapsed, expectations) {
 renv_tests_path <- function(path) {
   root <- renv_tests_root()
   file.path(root, path)
+}
+
+renv_tests_supported <- function() {
+
+  # supported when running locally + on CI
+  for (envvar in c("NOT_CRAN", "CI"))
+    if (!is.na(Sys.getenv(envvar, unset = NA)))
+      return(TRUE)
+
+  # disabled on older macOS releases (credentials fails to load)
+  if (renv_platform_macos() && getRversion() < "4.0.0")
+    return(FALSE)
+
+  # true otherwise
+  TRUE
+
 }

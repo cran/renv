@@ -1,4 +1,31 @@
 
+# renv 0.13.1
+
+* `renv::clean()` gains the `actions` argument, allowing the caller to control
+  which specific actions are taken during a `clean()` operation.
+
+* `renv` no longer performs an automatic snapshot after a call to
+  `renv::snapshot()`. (#651)
+
+* Fixed an issue where attempts to transform RSPM repository URLs could
+  fail if the copy of R was installed without a local `CRAN_mirrors.csv`
+  file.
+
+* Fixed an issue where `renv::init()` could fail when passed a relative
+  path to a directory. (#673)
+
+* Fixed an issue where `renv::dependencies()` would miss dependencies in
+  R Markdown YAML headers containing multiple output formats. (#674)
+
+* `renv::install()` now better respects the `Remotes` field in a project
+  `DESCRIPTION` file, if available. (#670)
+
+* `RENV_DOWNLOAD_METHOD` is now treated as an alias for
+  `RENV_DOWNLOAD_FILE_METHOD`.
+
+* Fixed an issue where `renv` would fail to load if the `~/.Rprofile` existed
+  but was an empty file.
+
 # renv 0.13.0
 
 * `renv::snapshot()` no longer creates an `renv/activate.R` file in the project
