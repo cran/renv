@@ -1,11 +1,34 @@
 
+# renv 0.13.2
+
+* `renv::install("user/repo/subdir with spaces")` now works as expected. (#694)
+
+* `renv` can now parse package dependencies declared by
+  `targets::tar_option_set(packages = <...>)`. (#698)
+
+* `renv` no longer performs an automatic snapshot following a user-canceled
+  `renv` action -- for example, if `renv::restore()` is canceled, the next
+  automatic snapshot will be suppressed. (#697)
+
+* Added the `vcs.ignore.local` project setting, to control whether the
+  project's `renv/local` folder is added to `renv`'s VCS ignore file
+  (e.g. `renv/.gitignore`). (#696)
+
+* Fixed an issue where `renv`'s bootstrapping code could inadvertently bootstrap
+  with the wrong version of `renv`, if the source and binary versions of `renv`
+  on CRAN were not in sync. (#695)
+  
+* Fixed an issue where `renv::status()` could provide a misleading message
+  for packages which are recorded in the lockfile, but not explicitly
+  required by the project. (#684)
+
 # renv 0.13.1
 
 * `renv::clean()` gains the `actions` argument, allowing the caller to control
   which specific actions are taken during a `clean()` operation.
 
 * `renv` no longer performs an automatic snapshot after a call to
-  `renv::snapshot()`. (#651)
+  `renv::status()`. (#651)
 
 * Fixed an issue where attempts to transform RSPM repository URLs could
   fail if the copy of R was installed without a local `CRAN_mirrors.csv`

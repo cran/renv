@@ -163,7 +163,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
 <p>To directly install a package from these local sources, you must specify the package version or provide the full path to the tarball:</p>
 <ul>
 <li><code>renv::install(&quot;&lt;package&gt;@&lt;version&gt;&quot;)</code></li>
-<li><code>renv::install(&quot;&lt;project&gt;/renv/local/&lt;package&gt;_&lt;version&gt;.tar.gz</code></li>
+<li><code>renv::install(&quot;&lt;project&gt;/renv/local/&lt;package&gt;_&lt;version&gt;.tar.gz&quot;)</code></li>
 </ul>
 <p>Note that packages placed in one of these local sources will override any default source recorded in the lockfile. For example, if <code>skeleton 1.0.0</code> was also available on CRAN, <code>renv::restore()</code> would still use the locally-provided tarball rather than the version available from CRAN.</p>
 <p>If you want to see what directory is being used by <code>renv</code> for local package sources, you can execute:</p>

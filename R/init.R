@@ -22,11 +22,6 @@
 #'
 #' 5. The project is activated with [activate()].
 #'
-#' This mimics the workflow provided by `packrat::init()`, but with a few
-#' differences -- in particular, `renv` does not attempt to download and store
-#' package sources, and `renv` will re-use packages that have already been
-#' installed whenever possible.
-#'
 #' If `renv` sees that the associated project has already been initialized and
 #' has a lockfile, then it will attempt to infer the appropriate action to take
 #' based on the presence of a private library. If no library is available,
@@ -112,7 +107,7 @@ init <- function(project = NULL,
   # determine appropriate action
   action <- renv_init_action(project, library, lockfile)
   if (empty(action) || identical(action, "cancel")) {
-    message("* Operation aborted.")
+    renv_report_user_cancel()
     return(invisible(FALSE))
   }
 
