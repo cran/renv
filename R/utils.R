@@ -84,12 +84,36 @@ trimws <- function(x) {
 
 bind_list <- function(data, names = NULL, index = "Index") {
 
+  # keep only non-empty data
   filtered <- Filter(NROW, data)
   if (!length(filtered))
     return(NULL)
 
-  rhs <- .mapply(c, filtered, list(use.names = FALSE))
-  names(rhs) <- names(filtered[[1]])
+  # ensure all datasets have the same column names
+  # try to preserve the ordering of names if possible
+  # (try to find one dataset which has all column relevant column names)
+  nms <- character()
+  for (i in seq_along(filtered)) {
+    nmsi <- names(filtered[[i]])
+    if (empty(setdiff(nms, nmsi)))
+      nms <- nmsi
+  }
+
+  # check now if we've caught all relevant names; if we didn't,
+  # just fall back to a "dumb" union
+  allnms <- unique(unlist(lapply(filtered, names)))
+  if (!setequal(nms, allnms))
+    nms <- allnms
+
+  # we've collected all names; now fill with NAs as necessary
+  filled <- map(filtered, function(datum) {
+    datum[setdiff(nms, names(datum))] <- NA
+    datum[nms]
+  })
+
+  # we've collected and ordered each data.frame, now merge them
+  rhs <- .mapply(c, filled, list(use.names = FALSE))
+  names(rhs) <- names(filled[[1]])
 
   if (is.null(names(data))) {
     names(rhs) <- names(rhs) %||% names
@@ -103,7 +127,7 @@ bind_list <- function(data, names = NULL, index = "Index") {
 
   lhs <- list()
   rows <- function(item) nrow(item) %||% length(item[[1]])
-  lhs[[index]] <- rep.int(names(filtered), times = map_dbl(filtered, rows))
+  lhs[[index]] <- rep.int(names(filled), times = map_dbl(filled, rows))
 
   cbind(
     as.data.frame(lhs, stringsAsFactors = FALSE),
@@ -136,22 +160,6 @@ case <- function(...) {
   }
 
   NULL
-
-}
-
-version_compare <- function(lhs, rhs) {
-
-  lhs <- unclass(numeric_version(lhs))[[1]]
-  rhs <- unclass(numeric_version(rhs))[[1]]
-
-  n <- max(length(lhs), length(rhs))
-  for (i in seq_len(n)) {
-    l <- lhs[i] %NA% 0; r <- rhs[i] %NA% 0
-    if (l < r) return(-1)
-    if (l > r) return(+1)
-  }
-
-  0
 
 }
 
@@ -354,27 +362,6 @@ drop <- function(x, keys) {
 
 invoke <- function(f, ...) {
   f(...)
-}
-
-delegate <- function(to) {
-
-  # forward all arguments by default
-  params <- names(formals(to))
-  syms <- map(params, as.name)
-  names(syms) <- params
-
-  # if the parent function provides '...', forward it
-  if ("..." %in% params) {
-    syms[["..."]] <- NULL
-    syms <- c(syms, as.name("..."))
-  }
-
-  # build call
-  call <- as.call(c(substitute(to), syms))
-
-  # evaluate it
-  eval(call, envir = parent.frame())
-
 }
 
 dequote <- function(strings) {

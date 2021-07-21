@@ -155,7 +155,8 @@ renv_available_packages_success <- function(db, url) {
 renv_available_packages_entry <- function(package,
                                           type   = "source",
                                           filter = NULL,
-                                          quiet  = FALSE)
+                                          quiet  = FALSE,
+                                          prefer = NULL)
 {
 
   # if filter is a string, treat it as an explicit version requirement
@@ -175,7 +176,17 @@ renv_available_packages_entry <- function(package,
     entries[ordered[[1]], ]
   }
 
+  # read available packages
   dbs <- renv_available_packages(type = type, quiet = quiet)
+
+  # if a preferred repository is marked and available, prefer using that
+  if (length(prefer) == 1L && prefer %in% names(dbs)) {
+    idx <- match(prefer, names(dbs))
+    ord <- c(idx, setdiff(seq_along(dbs), idx))
+    dbs <- dbs[ord]
+  }
+
+  # iterate through repositories, and find first matching
   for (i in seq_along(dbs)) {
 
     db <- dbs[[i]]
@@ -217,12 +228,11 @@ renv_available_packages_record <- function(entry, type) {
     return(entry)
 
   # otherwise, construct it
-  record <- list(
-    Package    = entry$Package,
-    Version    = entry$Version,
-    Source     = "Repository",
-    Repository = entry$Name
-  )
+  record <- entry
+
+  record$Source     <- "Repository"
+  record$Repository <- entry$Name
+  record$Name       <- NULL
 
   attr(record, "type") <- type
   attr(record, "url")  <- entry$Repository
@@ -417,7 +427,7 @@ renv_available_packages_latest_select <- function(src, bin) {
 
   # if the binary is at least as old as the source version,
   # then use the binary version
-  if (version_compare(bin$Version, src$Version) >= 0)
+  if (renv_version_compare(bin$Version, src$Version) >= 0)
     return(renv_available_packages_record(bin, "binary"))
 
   # if the user has requested we skip source repositories,

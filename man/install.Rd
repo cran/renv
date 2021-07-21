@@ -44,7 +44,7 @@ directory is used instead.}
 A named list of package records which were installed by \code{renv}.
 }
 \description{
-Install one or more \R packages from a variety of remote sources.
+Install one or more \R packages, from a variety of remote sources.
 }
 \details{
 \code{install()} uses the same machinery as \code{\link[=restore]{restore()}} when installing packages.
@@ -52,10 +52,37 @@ In particular, this means that the local cache of package installations is
 used when possible. This helps to avoid re-downloading packages that have
 already been downloaded before, and re-compiling packages from source when
 a binary copy of that package is already available.
-
-Note that this interface is subject to change -- the goal is to hook into
-separate package installation backends in the future.
 }
+\section{Project DESCRIPTION Files}{
+
+
+If your project contains a \code{DESCRIPTION} file, then calling \code{install()}
+without any arguments will instruct \code{renv} to install the latest versions of
+all packages as declared within that \code{DESCRIPTION} file's \code{Depends},
+\code{Imports} and \code{LinkingTo} fields; similar to how an \R package might declare
+its dependencies.
+
+If you have one or more packages that you'd like to install from a separate
+remote source, this can be accomplished by adding a \verb{Remotes:} field to the
+\code{DESCRIPTION} file. See \code{vignette("dependencies", package = "devtools")}
+for more details. Alternatively, view the vignette online at
+\url{https://devtools.r-lib.org/articles/dependencies.html}.
+
+Note that \code{install()} does not use the project's \code{renv.lock} when determining
+sources for packages to be installed. If you want to install packages using
+the sources declared in the lockfile, consider using \code{restore()} instead.
+Otherwise, you can declare the package sources in your \code{DESCRIPTION}'s
+\verb{Remotes:} field.
+}
+
+\section{Remotes Syntax}{
+
+
+\code{renv} supports a subset of the \code{remotes} syntax used for package installation,
+as described in \url{https://remotes.r-lib.org/articles/dependencies.html}. See
+the examples below for more details.
+}
+
 \section{Bioconductor}{
 
 
@@ -71,14 +98,6 @@ not available, \code{renv} will attempt to automatically install them before
 fulfilling the installation request.
 }
 
-\section{Remotes Syntax}{
-
-
-\code{renv} supports a subset of the \code{remotes} syntax used for package installation,
-as described in \url{https://remotes.r-lib.org/articles/dependencies.html}. See
-the examples below for more details.
-}
-
 \section{Package Configuration}{
 
 
@@ -89,6 +108,12 @@ In particular, the \R options \code{configure.args} and \code{configure.vars} ca
 used to map package names to their appropriate configuration. For example:\preformatted{# installation of RNetCDF may require us to set include paths for netcdf
 configure.args = c(RNetCDF = "--with-netcdf-include=/usr/include/udunits2"))
 options(configure.args = configure.args)
+renv::install("RNetCDF")
+}
+
+This could also be specified as, for example,\preformatted{options(
+  configure.args.RNetCDF = "--with-netcdf-include=/usr/include/udunits2"
+)
 renv::install("RNetCDF")
 }
 
@@ -121,6 +146,9 @@ renv::install("bioc::Biobase")
 
 # install a package, specifying path explicitly
 renv::install("~/path/to/package")
+
+# install packages as declared in the project DESCRIPTION file
+renv::install()
 
 }
 }

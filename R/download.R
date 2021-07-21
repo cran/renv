@@ -64,7 +64,7 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
   on.exit(callback(), add = TRUE)
 
   # form path to temporary file
-  tempfile <- renv_tempfile_path(tmpdir = dirname(destfile))
+  tempfile <- renv_scope_tempfile(tmpdir = dirname(destfile))
 
   # request the download
   before <- Sys.time()
@@ -235,7 +235,7 @@ renv_download_curl <- function(url, destfile, type, request, headers) {
 
   renv_download_trace_begin(url, "curl")
 
-  file <- renv_tempfile_path("renv-download-config-")
+  configfile <- renv_scope_tempfile("renv-download-config-")
 
   fields <- c(
     "user-agent" = renv_http_useragent(),
@@ -270,7 +270,7 @@ renv_download_curl <- function(url, destfile, type, request, headers) {
 
   # join together
   keys <- names(fields)
-  vals <- shQuote(fields, type = "cmd")
+  vals <- renv_json_quote(fields)
   text <- paste(keys, vals, sep = " = ")
 
   # add in stand-along flags
@@ -281,7 +281,7 @@ renv_download_curl <- function(url, destfile, type, request, headers) {
   # put it all together
   text <- c(flags, text)
 
-  writeLines(text, con = file)
+  writeLines(text, con = configfile)
   renv_download_trace_request(text)
 
   # generate the arguments to be passed to 'curl'
@@ -303,7 +303,7 @@ renv_download_curl <- function(url, destfile, type, request, headers) {
       args$push("--config", shQuote(entry))
 
   # add in our own config file (the actual request)
-  args$push("--config", shQuote(file))
+  args$push("--config", shQuote(configfile))
 
   # perform the download
   output <- suppressWarnings(
@@ -361,7 +361,7 @@ renv_download_wget <- function(url, destfile, type, request, headers) {
 
   renv_download_trace_begin(url, "wget")
 
-  config <- renv_tempfile_path("renv-download-config-")
+  configfile <- renv_scope_tempfile("renv-download-config-")
 
   fields <- c(
     "user-agent" = renv_http_useragent(),
@@ -385,7 +385,7 @@ renv_download_wget <- function(url, destfile, type, request, headers) {
   vals <- unlist(fields)
   text <- paste(keys, vals, sep = " = ")
 
-  writeLines(text, con = config)
+  writeLines(text, con = configfile)
   renv_download_trace_request(text)
 
   args <- stack()
@@ -394,7 +394,7 @@ renv_download_wget <- function(url, destfile, type, request, headers) {
   if (length(extra))
     args$push(extra)
 
-  args$push("--config", shQuote(config))
+  args$push("--config", shQuote(configfile))
 
   # NOTE: '-O' does not write headers to file; we need to manually redirect
   # in that case
@@ -515,7 +515,7 @@ renv_download_headers <- function(url, type, headers) {
     return(list())
 
   # perform the download
-  file <- renv_tempfile_path("renv-headers-")
+  file <- renv_scope_tempfile("renv-headers-")
 
   status <- renv_download_impl(
     url      = url,
@@ -793,7 +793,7 @@ renv_download_available_headers <- function(url) {
 
 renv_download_available_range <- function(url) {
 
-  destfile <- renv_tempfile_path("renv-download-")
+  destfile <- renv_scope_tempfile("renv-download-")
 
   # instruct curl to request only first byte
   extra <- c(getOption("download.file.extra"), "-r 0-0")
@@ -820,7 +820,7 @@ renv_download_available_range <- function(url) {
 
 renv_download_available_fallback <- function(url) {
 
-  destfile <- renv_tempfile_path("renv-download-")
+  destfile <- renv_scope_tempfile("renv-download-")
 
   # just try downloading the requested URL
   status <- catchall(

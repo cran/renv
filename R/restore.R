@@ -33,6 +33,12 @@
 #'   restored. Any required recursive dependencies of the requested packages
 #'   will be restored as well.
 #'
+#' @param exclude A subset of packages to be excluded during restore. This can
+#'  be useful for when you'd like to restore all but a subset of packages from
+#'  a lockfile. Note that if you attempt to exclude a package which is required
+#'  as the recursive dependency of another package, your request will be
+#'  ignored.
+#'
 #' @param repos The repositories to use during restore, for packages installed
 #'   from CRAN or another similar R package repository. When set, this will
 #'   override any repositories declared in the lockfile. See also the
@@ -60,6 +66,7 @@ restore <- function(project  = NULL,
                     library  = NULL,
                     lockfile = NULL,
                     packages = NULL,
+                    exclude  = NULL,
                     rebuild  = FALSE,
                     repos    = NULL,
                     clean    = FALSE,
@@ -72,6 +79,8 @@ restore <- function(project  = NULL,
   project  <- renv_project_resolve(project)
   renv_scope_lock(project = project)
 
+  renv_activate_prompt("restore", library, prompt, project)
+
   # resolve library, lockfile arguments
   libpaths <- renv_libpaths_resolve(library)
   lockfile <- lockfile %||% renv_lockfile_load(project = project)
@@ -81,9 +90,6 @@ restore <- function(project  = NULL,
   library <- nth(libpaths, 1L)
   ensure_directory(library)
   renv_scope_libpaths(libpaths)
-
-  # perform Python actions on exit
-  on.exit(renv_python_restore(project), add = TRUE)
 
   # resolve the lockfile
   if (is.character(lockfile))
@@ -125,20 +131,20 @@ restore <- function(project  = NULL,
     find.package(package, lib.loc = libpaths, quiet = TRUE) %||% ""
   })
 
-  exclude <- diff == "remove" & dirname(difflocs) != library
-  diff <- diff[!exclude]
+  diff <- diff[!(diff == "remove" & dirname(difflocs) != library)]
 
   # don't take any actions with ignored packages
   ignored <- renv_project_ignored_packages(project = project)
   diff <- diff[renv_vector_diff(names(diff), ignored)]
 
   # only take action with requested packages
-  diff <- diff[intersect(names(diff), packages %||% names(diff))]
+  packages <- setdiff(packages %||% names(diff), exclude)
+  diff <- diff[intersect(names(diff), packages)]
 
   if (!length(diff)) {
     name <- if (!missing(library)) "library" else "project"
     vwritef("* The %s is already synchronized with the lockfile.", name)
-    return(invisible(diff))
+    return(renv_restore_successful(diff, prompt, project))
   }
 
   if (!renv_restore_preflight(project, libpaths, diff, current, lockfile, prompt)) {
@@ -156,7 +162,7 @@ restore <- function(project  = NULL,
 
   # perform the restore
   records <- renv_restore_run_actions(project, diff, current, lockfile, rebuild)
-  invisible(records)
+  renv_restore_successful(records, prompt, project)
 }
 
 renv_restore_run_actions <- function(project, actions, current, lockfile, rebuild) {
@@ -182,8 +188,8 @@ renv_restore_run_actions <- function(project, actions, current, lockfile, rebuil
   packages <- names(installs)
 
   # perform the install
-  records <- renv_retrieve(packages)
-  status <- renv_install(records)
+  records <- retrieve(packages)
+  status <- renv_install_impl(records)
 
   # detect dependency tree repair
   diff <- renv_lockfile_diff_packages(renv_records(lockfile), records)
@@ -360,4 +366,9 @@ renv_restore_find_impl <- function(record, library) {
 renv_restore_rebuild_required <- function(record) {
   state <- renv_restore_state()
   any(c(NA_character_, record$Package) %in% state$rebuild)
+}
+
+renv_restore_successful <- function(records, prompt, project) {
+  renv_python_restore(project, prompt)
+  invisible(records)
 }

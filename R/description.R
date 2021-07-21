@@ -3,16 +3,27 @@ renv_description_read <- function(path = NULL, package = NULL, subdir = NULL, ..
 
   # if given a package name, construct path to that package
   path <- path %||% find.package(package)
-  stopifnot(renv_path_absolute(path))
+  if (!file.exists(path)) {
+    fmt <- "%s does not exist"
+    stopf(fmt, renv_path_pretty(path))
+  }
+
+  # validate that the path is absolute
+  if (!renv_path_absolute(path)) {
+    fmt <- "internal error: path %s is not absolute"
+    stopf(fmt, renv_path_pretty(path))
+  }
 
   # accept package directories
   path <- renv_description_path(path)
 
   # read value with filebacked cache
   renv_filebacked(
-    "DESCRIPTION", path,
-    renv_description_read_impl,
-    subdir = subdir, ...
+    scope    = "DESCRIPTION",
+    path     = path,
+    callback = renv_description_read_impl,
+    subdir   = subdir,
+    ...
   )
 
 }
@@ -50,7 +61,7 @@ renv_description_read_impl <- function(path = NULL, subdir = NULL, ...) {
     # choose the shortest DESCRPITION file matching
     # unpack into tempdir location
     file <- descs[[1]]
-    exdir <- renv_tempfile_path("renv-description-")
+    exdir <- renv_scope_tempfile("renv-description-")
     renv_archive_decompress(path, files = file, exdir = exdir)
 
     # update path to extracted DESCRIPTION
@@ -171,4 +182,24 @@ renv_description_remotes_parse <- function(entry) {
 
   status
 
+}
+
+renv_description_resolve <- function(path) {
+
+  case(
+    is.list(path)      ~ path,
+    is.character(path) ~ renv_description_read(path = path)
+  )
+
+}
+
+renv_description_built_version <- function(desc = NULL) {
+
+  desc <- renv_description_resolve(desc)
+
+  built <- desc[["Built"]]
+  if (is.null(built))
+    return(NA)
+
+  substring(built, 3L, regexpr(";", built, fixed = TRUE) - 1L)
 }

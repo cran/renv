@@ -93,9 +93,19 @@ renv_scope_envvars <- function(..., .list = NULL, .envir = NULL) {
 }
 
 renv_scope_sink <- function(file = nullfile(), ..., .envir = NULL) {
+
   .envir <- .envir %||% parent.frame()
-  sink(file = file, ...)
-  defer(sink(NULL), envir = parent.frame())
+
+  # redirect stdout to file, and redirect stderr back to stdout
+  # this ensures that both stdout, stderr are redirected to the same place
+  sink(file = file,     type = "output")
+  sink(file = stdout(), type = "message")
+
+  defer({
+    sink(type = "output")
+    sink(type = "message")
+  }, envir = .envir)
+
 }
 
 renv_scope_error_handler <- function(.envir = NULL) {
@@ -339,4 +349,32 @@ renv_scope_trace <- function(what, tracer, ..., .envir = NULL) {
 
   defer(untrace(substitute(what)), envir = .envir)
 
+}
+
+renv_scope_var <- function(key, value, envir, ..., .envir = NULL) {
+
+  .envir <- .envir %||% parent.frame()
+
+  if (exists(key, envir = envir, inherits = FALSE)) {
+    saved <- get(key, envir = envir, inherits = FALSE)
+    assign(key, value, envir = envir, inherits = FALSE)
+    defer(assign(key, saved, envir = envir, inherits = FALSE), envir = .envir)
+  } else {
+    assign(key, value, envir = envir, inherits = FALSE)
+    defer(rm(list = key, envir = envir, inherits = FALSE), envir = .envir)
+  }
+
+}
+
+renv_scope_tempfile <- function(pattern = "renv-tempfile-",
+                                tmpdir  = tempdir(),
+                                fileext = ".log",
+                                .envir  = NULL)
+{
+  filepath <- tempfile(pattern, tmpdir, fileext)
+
+  .envir <- .envir %||% parent.frame()
+  defer(unlink(filepath, recursive = TRUE, force = TRUE), envir = .envir)
+
+  invisible(filepath)
 }

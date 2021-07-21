@@ -15,7 +15,7 @@ remote <- function(spec) {
 renv_remotes_resolve <- function(entry, latest = FALSE) {
 
   # check for already-resolved lists
-  if (is.list(entry))
+  if (is.null(entry) || is.list(entry))
     return(entry)
 
   # check for URLs
@@ -71,6 +71,7 @@ renv_remotes_resolve_impl <- function(entry, latest = FALSE) {
     gitlab     = renv_remotes_resolve_gitlab(parsed),
     github     = renv_remotes_resolve_github(parsed),
     repository = renv_remotes_resolve_repository(parsed, latest),
+    git        = renv_remotes_resolve_git(parsed),
     stopf("unknown remote type '%s'", parsed$type %||% "<NA>")
   )
 
@@ -78,9 +79,9 @@ renv_remotes_resolve_impl <- function(entry, latest = FALSE) {
 
 }
 
-renv_remotes_parse_impl <- function(entry, pattern, fields) {
+renv_remotes_parse_impl <- function(entry, pattern, fields, perl = FALSE) {
 
-  matches <- regexec(pattern, entry)
+  matches <- regexec(pattern, entry, perl = perl)
   strings <- regmatches(entry, matches)[[1]]
   if (empty(strings))
     stopf("'%s' is not a valid remote", entry)
@@ -132,8 +133,54 @@ renv_remotes_parse_remote <- function(entry) {
 
 }
 
-renv_remotes_parse_finalize <- function(parsed) {
+renv_remotes_parse_git <- function(entry) {
+  pattern <- paste0(
+    "^",
+    "(?:([^@:]+)::)?",  # optional prefix, providing type
+    "(", # URL start
+      "(?:(https?|git|ssh)://)?",   # protocol
+      "(?:([^@]+)@)?",    # login (probably git)
+      # stack overflow: https://stackoverflow.com/a/26987741/9238801
+      "(",  # host start
+        "(?:(?:(?!-))(?:xn--|_{1,1})?[a-z0-9-]{0,61}[a-z0-9]{1,1}\\.)*",
+        "(?:xn--)?",
+        "(?:[a-z0-9][a-z0-9\\-]{0,60}|[a-z0-9-]{1,30}\\.[a-z]{2,})",
+      ")",  # host end
+      "[/:]([-\\.a-zA-Z]+)",             # a username
+      "(?:/([^@#:]+?))?",                # a repository (allow sub-repositories)
+      "(?:\\.(git))?",                     # optional .git extension
+    ")", # URL end
+    "(?::([^@#:]+))?",                 # optional subdirectory
+    "(?:#([^@#:]+))?",                 # optional hash (e.g. pull request)
+    "(?:@([^@#:]+))?",                 # optional ref (e.g. branch or commit)
+    "$"
+  )
 
+  fields <- c(
+    "entry",
+      "type",
+      "url",
+        "protocol", "login", "host",
+        "user", "repo", "ext",
+      "subdir",
+      "pull",
+      "ref"
+    )
+  parsed <- renv_remotes_parse_impl(entry, pattern, fields, perl = TRUE)
+
+  if (!nzchar(parsed$repo))
+    stopf("'%s' is not a valid remote", entry)
+
+  # If type has not been found & repo looks like a git repo, set it as git
+  # (note that this parser also accepts entries which are not truly git
+  # references, so we try to "fix up" after the fact)
+  if ("git" %in% c(parsed$type, parsed$ext, parsed$protocol))
+    parsed$type <- tolower(parsed$type %||% "git")
+
+  renv_remotes_parse_finalize(parsed)
+}
+
+renv_remotes_parse_finalize <- function(parsed) {
   # default remote type is github
   parsed$type <- tolower(parsed$type %||% "github")
 
@@ -154,8 +201,8 @@ renv_remotes_parse_finalize_github <- function(parsed) {
     return(parsed)
 
   # form subdir from tail of repo
-  parsed$repo <- paste(head(parts, n = -1L), collapse = "/")
-  parsed$subdir <- tail(parts, n = 1L)
+  parsed$repo   <- paste(head(parts, n = 1L),  collapse = "/")
+  parsed$subdir <- paste(tail(parts, n = -1L), collapse = "/")
 
   # return modified remote
   parsed
@@ -173,6 +220,12 @@ renv_remotes_parse <- function(entry) {
   parsed <- catch(renv_remotes_parse_remote(entry))
   if (!inherits(parsed, "error")) {
     parsed$type <- parsed$type %||% "github"
+    return(parsed)
+  }
+
+  parsed <- catch(renv_remotes_parse_git(entry))
+  if (!inherits(parsed, "error")) {
+    parsed$type <- parsed$type %||% "git"
     return(parsed)
   }
 
@@ -194,7 +247,7 @@ renv_remotes_resolve_bitbucket <- function(entry) {
   origin <- renv_retrieve_origin(host)
   url <- sprintf(fmt, origin, user, repo, ref)
 
-  destfile <- renv_tempfile_path("renv-bitbucket-")
+  destfile <- renv_scope_tempfile("renv-bitbucket-")
   download(url, destfile = destfile, type = "bitbucket", quiet = TRUE)
   json <- renv_json_read(file = destfile)
   sha <- json$hash
@@ -204,7 +257,7 @@ renv_remotes_resolve_bitbucket <- function(entry) {
   origin <- renv_retrieve_origin(host)
   url <- sprintf(fmt, origin, user, repo, ref)
 
-  destfile <- renv_tempfile_path("renv-description-")
+  destfile <- renv_scope_tempfile("renv-description-")
   download(url, destfile = destfile, type = "bitbucket", quiet = TRUE)
   desc <- renv_dcf_read(destfile)
 
@@ -261,7 +314,7 @@ renv_remotes_resolve_github_sha_pull <- function(host, user, repo, pull) {
   fmt <- "%s/repos/%s/%s/pulls/%s"
   origin <- renv_retrieve_origin(host)
   url <- sprintf(fmt, origin, user, repo, pull)
-  jsonfile <- renv_tempfile_path("renv-json-")
+  jsonfile <- renv_scope_tempfile("renv-json-")
   download(url, destfile = jsonfile, type = "github", quiet = TRUE)
   json <- renv_json_read(jsonfile)
   json$head$sha
@@ -279,7 +332,7 @@ renv_remotes_resolve_github_sha_ref <- function(host, user, repo, ref) {
   headers <- c(Accept = "application/vnd.github.v2.sha")
 
   # make request to endpoint
-  shafile <- renv_tempfile_path("renv-sha-")
+  shafile <- renv_scope_tempfile("renv-sha-")
   download(
     url,
     destfile = shafile,
@@ -316,7 +369,7 @@ renv_remotes_resolve_github_description <- function(host, user, repo, subdir, sh
   fmt <- "%s/repos/%s/%s/contents/%s?ref=%s"
   origin <- renv_retrieve_origin(host)
   url <- sprintf(fmt, origin, user, repo, descpath, sha)
-  jsonfile <- renv_tempfile_path("renv-json-")
+  jsonfile <- renv_scope_tempfile("renv-json-")
   download(url, destfile = jsonfile, type = "github", quiet = TRUE)
   json <- renv_json_read(jsonfile)
   contents <- renv_base64_decode(json$content)
@@ -325,7 +378,7 @@ renv_remotes_resolve_github_description <- function(host, user, repo, subdir, sh
   contents <- gsub("\r\n", "\n", contents, fixed = TRUE)
 
   # write to file and read back in
-  descfile <- renv_tempfile_path("renv-description-")
+  descfile <- renv_scope_tempfile("renv-description-")
   writeLines(contents, con = descfile)
   renv_dcf_read(descfile)
 
@@ -337,7 +390,7 @@ renv_remotes_resolve_github_ref <- function(host, user, repo) {
     renv_remotes_resolve_github_ref_impl(host, user, repo),
     error = function(e) {
       warning(e)
-      "master"
+      getOption("renv.github.default_branch", default = "master")
     }
   )
 
@@ -351,7 +404,7 @@ renv_remotes_resolve_github_ref_impl <- function(host, user, repo) {
   url <- sprintf(fmt, origin, user, repo)
 
   # download JSON data at endpoint
-  jsonfile <- renv_tempfile_path("renv-github-ref-", fileext = ".json")
+  jsonfile <- renv_scope_tempfile("renv-github-ref-", fileext = ".json")
   download(url, destfile = jsonfile, type = "github", quiet = TRUE)
   json <- renv_json_read(jsonfile)
 
@@ -394,17 +447,147 @@ renv_remotes_resolve_github <- function(entry) {
 
 }
 
+renv_remotes_resolve_git <- function(parsed) {
+
+  package <- parsed$repo
+  url <- parsed$url
+  subdir <- parsed$subdir
+
+  # handle git ref
+  pull <- parsed$pull %||% ""
+  ref  <- parsed$ref %||% ""
+
+  # resolve ref from pull if set
+  if (nzchar(pull))
+    ref <- renv_remotes_resolve_git_pull(ref)
+
+  record <- list(
+    Package        = package,
+    Version        = "<unknown>",
+    Source         = "git",
+    RemoteType     = "git",
+    RemoteUrl      = url,
+    RemoteSubdir   = subdir,
+    RemoteRef      = ref
+  )
+
+  desc <- renv_remotes_resolve_git_description(record)
+
+  record$Package <- desc$Package
+  record$Version <- desc$Version
+
+  record
+}
+
+
+renv_remotes_resolve_git_sha_ref <- function(record) {
+
+  renv_git_preflight()
+
+  data <- list(
+    ORIGIN = record$RemoteUrl,
+    REF    = record$RemoteRef %||% record$RemoteSha
+  )
+
+  args <- c("ls-remote", data$ORIGIN, data$REF)
+
+  # output looks like:
+  # SHA1 (tab) refs/path/to/ref_name
+
+  output <- local({
+    renv_scope_auth(record)
+    renv_scope_git_auth()
+    renv_system_exec("git", args, "checking git remote")
+  })
+
+  if (empty(output))
+    return("")
+
+  # split each line
+  # gets a list of character vectors,
+  # list(
+  #   c("sha1", "refname1"),
+  #   c("sha2", "refname2)
+  #  )
+  # get first sha of first line
+  sha <- strsplit(output, "\t", fixed = TRUE)[[1]][1]
+  return(sha)
+}
+
+
+renv_remotes_resolve_git_description <- function(record) {
+  path <- tempfile("renv-git-")
+  ensure_directory(path)
+
+  renv_retrieve_git_impl(record, path)
+
+  subdir <- record$RemoteSubdir
+  # subdir may be NULL
+  desc <- renv_description_read(path, subdir = subdir)
+
+  desc
+}
+
+renv_remotes_resolve_git_pull <- function(pr) {
+  # to be able to checkout PR 760:
+  # git fetch origin pull/760/head:pr-760
+  # or:
+  # git fetch origin pull/760/head:pull/760
+
+  # so format for ref is:
+  # pull/{ref_number}/head:pr-{ref_number}
+  fmt <- "pull/%s/head:pull/%s"
+
+  remote_ref <- sprintf(fmt, pr, pr)
+  remote_ref
+}
+
+renv_remotes_resolve_gitlab_ref <- function(host, user, repo) {
+
+  tryCatch(
+    renv_remotes_resolve_gitlab_ref_impl(host, user, repo),
+    error = function(e) {
+      warning(e)
+      "master"
+    }
+  )
+
+}
+
+renv_remotes_resolve_gitlab_ref_impl <- function(host, user, repo) {
+
+  # get list of available branches
+  fmt <- "%s/api/v4/projects/%s/repository/branches"
+  origin <- renv_retrieve_origin(host)
+  id <- URLencode(paste(user, repo, sep = "/"), reserved = TRUE)
+  url <- sprintf(fmt, origin, id)
+
+  destfile <- renv_scope_tempfile("renv-gitlab-commits-")
+  download(url, destfile = destfile, type = "gitlab", quiet = TRUE)
+  json <- renv_json_read(file = destfile)
+
+  # iterate through and find the default
+  for (info in json)
+    if (identical(info$default, TRUE))
+      return(info$name)
+
+  # if no default was found, use master branch
+  # (for backwards compatibility with existing projects)
+  getOption("renv.gitlab.default_branch", default = "master")
+
+}
+
 renv_remotes_resolve_gitlab <- function(entry) {
 
+  host   <- entry$host %||% config$gitlab.host()
   user   <- entry$user
   repo   <- entry$repo
   subdir <- entry$subdir %||% ""
-  ref    <- entry$ref %||% "master"
+
+  ref <- entry$ref %||% renv_remotes_resolve_gitlab_ref(host, user, repo)
 
   parts <- c(if (nzchar(subdir)) subdir, "DESCRIPTION")
   descpath <- URLencode(paste(parts, collapse = "/"), reserved = TRUE)
-
-  host <- entry$host %||% config$gitlab.host()
 
   # retrieve sha associated with this ref
   fmt <- "%s/api/v4/projects/%s/repository/commits/%s"
@@ -413,7 +596,7 @@ renv_remotes_resolve_gitlab <- function(entry) {
   ref <- URLencode(ref, reserved = TRUE)
   url <- sprintf(fmt, origin, id, ref)
 
-  destfile <- renv_tempfile_path("renv-gitlab-commits-")
+  destfile <- renv_scope_tempfile("renv-gitlab-commits-")
   download(url, destfile = destfile, type = "gitlab", quiet = TRUE)
   json <- renv_json_read(file = destfile)
   sha <- json$id
@@ -424,7 +607,7 @@ renv_remotes_resolve_gitlab <- function(entry) {
   id <- URLencode(paste(user, repo, sep = "/"), reserved = TRUE)
   url <- sprintf(fmt, origin, id, descpath, ref)
 
-  destfile <- renv_tempfile_path("renv-description-")
+  destfile <- renv_scope_tempfile("renv-description-")
   download(url, destfile = destfile, type = "gitlab", quiet = TRUE)
   desc <- renv_dcf_read(destfile)
 
@@ -445,7 +628,7 @@ renv_remotes_resolve_gitlab <- function(entry) {
 
 renv_remotes_resolve_url <- function(entry, quiet = FALSE) {
 
-  tempfile <- renv_tempfile_path("renv-url-")
+  tempfile <- renv_scope_tempfile("renv-url-")
   writeLines(entry, con = tempfile)
   hash <- tools::md5sum(tempfile)
 

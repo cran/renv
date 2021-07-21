@@ -91,7 +91,7 @@ renv_cache_path <- function(path) {
   renv_cache_find(record)
 }
 
-renv_cache_path_components <- function(path, name) {
+renv_cache_path_components <- function(path) {
 
   data.frame(
     Package = renv_path_component(path, 1L),
@@ -129,7 +129,7 @@ renv_cache_synchronize <- function(record, linkable = FALSE) {
 
   copied <- FALSE
   for (cachePath in cache) {
-    copied <- renv_cache_synchronize_inner(cachePath, record, linkable, path)
+    copied <- renv_cache_synchronize_impl(cachePath, record, linkable, path)
     if (copied)
       return(TRUE)
   }
@@ -137,8 +137,9 @@ renv_cache_synchronize <- function(record, linkable = FALSE) {
 
 }
 
-renv_cache_synchronize_inner <- function(cache, record, linkable, path) {
+renv_cache_synchronize_impl <- function(cache, record, linkable, path) {
 
+  # double-check we have a valid cache path
   if (!nzchar(cache))
     return(FALSE)
 
@@ -168,26 +169,26 @@ renv_cache_synchronize_inner <- function(cache, record, linkable, path) {
   callback <- renv_file_backup(cache)
   on.exit(callback(), add = TRUE)
 
-  # copy into cache and link back into requested directory
+  # get ready to copy / move into cache
+  fmt <- "%s %s [%s] into the cache ..."
+  vwritef(fmt, if (linkable) "Moving" else "Copying", record$Package, record$Version)
+
+  before <- Sys.time()
+
   if (linkable) {
     renv_file_move(path, cache)
     renv_file_link(cache, path, overwrite = TRUE)
-    return(TRUE)
+  } else {
+    renv_file_copy(path, cache)
   }
 
-  # otherwise, copy into the cache (notifying as appropriate)
-  fmt <- "Copying %s [%s] into the cache ..."
-  vwritef(fmt, record$Package, record$Version)
-
-  before <- Sys.time()
-  renv_file_copy(path, cache)
   after <- Sys.time()
 
-  files <- list.files(cache, recursive = TRUE)
   time <- difftime(after, before, units = "auto")
 
-  fmt <- "\tOK [copied %s files in %s]"
-  vwritef(fmt, length(files), renv_difftime_format(time))
+  # report status to user
+  fmt <- "\tOK [%s to cache in %s]"
+  vwritef(fmt, if (linkable) "moved" else "copied", renv_difftime_format(time))
 
   TRUE
 
@@ -214,6 +215,18 @@ renv_cache_list <- function(cache = NULL, packages = NULL) {
 
 }
 
+renv_cache_problems <- function(paths, reason) {
+
+  data.frame(
+    Package = renv_path_component(paths, 1L),
+    Version = renv_path_component(paths, 3L),
+    Path    = paths,
+    Reason  = reason,
+    stringsAsFactors = FALSE
+  )
+
+}
+
 renv_cache_diagnose_corrupt_metadata <- function(paths, problems, verbose) {
 
   # check for missing metadata files
@@ -228,18 +241,15 @@ renv_cache_diagnose_corrupt_metadata <- function(paths, problems, verbose) {
       renv_pretty_print(
         renv_cache_format_path(bad),
         "The following package(s) are missing 'Meta/package.rds':",
-        "These packages should be purged and re-installed.",
+        "These packages should be purged and reinstalled.",
         wrap = FALSE
       )
     }
     # nocov end
 
-    data <- data.frame(
-      Package = renv_path_component(bad, 1L),
-      Version = renv_path_component(bad, 3L),
-      Path    = bad,
-      Reason  = "'Meta/package.rds' does not exist",
-      stringsAsFactors = FALSE
+    data <- renv_cache_problems(
+      paths  = bad,
+      reason = "'Meta/package.rds' does not exist"
     )
 
     problems$push(data)
@@ -261,18 +271,15 @@ renv_cache_diagnose_corrupt_metadata <- function(paths, problems, verbose) {
       renv_pretty_print(
         renv_cache_format_path(bad),
         "The following package(s) have corrupt 'Meta/package.rds' files:",
-        "These packages should be purged and re-installed.",
+        "These packages should be purged and reinstalled.",
         wrap = FALSE
       )
     }
     # nocov end
 
-    data <- data.frame(
-      Package = renv_path_component(bad, 1L),
-      Version = renv_path_component(bad, 3L),
-      Path    = bad,
-      Reason  = "'Meta/package.rds' is corrupt and cannot be read",
-      stringsAsFactors = FALSE
+    data <- renv_cache_problems(
+      paths  = bad,
+      reason = "'Meta/package.rds' does not exist"
     )
 
     problems$push(data)
@@ -294,24 +301,17 @@ renv_cache_diagnose_missing_descriptions <- function(paths, problems, verbose) {
   # nocov start
   if (verbose) {
     renv_pretty_print(
-      renv_cache_format_path(dirname(bad)),
+      renv_cache_format_path(bad),
       "The following packages are missing DESCRIPTION files in the cache:",
-      "These packages should be purged and re-installed.",
+      "These packages should be purged and reinstalled.",
       wrap = FALSE
     )
   }
   # nocov end
 
-  path    <- dirname(bad)
-  package <- renv_path_component(bad, 1L)
-  version <- renv_path_component(bad, 3L)
-
-  data <- data.frame(
-    Package = package,
-    Version = version,
-    Path    = path,
-    Reason  = "'DESCRIPTION' does not exist",
-    stringsAsFactors = FALSE
+  data <- renv_cache_problems(
+    paths  = bad,
+    reason = "'DESCRIPTION' file does not exist"
   )
 
   problems$push(data)
@@ -344,12 +344,93 @@ renv_cache_diagnose_bad_hash <- function(paths, problems, verbose) {
   }
   # nocov end
 
-  data <- data.frame(
-    Package = renv_path_component(paths[wrong], 1L),
-    Version = renv_path_component(paths[wrong], 3L),
-    Path    = paths[wrong],
-    Reason  = "unexpected hash",
-    stringsAsFactors = FALSE
+  data <- renv_cache_problems(
+    paths  = paths[wrong],
+    reason = "unexpected hash"
+  )
+
+  problems$push(data)
+  paths
+
+}
+
+renv_cache_diagnose_wrong_built_version <- function(paths, problems, verbose) {
+
+  # form paths to DESCRIPTION files
+  descpaths <- file.path(paths, "DESCRIPTION")
+
+  # parse the version of R each was built for
+  versions <- map_chr(descpaths, function(descpath) {
+
+    tryCatch(
+      renv_description_built_version(descpath),
+      error = function(e) {
+        warning(e)
+        NA
+      }
+    )
+
+  })
+
+  # check for NAs, report and remove them
+  isna <- is.na(versions)
+  if (any(isna)) {
+
+    # nocov start
+    if (verbose) {
+
+      renv_pretty_print(
+        paths[isna],
+        "The following packages have no 'Built' field recorded in their DESCRIPTION file:",
+        "renv is unable to validate the version of R this package was built for.",
+        wrap = FALSE
+      )
+
+    }
+    # nocov end
+
+    data <- renv_cache_problems(
+      paths = paths[isna],
+      reason = "missing Built field"
+    )
+
+    problems$push(data)
+
+    paths    <- paths[!isna]
+    versions <- versions[!isna]
+
+  }
+
+  # check for incompatible versions
+  wrong <- map_lgl(versions, function(version) {
+    tryCatch(
+      renv_version_compare(version, getRversion(), 2L) != 0,
+      error = function(e) {
+        warning(e)
+        TRUE
+      }
+    )
+  })
+
+  if (!any(wrong))
+    return(paths)
+
+  # nocov start
+  if (verbose) {
+
+    renv_pretty_print(
+      renv_cache_format_path(paths[wrong]),
+      "The following packages in the cache were built for a different version of R:",
+      "These packages will need to be purged and reinstalled.",
+      wrap = FALSE
+    )
+
+  }
+  # nocov end
+
+  data <- renv_cache_problems(
+    paths = paths[wrong],
+    reason = "built for different version of R"
   )
 
   problems$push(data)
@@ -366,6 +447,7 @@ renv_cache_diagnose <- function(verbose = NULL) {
   paths <- renv_cache_diagnose_corrupt_metadata(paths, problems, verbose)
   paths <- renv_cache_diagnose_missing_descriptions(paths, problems, verbose)
   paths <- renv_cache_diagnose_bad_hash(paths, problems, verbose)
+  paths <- renv_cache_diagnose_wrong_built_version(paths, problems, verbose)
 
   invisible(bind_list(problems$data()))
 
@@ -379,10 +461,12 @@ renv_cache_move <- function(source, target, overwrite = FALSE) {
 # nocov start
 renv_cache_format_path <- function(paths) {
 
+  # extract path components
   names    <- format(renv_path_component(paths, 1L))
   hashes   <- format(renv_path_component(paths, 2L))
   versions <- format(renv_path_component(paths, 3L))
 
+  # format and write
   fmt <- "%s %s [Hash: %s]"
   sprintf(fmt, names, versions, hashes)
 

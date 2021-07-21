@@ -38,7 +38,7 @@ renv_file_copy <- function(source, target, overwrite = FALSE) {
 renv_file_copy_file <- function(source, target) {
 
   # copy to temporary path
-  tmpfile <- renv_tempfile_path(".renv-copy-", tmpdir = dirname(target))
+  tmpfile <- renv_scope_tempfile(".renv-copy-", tmpdir = dirname(target))
   status <- catchall(file.copy(source, tmpfile))
   if (inherits(status, "condition"))
     stop(status)
@@ -92,7 +92,7 @@ renv_file_copy_dir_cp <- function(source, target) {
 renv_file_copy_dir_r <- function(source, target) {
 
   # create sub-directory to host copy attempt
-  tempdir <- renv_tempfile_path(".renv-copy-", tmpdir = dirname(target))
+  tempdir <- renv_scope_tempfile(".renv-copy-", tmpdir = dirname(target))
   ensure_directory(tempdir)
 
   # attempt to copy to generated folder
@@ -152,7 +152,7 @@ renv_file_copy_dir <- function(source, target) {
   # create temporary sub-directory
   tmpdir <- dirname(target)
   ensure_directory(tmpdir)
-  tempdir <- renv_tempfile_path(".renv-copy-", tmpdir = tmpdir)
+  tempdir <- renv_scope_tempfile(".renv-copy-", tmpdir = tmpdir)
 
   # copy to that directory
   status <- catchall(renv_file_copy_dir_impl(source, tempdir))
@@ -490,4 +490,19 @@ renv_file_find <- function(path, predicate, limit = 8L) {
 renv_file_read <- function(path) {
   contents <- readLines(path, warn = FALSE, encoding = "UTF-8")
   paste(contents, collapse = "\n")
+}
+
+renv_file_shebang <- function(path) {
+  con <- file(path, open = "rb")
+  on.exit(close(con), add = TRUE)
+
+  signature <- charToRaw("#!")
+  first_two_bytes <- readBin(con, what = "raw", n = length(signature))
+  looks_like_script <- identical(first_two_bytes, signature)
+
+  # skip binary files with potentially very long first "lines"
+  if (looks_like_script)
+    readLines(con, n = 1L, warn = FALSE)
+  else
+    ""
 }

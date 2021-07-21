@@ -14,7 +14,7 @@
 #'   During package installation, \R will create package locks in the
 #'   library path, typically named `00LOCK-<package>`. On occasion, if package
 #'   installation fails or \R is terminated while installing a package, these
-#'   locks can be left behind and will inhibit future attempts to re-install
+#'   locks can be left behind and will inhibit future attempts to reinstall
 #'   that package. Use this action to remove such left-over package locks.
 #'
 #' }
@@ -34,8 +34,8 @@
 #'   by `.Library`). Use this action to remove any user-installed packages
 #'   that have been installed to the system library.
 #'
-#'   Because this action is destructive, it is by default only run in
-#'   interactive sessions when prompting is enabled.
+#'   Because this action is destructive, it is by default never run -- it
+#'   must be explicitly requested by the user.
 #'
 #' }
 #'
@@ -78,6 +78,8 @@ clean <- function(project = NULL,
   project <- renv_project_resolve(project)
   renv_scope_lock(project = project)
 
+  renv_activate_prompt("clean", NULL, prompt, project)
+
   renv_dependencies_scope(project, action = "clean")
 
   actions <- actions %||% renv_clean_actions(prompt)
@@ -105,7 +107,7 @@ renv_clean_actions <- function(prompt) {
   )
 
   unsafe <- c(
-    "system.library",
+    # "system.library",
     "unused.packages"
   )
 
@@ -186,7 +188,7 @@ renv_clean_system_library <- function(project, prompt) {
       c(
         "Normally, only packages distributed with R should be installed in the system library.",
         "These packages will be removed.",
-        "If necessary, consider re-installing these packages in your site library."
+        "If necessary, consider reinstalling these packages in your site library."
       )
     )
 

@@ -40,7 +40,7 @@ The following clean actions are available:
 During package installation, \R will create package locks in the
 library path, typically named \verb{00LOCK-<package>}. On occasion, if package
 installation fails or \R is terminated while installing a package, these
-locks can be left behind and will inhibit future attempts to re-install
+locks can be left behind and will inhibit future attempts to reinstall
 that package. Use this action to remove such left-over package locks.
 
 }
@@ -60,8 +60,8 @@ are installed into the system library (the library path referred to
 by \code{.Library}). Use this action to remove any user-installed packages
 that have been installed to the system library.
 
-Because this action is destructive, it is by default only run in
-interactive sessions when prompting is enabled.
+Because this action is destructive, it is by default never run -- it
+must be explicitly requested by the user.
 
 }
 

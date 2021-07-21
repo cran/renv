@@ -3,7 +3,7 @@ context("Restore")
 
 test_that("library permissions are validated before restore", {
   skip_on_os("windows")
-  inaccessible <- renv_tempfile_path()
+  inaccessible <- renv_scope_tempfile()
   dir.create(inaccessible, mode = "0100")
   renv_scope_options(renv.verbose = FALSE)
   expect_false(renv_install_preflight_permissions(inaccessible))
@@ -221,5 +221,16 @@ test_that("restore doesn't re-use active library paths", {
   lockfile <- renv::snapshot(library = lib2, lockfile = NULL)
   restore(library = lib1, lockfile = lockfile)
   expect_true(renv_package_installed("bread", lib.loc = lib1))
+
+})
+
+test_that("restore(exclude = <...>) excludes as expected", {
+
+  renv_tests_scope("breakfast")
+  init()
+
+  remove(c("bread", "breakfast", "oatmeal", "toast"))
+  restore(exclude = "breakfast")
+  expect_false(renv_package_installed("breakfast"))
 
 })

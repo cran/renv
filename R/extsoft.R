@@ -1,6 +1,6 @@
 
 renv_extsoft_curl_version <- function() {
-  "7.70.0"
+  Sys.getenv("RENV_EXTSOFT_CURL_VERSION", unset = "7.77.0")
 }
 
 renv_extsoft_install <- function(quiet = FALSE) {
@@ -49,7 +49,7 @@ renv_extsoft_install <- function(quiet = FALSE) {
 
     # download the file
     url <- file.path(root, file)
-    destfile <- renv_tempfile_path("renv-archive-", fileext = ".zip")
+    destfile <- renv_scope_tempfile("renv-archive-", fileext = ".zip")
     download(url, destfile = destfile, quiet = quiet)
 
     # write manifest

@@ -1,45 +1,40 @@
 
+renv_python_virtualenv_home <- function() {
+  Sys.getenv("WORKON_HOME", unset = "~/.virtualenvs")
+}
+
 renv_python_virtualenv_path <- function(name) {
 
-  path <- name
-  if (!grepl("[/\\\\]", name)) {
-    home <- Sys.getenv("WORKON_HOME", unset = "~/.virtualenvs")
-    path <- file.path(home, name)
-  }
+  # if the name contains a slash, use it as-is
+  if (grepl("/", name, fixed = TRUE))
+    return(renv_path_canonicalize(name))
 
-  path
+  # treat names starting with '.' specially
+  if (substring(name, 1L, 1L) == ".")
+    return(renv_path_canonicalize(name))
+
+  # otherwise, resolve relative to virtualenv home
+  home <- renv_python_virtualenv_home()
+  file.path(home, name)
 
 }
 
-renv_python_virtualenv_validate <- function(path, python, version) {
+renv_python_virtualenv_validate <- function(path, version) {
 
-  # compare requested vs. actual versions of Python
-  exe <- renv_python_exe(path)
-  request <- version %||% renv_python_version(python)
-  current <- renv_python_version(exe)
-  if (request == current)
-    return(exe)
+  # get path to python executable
+  python <- renv_python_exe(path)
 
-  # err in automatic sessions
-  if (!interactive()) {
-    fmt <- "incompatible virtual environment already exists at path '%s'"
-    stopf(fmt, path)
+  # compare requested + actual versions
+  if (!is.null(version)) {
+    request <- version
+    current <- renv_python_version(python)
+    if (!renv_version_eq(request, current, 2L)) {
+      fmt <- "Project requested Python version '%s' but '%s' is currently being used"
+      warningf(fmt, request, current)
+    }
   }
 
-  renv_pretty_print(
-    sprintf("Requested version %s != %s", request, current),
-    "This virtual environment has already been initialized with a different copy of Python.",
-    "The old virtual environment will be overwritten."
-  )
-
-  if (!proceed()) {
-    renv_scope_options(show.error.messages = FALSE)
-    renv_report_user_cancel()
-    stop("operation aborted", call. = FALSE)
-  }
-
-  unlink(path, recursive = TRUE)
-  return("")
+  python
 
 }
 
@@ -47,23 +42,45 @@ renv_python_virtualenv_create <- function(python, path) {
 
   ensure_parent_directory(path)
 
+  python <- renv_path_canonicalize(python)
   version <- renv_python_version(python)
   module <- if (numeric_version(version) > "3.2") "venv" else "virtualenv"
-  python <- renv_path_normalize(python)
   args <- c("-m", module, shQuote(path.expand(path)))
-  output <- system2(python, args = args, stdout = TRUE, stderr = TRUE)
+  renv_system_exec(python, args, "creating virtual environment")
 
-  status <- attr(output, "status") %||% 0L
-  if (status != 0L || !file.exists(path)) {
-    msg <- c("failed to create virtual environment", output)
-    stop(paste(msg, collapse = "\n"), call. = FALSE)
-  }
-
-  invisible(file.exists(path))
+  info <- renv_python_info(path)
+  info$python
 
 }
 
-renv_python_virtualenv_snapshot <- function(project, python) {
+renv_python_virtualenv_update <- function(python) {
+
+  # resolve python executable path
+  python <- renv_python_exe(python)
+  python <- renv_path_canonicalize(python)
+
+  # resolve packages
+  packages <- c("pip", "setuptools", "wheel")
+
+  # don't upgrade these packages for older versions of python, as we may
+  # end up installing versions of packages that aren't actually compatible
+  # with the version of python we're running
+  version <- renv_python_version(python)
+  if (renv_version_lt(version, "3.6"))
+    return(TRUE)
+
+  # perform the install
+  # make errors non-fatal as the environment will still be functional even
+  # if we're not able to install or update these packages
+  status <- catch(pip_install(packages, python = python))
+  if (inherits(status, "error"))
+    warning(status)
+
+  TRUE
+
+}
+
+renv_python_virtualenv_snapshot <- function(project, prompt, python) {
 
   owd <- setwd(project)
   on.exit(setwd(owd), add = TRUE)
@@ -73,48 +90,60 @@ renv_python_virtualenv_snapshot <- function(project, python) {
   if (file.exists(path))
     before <- readLines(path, warn = FALSE)
 
-  suffix <- "-m pip freeze 2> /dev/null"
-  command <- paste(shQuote(python), suffix)
-  after <- system(command, intern = TRUE)
-
+  after <- pip_freeze(python = python)
   if (setequal(before, after)) {
-    vwritef("* '%s' is already up to date.", aliased_path(path))
+    vwritef("* Python requirements are already up to date.")
+    return(FALSE)
+  }
+
+  renv_pretty_print(
+    values   = after,
+    preamble = "The following will be written to requirements.txt:",
+    wrap     = FALSE
+  )
+
+  if (prompt && !proceed()) {
+    renv_report_user_cancel()
     return(FALSE)
   }
 
   writeLines(after, con = path)
-  vwritef("* Wrote Python packages to '%s'.", aliased_path(path))
+
+  fmt <- "* Wrote Python packages to %s."
+  vwritef(fmt, renv_path_pretty(path))
   return(TRUE)
 
 }
 
-renv_python_virtualenv_restore <- function(project, python) {
+renv_python_virtualenv_restore <- function(project, prompt, python) {
 
   owd <- setwd(project)
   on.exit(setwd(owd), add = TRUE)
 
   path <- file.path(project, "requirements.txt")
-  before <- character()
-  if (file.exists(path))
-    before <- readLines(path, warn = FALSE)
+  if (!file.exists(path))
+    return(FALSE)
 
-  suffix <- "-m pip freeze 2> /dev/null"
-  command <- paste(shQuote(python), suffix)
-  after <- system(command, intern = TRUE)
-
-  if (setequal(before, after)) {
+  before <- readLines(path, warn = FALSE)
+  after <- pip_freeze(python = python)
+  diff <- renv_vector_diff(before, after)
+  if (empty(diff)) {
     vwritef("* The Python library is already up to date.")
     return(FALSE)
   }
 
-  diff <- renv_vector_diff(before, after)
-  file <- renv_tempfile_path("renv-requirements-", fileext = ".txt")
-  writeLines(diff, con = file)
-  suffix <- paste("-m pip install --upgrade -r", shQuote(file))
-  command <- paste(shQuote(python), suffix)
-  ignore <- renv_tests_running()
-  system(command, ignore.stdout = ignore, ignore.stderr = ignore)
+  renv_pretty_print(
+    values   = diff,
+    preamble = "The following Python packages will be restored:",
+    wrap     = FALSE
+  )
 
-  vwritef("* Restored Python packages from '%s'.", aliased_path(path))
+  if (prompt && !proceed()) {
+    renv_report_user_cancel()
+    return(FALSE)
+  }
+
+  pip_install_requirements(diff, python = python, stream = TRUE)
+  TRUE
 
 }

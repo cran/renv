@@ -39,11 +39,18 @@ recurse <- function(object, callback, ...) {
 
 recurse_impl <- function(stack, object, callback, ...) {
 
+  # ignore missing values
+  if (missing(object) || identical(object, quote(expr = )))
+    return()
+
   # push node on to stack
   stack[[length(stack) + 1]] <- object
 
   # invoke callback
-  callback(object, stack, ...)
+
+  result <- callback(object, stack, ...)
+  if (is.call(result))
+    object <- result
 
   # recurse
   if (is.recursive(object))
@@ -54,34 +61,42 @@ recurse_impl <- function(stack, object, callback, ...) {
 
 
 uapply <- function(x, f, ...) {
+  f <- match.fun(f)
   unlist(lapply(x, f, ...), recursive = FALSE)
 }
 
 filter <- function(x, f, ...) {
+  f <- match.fun(f)
   x[map_lgl(x, f, ...)]
 }
 
 reject <- function(x, f, ...) {
+  f <- match.fun(f)
   x[!map_lgl(x, f, ...)]
 }
 
 map <- function(x, f, ...) {
+  f <- match.fun(f)
   lapply(x, f, ...)
 }
 
 map_chr <- function(x, f, ...) {
+  f <- match.fun(f)
   vapply(x, f, ..., FUN.VALUE = character(1))
 }
 
 map_dbl <- function(x, f, ...) {
+  f <- match.fun(f)
   vapply(x, f, ..., FUN.VALUE = numeric(1))
 }
 
 map_int <- function(x, f, ...) {
+  f <- match.fun(f)
   vapply(x, f, ..., FUN.VALUE = integer(1))
 }
 
 map_lgl <- function(x, f, ...) {
+  f <- match.fun(f)
   vapply(x, f, ..., FUN.VALUE = logical(1))
 }
 

@@ -36,11 +36,43 @@ test_that("bind_list warns on name collision", {
   expect_error(bind_list(data))
 })
 
+test_that("bind_list() handles data.frames with potentially different names", {
+
+  data <- list(
+    a = data.frame(A = 1, B = 2),
+    b = data.frame(A = 1, C = 3)
+  )
+
+  bound <- bind_list(data)
+  expected <- data.frame(
+    Index = c("a", "b"),
+    A     = c(1, 1),
+    B     = c(2, NA),
+    C     = c(NA, 3),
+    stringsAsFactors = FALSE
+  )
+
+  expect_identical(bound, expected)
+
+})
+
+test_that("bind_list() preserves order where possible", {
+
+  data <- list(
+    a = data.frame(A = 1,        C = 3),
+    b = data.frame(A = 1, B = 2, C = 3)
+  )
+
+  bound <- bind_list(data)
+  expect_equal(names(bound), c("Index", "A", "B", "C"))
+
+})
+
 test_that("versions are compared as expected", {
 
-  expect_equal(version_compare("0.1.0", "0.2.0"), -1)
-  expect_equal(version_compare("0.2.0", "0.2.0"),  0)
-  expect_equal(version_compare("0.3.0", "0.2.0"), +1)
+  expect_equal(renv_version_compare("0.1.0", "0.2.0"), -1L)
+  expect_equal(renv_version_compare("0.2.0", "0.2.0"), +0L)
+  expect_equal(renv_version_compare("0.3.0", "0.2.0"), +1L)
 
 })
 
@@ -76,25 +108,24 @@ test_that("memoize avoids evaluating expression multiple times", {
 
 })
 
-test_that("delegate() handles basic forwarding", {
+test_that("sink captures both stdout and stderr", {
 
-  delegatee <- function(x, y, z) { x + y + z }
-  delegator <- function(x, y = 2) {
-    z <- 3
-    delegate(delegatee)
-  }
+  file <- tempfile("renv-sink-", fileext = ".log")
 
-  result <- delegator(1)
-  expect_equal(result, 6)
+  osinks <- sink.number(type = "output")
+  msinks <- sink.number(type = "message")
 
-})
+  local({
+    renv_scope_sink(file)
+    writeLines("stdout", con = stdout())
+    writeLines("stderr", con = stderr())
+  })
 
-test_that("delegate() handles missingness", {
+  contents <- readLines(file)
+  expect_equal(contents, c("stdout", "stderr"))
 
-  delegatee <- function(x) { missing(x) }
-  delegator <- function(x) { delegate(delegatee) }
+  expect_equal(sink.number(type = "output"),  osinks)
+  expect_equal(sink.number(type = "message"), msinks)
 
-  result <- delegator()
-  expect_true(result)
 
 })

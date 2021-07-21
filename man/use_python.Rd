@@ -13,26 +13,19 @@ use_python(
 )
 }
 \arguments{
-\item{python}{The path to a Python binary. This can be the path to a Python
-binary on the system, or the path to a Python binary within an
-already-existing Python environment. If \code{NULL}, the \code{RETICULATE_PYTHON}
-environment variable is checked; if that is not set, then the default
-version of \code{python} on the \code{PATH} is used instead. As a special case,
-\code{use_python(FALSE)} can be used to deactivate Python integration with
-a project.}
+\item{python}{The path to the version of Python to be used with this project. See
+\strong{Finding Python} for more details.}
 
 \item{...}{Optional arguments; currently unused.}
 
-\item{type}{The type of Python environment to use. When \code{"auto"} (the
-default), a project-local environment (virtual environments on Linux /
-macOS; conda environments on Windows) will be created. Ignored if the
-requested version of \code{python} lives within a pre-existing Python
-environment.}
+\item{type}{The type of Python environment to use. When \code{"auto"} (the default),
+virtual environments will be used.}
 
-\item{name}{The name or path that should be used for the associated Python
-environment. If \code{NULL} and \code{python} points to a Python executable living
-within a pre-existing virtual environment, that environment will be used.
-Otherwise, a project-local environment will be created instead.}
+\item{name}{The name or path that should be used for the associated Python environment.
+If \code{NULL} and \code{python} points to a Python executable living within a
+pre-existing virtual environment, that environment will be used. Otherwise,
+a project-local environment will be created instead, using a name
+generated from the associated version of Python.}
 
 \item{project}{The project directory. If \code{NULL}, then the active project will
 be used. If no project is currently active, then the current working
@@ -40,8 +33,8 @@ directory is used instead.}
 }
 \value{
 \code{TRUE}, indicating that the requested version of Python has been
-successfully activated. Note that this function is normally called for
-its side effects.
+successfully activated. Note that this function is normally called for its
+side effects.
 }
 \description{
 Associate a version of Python with your project.
@@ -52,18 +45,86 @@ When Python integration is active, \code{renv} will:
 \item Save metadata about the requested version of Python in \code{renv.lock} -- in
 particular, the Python version, and the Python type ("virtualenv", "conda",
 "system"),
-\item On load, set the \code{RETICULATE_PYTHON} environment variable, so that the
+\item Capture the set of installed Python packages during \code{renv::snapshot()},
+\item Re-install the set of recorded Python packages during \code{renv::restore()}.
+}
+
+In addition, when the project is loaded, the following actions will be taken:
+\itemize{
+\item The \code{RENV_PYTHON} environment variable will be set, indicating the version
+of Python currently active for this sessions,
+\item The \code{RETICULATE_PYTHON} environment variable will be set, so that the
 \code{reticulate} package can automatically use the requested copy of Python
 as appropriate,
-\item Capture the set of installed Python packages during \code{renv::snapshot()},
-\item Reinstall the set of recorded Python packages during \code{renv::restore()}.
+\item The requested version of Python will be placed on the \code{PATH}, so that
+attempts to invoke Python will resolve to the expected version of Python.
 }
+
+You can override the version of Python used in a particular project by
+setting the \code{RENV_PYTHON} environment variable; e.g. as part of the
+project's \code{.Renviron} file. This can be useful if you find that \code{renv}
+is unable to automatically discover a compatible version of Python to
+be used in the project.
 }
+\section{Finding Python}{
+
+
+In interactive sessions, when \code{python = NULL}, \code{renv} will prompt for an
+appropriate version of Python. \code{renv} will search a pre-defined set of
+locations when attempting to find Python installations on the system:
+\itemize{
+\item \code{getOption("renv.python.root")},
+\item \verb{/opt/python},
+\item \verb{/opt/local/python},
+\item \verb{~/opt/python},
+\item \verb{/usr/local/opt} (for macOS Homebrew-installed copies of Python),
+\item \verb{/opt/homebrew/opt} (for M1 macOS Homebrew-installed copies of Python),
+\item \verb{~/.pyenv/versions},
+\item Python instances available on the \code{PATH}.
+}
+
+In non-interactive sessions, \code{renv} will first check the \code{RETICULATE_PYTHON}
+environment variable; if that is unset, \code{renv} will look for Python on the
+\code{PATH}. It is recommended that the version of Python to be used is explicitly
+supplied for non-interactive usages of \code{use_python()}.
+}
+
+\section{Warning}{
+
+
+We strongly recommend using Python virtual environments, for a few reasons:
+\enumerate{
+\item If something goes wrong with a local virtual environment, you can safely
+delete that virtual environment, and then re-initialize it later, without
+worry that doing so might impact other software on your system.
+\item If you choose to use a "system" installation of Python, then any packages
+you install or upgrade will be visible to any other application that
+wants to use that same Python installation. Using a virtual environment
+ensures that any changes made are isolated to that environment only.
+\item Choosing to use Anaconda will likely invite extra frustration in the
+future, as you may be required to upgrade and manage your Anaconda
+installation as new versions of Anaconda are released. In addition,
+Anaconda installations tend to work poorly with software not specifically
+installed as part of that same Anaconda installation.
+}
+
+In other words, we recommend selecting "system" or "conda" only if you are an
+expert Python user who is already accustomed to managing Python / Anaconda
+installations on your own.
+}
+
 \examples{
 \dontrun{
 
 # use python with a project
 renv::use_python()
+
+# use python with a project; create the environment
+# within the project directory in the '.venv' folder
+renv::use_python(name = ".venv")
+
+# use python with a pre-existing virtual environment located elsewhere
+renv::use_python(name = "~/.virtualenvs/env")
 
 # use virtualenv python with a project
 renv::use_python(type = "virtualenv")

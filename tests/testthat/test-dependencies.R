@@ -236,7 +236,7 @@ test_that("empty fields are handled in DESCRIPTION", {
 test_that("recursive symlinks are handled", {
   skip_on_os("windows")
 
-  project <- renv_tempfile_path()
+  project <- renv_scope_tempfile()
   ensure_directory(project)
 
   owd <- setwd(project)
@@ -309,4 +309,47 @@ test_that("only dependencies in a top-level DESCRIPTION file are used", {
 test_that("multiple output formats are handled", {
   deps <- dependencies("resources/multiple-output-formats.Rmd", progress = FALSE)
   expect_true("bookdown" %in% deps$Package)
+})
+
+test_that("glue::glue() package usages are found", {
+  deps <- dependencies("resources/glue.R", progress = FALSE)
+  expect_true(all(c("A", "B", "C") %in% deps$Package))
+})
+
+test_that("set_engine() package usages are found", {
+  deps <- dependencies("resources/parsnip.R", progress = FALSE)
+  expect_setequal(deps$Package, c("glmnet"))
+})
+
+test_that("eval=F does not trip up dependencies", {
+  deps <- dependencies("resources/eval.Rmd", progress = FALSE)
+  expect_true("A" %in% deps$Package)
+  expect_false("a" %in% deps$Package)
+})
+
+test_that("renv.ignore=FALSE, eval=TRUE is handled", {
+  deps <- dependencies("resources/ignore.Rmd", progress = FALSE)
+  expect_true("A" %in% deps$Package)
+  expect_false("a" %in% deps$Package)
+})
+
+test_that("piped expressions can be parsed for dependencies", {
+  deps <- dependencies("resources/magrittr.R", progress = FALSE)
+  expect_setequal(deps$Package, c("A", "B", "C"))
+})
+
+test_that("bslib dependencies are discovered", {
+  deps <- dependencies("resources/bslib.Rmd", progress = FALSE)
+  expect_true("bslib" %in% deps$Package)
+})
+
+test_that("utility script dependencies are discovered", {
+  deps <- dependencies("resources/utility", progress = FALSE)
+  expect_false(is.null(deps))
+  expect_setequal(deps$Package, c("A", "B"))
+})
+
+test_that("we handle shiny_prerendered documents", {
+  deps <- dependencies("resources/shiny-prerendered.Rmd", progress = FALSE)
+  expect_true("shiny" %in% deps$Package)
 })

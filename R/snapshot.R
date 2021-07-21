@@ -110,8 +110,12 @@ snapshot <- function(project  = NULL,
   renv_scope_error_handler()
   renv_dots_check(...)
 
+  renv_snapshot_auto_suppress_next()
+
   project <- renv_project_resolve(project)
   renv_scope_lock(project = project)
+
+  renv_activate_prompt("snapshot", library, prompt, project)
 
   libpaths <- library %||% renv_libpaths_all()
   if (config$snapshot.validate())
@@ -138,10 +142,6 @@ snapshot <- function(project  = NULL,
   if (reprex)
     return(renv_snapshot_reprex(new))
 
-  # TODO: do we still want to snapshot if the user cancels
-  # the R-level snapshot?
-  on.exit(renv_python_snapshot(project), add = TRUE)
-
   # get prior lockfile state
   old <- list()
   if (file.exists(lockfile)) {
@@ -156,7 +156,7 @@ snapshot <- function(project  = NULL,
     diff <- renv_lockfile_diff(old, alt)
     if (empty(diff)) {
       vwritef("* The lockfile is already up to date.")
-      return(invisible(alt))
+      return(renv_snapshot_successful(alt, prompt, project))
     }
 
   }
@@ -202,7 +202,8 @@ snapshot <- function(project  = NULL,
   # ensure the activate script is up-to-date
   renv_infrastructure_write_activate(project, create = FALSE)
 
-  invisible(new)
+  # return new records
+  renv_snapshot_successful(new, prompt, project)
 }
 
 renv_snapshot_preserve <- function(old, new) {
@@ -414,7 +415,7 @@ renv_snapshot_validate_dependencies_available <- function(project, lockfile, lib
     renv_pretty_print(
       sprintf("%s  [required by %s]", format(missing), usedby),
       "The following required packages are not installed:",
-      "Consider re-installing these packages before snapshotting the lockfile.",
+      "Consider reinstalling these packages before snapshotting the lockfile.",
       wrap = FALSE
     )
   }
@@ -527,8 +528,9 @@ renv_snapshot_r_packages_impl <- function(library = NULL,
   ignored <- renv_project_ignored_packages(project = project)
   paths <- paths[!basename(paths) %in% ignored]
 
-  # ignore '_cache' folder explicitly (written by 'pak')
-  paths <- paths[!basename(paths) %in% "_cache"]
+  # remove paths that are not valid package names
+  pattern <- sprintf("^%s$", .standard_regexps()$valid_package_name)
+  paths <- paths[grep(pattern, basename(paths))]
 
   # validate the remaining set of packages
   valid <- renv_snapshot_r_library_diagnose(library, paths)
@@ -584,7 +586,7 @@ renv_snapshot_r_library_diagnose_broken_link <- function(library, pkgs) {
   renv_pretty_print(
     basename(pkgs)[broken],
     "The following package(s) have broken symlinks into the cache:",
-    "Consider re-installing these packages."
+    "Consider reinstalling these packages."
   )
 
   pkgs[!broken]
@@ -620,7 +622,7 @@ renv_snapshot_r_library_diagnose_missing_description <- function(library, pkgs) 
     "The following package(s) are missing their DESCRIPTION files:",
     c(
       "These may be left over from a prior, failed installation attempt.",
-      "Consider removing or re-installing these packages."
+      "Consider removing or reinstalling these packages."
     ),
     wrap = FALSE
   )
@@ -767,8 +769,10 @@ renv_snapshot_filter <- function(project, records, type, packages) {
   end <- Sys.time()
 
   # report if dependency discovery took a long time
-  limit <- 10L
-  if (difftime(end, start, units = "secs") > limit) {
+  limit <- getOption("renv.snapshot.filter.timelimit", default = 10L)
+  diff <- difftime(end, start, units = "secs")
+
+  if (diff > limit) {
 
     lines <- c(
       "NOTE: Dependency discovery took %s %s during snapshot.",
@@ -939,5 +943,15 @@ renv_snapshot_reprex <- function(lockfile) {
   attr(output, "knit_cacheable") <- NA
 
   output
+
+}
+
+renv_snapshot_successful <- function(records, prompt, project) {
+
+  # perform python snapshot on success
+  renv_python_snapshot(project, prompt)
+
+  # return generated records
+  invisible(records)
 
 }

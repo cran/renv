@@ -86,6 +86,23 @@ test_that("we can retrieve packages from git", {
 
 })
 
+test_that("we can retrieve packages with git dependencies", {
+  skip_on_cran()
+  skip_sometimes()
+
+  # GitHub doesn't like ssh (used as remote field in renv.git1)
+  skip_on_ci()
+
+  record <- list(
+    Package   = "renv.git1",
+    Source    = "git",
+    RemoteUrl = "https://github.com/kevinushey/renv.git1.git",
+    RemoteRef = "main"
+  )
+
+  renv_test_retrieve(record)
+})
+
 
 test_that("we can retrieve packages from GitHub", {
 
@@ -305,4 +322,25 @@ test_that("we can retrieve files using file URIs", {
   expect_equal(readLines(target), "Hello, world!")
   unlink(target)
 
+})
+
+test_that("records with RemoteSha successfully retrieved from archives", {
+
+  renv_tests_scope()
+
+  record <- list(
+    Package   = "bread",
+    Version   = "0.1.0",
+    Source    = "Repository",
+    RemoteSha = "oops"
+  )
+
+  renv_test_retrieve(record)
+
+})
+
+test_that("we respect the default branch for gitlab repositories", {
+  skip_on_cran()
+  remote <- renv_remotes_resolve("gitlab::kevinushey/main")
+  expect_equal(remote$RemoteRef, "main")
 })

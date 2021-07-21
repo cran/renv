@@ -116,15 +116,19 @@ renv_paths_root <- function(...) {
 # nocov start
 renv_paths_root_default <- function() {
 
-  root <- switch(
-    Sys.info()[["sysname"]],
-    Darwin  = Sys.getenv("XDG_DATA_HOME", "~/Library/Application Support"),
-    Windows = Sys.getenv("LOCALAPPDATA", Sys.getenv("APPDATA")),
-    Sys.getenv("XDG_DATA_HOME", "~/.local/share")
-  )
+  # use tempdir for cache when running tests
+  # this check is necessary here to support packages which might use renv
+  # during testing (and we don't want those to try to use the user dir)
+  checking <-
+    "CheckExEnv" %in% search() ||
+    !is.na(Sys.getenv("_R_CHECK_PACKAGE_NAME_", unset = NA)) ||
+    !is.na(Sys.getenv("TESTTHAT", unset = NA))
 
-  root <- renv_path_normalize(root, winslash = "/", mustWork = FALSE)
-  path <- file.path(root, "renv")
+  if (checking)
+    return(renv_paths_root_default_tempdir())
+
+  # resolve path to cache
+  path <- renv_paths_root_default_impl()
 
   # check for user consent
   consenting <- identical(getOption("renv.consenting"), TRUE)
@@ -157,14 +161,70 @@ renv_paths_root_default <- function() {
     )
   }
 
-  temp <- tempfile("renv-root-")
+  renv_paths_root_default_tempdir()
+
+}
+
+renv_paths_root_default_impl <- function() {
+
+  # support renv projects created with the old root location
+  oldroot <- switch(
+    Sys.info()[["sysname"]],
+    Darwin  = Sys.getenv("XDG_DATA_HOME", "~/Library/Application Support"),
+    Windows = Sys.getenv("LOCALAPPDATA", Sys.getenv("APPDATA")),
+    Sys.getenv("XDG_DATA_HOME", "~/.local/share")
+  )
+
+  # if we've already initialized renv with the old location, use it
+  oldpath <- file.path(oldroot, "renv")
+  if (file.exists(oldpath))
+    return(oldpath)
+
+  # try using tools to get the user directory
+  tools <- asNamespace("tools")
+  path <- catch(tools$R_user_dir("renv", which = "cache"))
+  if (!inherits(path, "error"))
+    return(path)
+
+  # try using our own backfill for older versions of R
+  renv_paths_root_default_impl_fallback()
+
+}
+
+renv_paths_root_default_impl_fallback <- function() {
+
+  # check for R_USER_CACHE_DIR + XDG_CACHE_HOME overrides
+  envvars <- c("R_USER_CACHE_DIR", "XDG_CACHE_HOME")
+  for (envvar in envvars) {
+    root <- Sys.getenv(envvar, unset = NA)
+    if (!is.na(root)) {
+      path <- file.path(root, "R/renv")
+      return(path)
+    }
+  }
+
+  # use platform-specific default fallbacks
+  if (renv_platform_windows())
+    file.path(Sys.getenv("LOCALAPPDATA"), "R/cache/R/renv")
+  else if (renv_platform_macos())
+    "~/Library/Caches/org.R-project.R/R/renv"
+  else
+    "~/.cache/R/renv"
+
+}
+
+renv_paths_root_default_tempdir <- function() {
+  temp <- file.path(tempdir(), "renv")
   ensure_directory(temp)
   return(temp)
-
 }
 # nocov end
 
 renv_paths_init <- function() {
+  renv_paths_init_envvars()
+}
+
+renv_paths_init_envvars <- function() {
 
   envvars <- Sys.getenv()
 
@@ -192,7 +252,20 @@ renv_paths_init <- function() {
 #' Windows      \tab `%LOCALAPPDATA%/renv` \cr
 #' }
 #'
-#' If desired, this path can be adjusted by setting the `RENV_PATHS_ROOT`
+#' For new installations of `renv` using R (>= 4.0.0), `renv` will use
+#' [tools::R_user_dir()] to resolve the root directory. If an `renv` root
+#' directory has already been created in one of the old locations, that will
+#' still be used. This change was made to comply with the CRAN policy
+#' requirements of \R packages. By default, these paths resolve as:
+#'
+#' \tabular{ll}{
+#' **Platform** \tab **Location** \cr
+#' Linux        \tab `~/.cache/R/renv` \cr
+#' macOS        \tab `~/Library/Caches/org.R-project.R/R/renv` \cr
+#' Windows      \tab `%LOCALAPPDATA%/R/cache/R/renv` \cr
+#' }
+#'
+#' If desired, this path can be customized by setting the `RENV_PATHS_ROOT`
 #' environment variable. This can be useful if you'd like, for example, multiple
 #' users to be able to share a single global cache.
 #'

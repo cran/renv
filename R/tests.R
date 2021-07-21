@@ -93,12 +93,6 @@ renv_tests_init_working_dir <- function() {
   }
 }
 
-renv_tests_init_envvars <- function() {
-  root <- tempfile("renv-root-")
-  dir.create(root, showWarnings = TRUE, mode = "755")
-  Sys.setenv(RENV_PATHS_ROOT = root)
-}
-
 renv_tests_init_options <- function() {
   options(
     renv.config.user.library = FALSE,
@@ -301,6 +295,7 @@ renv_tests_init <- function() {
     return()
 
   Sys.unsetenv("RENV_PROFILE")
+  Sys.unsetenv("RENV_PATHS_ROOT")
   Sys.unsetenv("RENV_PATHS_LIBRARY")
   Sys.unsetenv("RENV_PATHS_LIBRARY_ROOT")
   Sys.unsetenv("RENV_CONFIG_CACHE_ENABLED")
@@ -312,7 +307,6 @@ renv_tests_init <- function() {
 
   renv_tests_init_workarounds()
   renv_tests_init_working_dir()
-  renv_tests_init_envvars()
   renv_tests_init_options()
   renv_tests_init_repos()
   renv_tests_init_packages()
@@ -359,7 +353,7 @@ renv_test_retrieve <- function(record) {
   names(records) <- package
 
   # prepare dummy library
-  templib <- renv_tempfile_path("renv-library-")
+  templib <- renv_scope_tempfile("renv-library-")
   ensure_directory(templib)
   renv_scope_libpaths(c(templib, .libPaths()))
 
@@ -372,8 +366,8 @@ renv_test_retrieve <- function(record) {
     recursive = FALSE
   )
 
-  records <- renv_retrieve(record$Package)
-  renv_install(records)
+  records <- retrieve(record$Package)
+  renv_install_impl(records)
 
   descpath <- file.path(templib, package)
   if (!file.exists(descpath))
@@ -451,7 +445,7 @@ renv_tests_diagnostics <- function() {
 
   keys <- format(envvars)
   vals <- Sys.getenv(envvars, unset = "<NA>")
-  vals[vals != "<NA>"] <- shQuote(vals[vals != "<NA>"], type = "cmd")
+  vals[vals != "<NA>"] <- renv_json_quote(vals[vals != "<NA>"])
 
   renv_pretty_print(
     paste(keys, vals, sep = " : "),

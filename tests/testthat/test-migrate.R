@@ -2,12 +2,18 @@
 context("Migrate")
 
 skip_if_no_packrat <- function() {
+
   skip_on_cran()
+  skip_on_windows()
   skip_if_not_installed("packrat")
 
   version <- unclass(packageVersion("packrat"))
   if (length(version[[1]]) > 3)
     skip("cannot test with development version of Packrat")
+
+  packrat <- renv_available_packages_latest(package = "packrat", type = "source")
+  if (packageVersion("packrat") > packrat$Version)
+    skip("packrat is not current")
 
   TRUE
 

@@ -23,10 +23,17 @@
 #' Depending on how you've structured your code, `renv` may emit errors when
 #' attempting to enumerate dependencies within `.Rmd` / `.Rnw` documents.
 #' For code chunks that you'd explicitly like `renv` to ignore, you can
-#' include `renv.ignore=FALSE` in the chunk header. For example:
+#' include `renv.ignore=TRUE` in the chunk header. For example:
 #'
-#'     ```{r chunk-label, renv.ignore=FALSE}
+#'     ```{r chunk-label, renv.ignore=TRUE}
 #'     # code in this chunk will be ignored by renv
+#'     ```
+#'
+#' Similarly, if you'd like `renv` to parse a chunk that is otherwise ignored
+#' (e.g. because it has `eval=FALSE` as a chunk header), you can set:
+#'
+#'     ```{r chunk-label, eval=FALSE, renv.ignore=FALSE}
+#'     # code in this chunk will _not be ignored
 #'     ```
 #'
 #' @section Ignoring Files:
@@ -125,7 +132,15 @@ dependencies <- function(
 {
   renv_scope_error_handler()
 
-  deps <- delegate(renv_dependencies_impl)
+  deps <- renv_dependencies_impl(
+    path     = path,
+    root     = root,
+    progress = progress,
+    errors   = errors,
+    dev      = dev,
+    ...
+  )
+
   if (empty(deps) || nrow(deps) == 0L)
     return(deps)
 
@@ -221,13 +236,26 @@ renv_dependencies_callback <- function(path) {
   cbext <- list(
     ".rproj"       = function(path) renv_dependencies_discover_rproj(path),
     ".r"           = function(path) renv_dependencies_discover_r(path),
+    ".qmd"         = function(path) renv_dependencies_discover_multimode(path, "rmd"),
     ".rmd"         = function(path) renv_dependencies_discover_multimode(path, "rmd"),
     ".rmarkdown"   = function(path) renv_dependencies_discover_multimode(path, "rmd"),
     ".rnw"         = function(path) renv_dependencies_discover_multimode(path, "rnw")
   )
 
-  cbname[[basename(path)]] %||% cbext[[tolower(fileext(path))]]
+  cbname[[basename(path)]] %||% cbext[[tolower(fileext(path))]] %||% {
+    if (is_r_executable(path)) function(path) renv_dependencies_discover_r(path)
+  }
 
+}
+
+is_r_executable <- function(path) {
+  # don't check executability via `file.access` since this is implemented
+  # differently on Windows, and would thus lead to different dependencies being
+  # discovered across platforms
+  if (nzchar(fileext(path)))
+    return(FALSE)
+
+  grepl("\\b(R|r|Rscript)\\b", renv_file_shebang(path))
 }
 
 renv_dependencies_find_extra <- function(root) {
@@ -357,7 +385,7 @@ renv_dependencies_discover_impl <- function(path) {
   callback <- renv_dependencies_callback(path)
   if (is.null(callback)) {
     fmt <- "internal error: no callback registered for file %s"
-    warningf(fmt, shQuote(aliased_path(callback), type = "cmd"))
+    warningf(fmt, renv_path_pretty(path))
   }
 
   result <- tryCatch(callback(path), error = warning)
@@ -541,12 +569,19 @@ renv_dependencies_discover_rmd_yaml_header <- function(path) {
   deps$push("rmarkdown")
 
   # check for Shiny runtime
-  runtime <- yaml$runtime %||% ""
+  runtime <- yaml[["runtime"]] %||% ""
   if (pstring(runtime) && grepl("shiny", runtime, fixed = TRUE))
     deps$push("shiny")
 
+  server <- yaml[["server"]] %||% ""
+  if (identical(server, "shiny"))
+    deps$push("shiny")
+
+  if (is.list(server) && identical(server[["type"]], "shiny"))
+    deps$push("shiny")
+
   # check for custom output function from another package
-  for (output in list(yaml$output, yaml$site)) {
+  for (output in list(yaml[["output"]], yaml[["site"]])) {
 
     # if the output is named, then the output is mapping the
     # function name to the parameters to be used; use names
@@ -565,8 +600,43 @@ renv_dependencies_discover_rmd_yaml_header <- function(path) {
 
   }
 
+  # check for dependency on bslib
+  theme <- catchall(yaml[[c("output", "html_document", "theme")]])
+  if (!inherits(theme, "error") && is.list(theme))
+    deps$push("bslib")
+
   packages <- as.character(deps$data())
   renv_dependencies_list(path, packages)
+
+}
+
+renv_dependencies_discover_chunks_ignore <- function(chunk) {
+
+  # if renv.ignore is set, respect it
+  ignore <- chunk$params$renv.ignore
+  if (!is.null(ignore))
+    return(truthy(ignore))
+
+  # skip non-R chunks
+  engine <- chunk$params$engine
+  if (!(identical(engine, "r") || identical(engine, "rscript")))
+    return(TRUE)
+
+  # skip un-evaluated chunks
+  if (!truthy(chunk$params$eval, default = TRUE))
+    return(TRUE)
+
+  # skip learnr exercises
+  if (truthy(chunk$params$exercise, default = FALSE))
+    return(TRUE)
+
+  # skip chunks whose labels end in '-display'
+  label <- chunk$params$label %||% ""
+  if (grepl("-display$", label))
+    return(TRUE)
+
+  # ok, don't ignore this chunk
+  FALSE
 
 }
 
@@ -578,7 +648,7 @@ renv_dependencies_discover_chunks <- function(path) {
 
   # figure out the appropriate begin, end patterns
   type <- tolower(tools::file_ext(path))
-  if (type %in% c("rmd", "rmarkdown"))
+  if (type %in% c("rmd", "qmd", "rmarkdown"))
     type <- "md"
 
   patterns <- knitr::all_patterns[[type]]
@@ -614,26 +684,8 @@ renv_dependencies_discover_chunks <- function(path) {
   # iterate over chunks, and attempt to parse dependencies from each
   cdeps <- bapply(chunks, function(chunk) {
 
-    # skip non-R chunks
-    engine <- chunk$params$engine
-    if (!(identical(engine, "r") || identical(engine, "rscript")))
-      return(character())
-
-    # skip un-evaluated chunks
-    if (identical(chunk$params$eval, FALSE))
-      return(character())
-
-    # skip explicitly-ignored chunks
-    if (identical(chunk$params$renv.ignore, TRUE))
-      return(character())
-
-    # skip learnr exercises
-    if (identical(chunk$params$exercise, TRUE))
-      return(character())
-
-    # skip chunks whose labels end in '-display'
-    label <- chunk$params$label %||% ""
-    if (grepl("-display$", label))
+    # check whether this chunk should be ignored
+    if (renv_dependencies_discover_chunks_ignore(chunk))
       return(character())
 
     # remove reused chunk placeholders
@@ -738,21 +790,34 @@ renv_dependencies_discover_r <- function(path = NULL,
                                          text = NULL,
                                          expr = NULL)
 {
+  packages <- renv_dependencies_discover_r_impl(path, text, expr)
+  if (empty(packages))
+    return(list())
 
+  renv_dependencies_list(path, packages)
+}
+
+renv_dependencies_discover_r_impl <- function(path  = NULL,
+                                              text  = NULL,
+                                              expr  = NULL,
+                                              envir = NULL)
+{
   expr <- case(
     is.function(expr)  ~ body(expr),
     is.language(expr)  ~ expr,
+    is.character(expr) ~ catch(renv_parse_text(expr)),
     is.character(text) ~ catch(renv_parse_text(text)),
     is.character(path) ~ catch(renv_parse_file(path)),
     ~ stop("internal error")
   )
 
-  if (inherits(expr, "error")) {
-    # workaround for an R bug where parse-related state could be
-    # leaked if an error occurred
-    Sys.setlocale()
+  if (inherits(expr, "error"))
     return(renv_dependencies_error(path, error = expr))
-  }
+
+  # update current path
+  state <- renv_dependencies_state()
+  if (!is.null(state))
+    renv_scope_var("path", path, envir = state)
 
   methods <- c(
     renv_dependencies_discover_r_methods,
@@ -765,21 +830,28 @@ renv_dependencies_discover_r <- function(path = NULL,
     renv_dependencies_discover_r_import,
     renv_dependencies_discover_r_box,
     renv_dependencies_discover_r_targets,
+    renv_dependencies_discover_r_glue,
+    renv_dependencies_discover_r_parsnip,
     renv_dependencies_discover_r_database
   )
 
-  discoveries <- new.env(parent = emptyenv())
+  envir <- envir %||% new.env(parent = emptyenv())
   recurse(expr, function(node, stack) {
+
+    # normalize calls (handle magrittr pipes)
+    node <- renv_call_normalize(node, stack)
+
+    # invoke methods on call objects
     if (is.call(node))
       for (method in methods)
-        method(node, stack, discoveries)
+        method(node, stack, envir)
+
+    # return node
+    node
+
   })
 
-  packages <- ls(envir = discoveries)
-  if (empty(packages))
-    return(list())
-
-  renv_dependencies_list(path, packages)
+  ls(envir = envir, all.names = TRUE)
 
 }
 
@@ -1051,24 +1123,23 @@ renv_dependencies_discover_r_box <- function(node, stack, envir) {
 renv_dependencies_discover_r_box_impl <- function(node, stack, envir) {
 
   # if the node is just a symbol, then it's the name of a package
-  if (is.symbol(node)) {
-    package <- as.character(node)
-    envir[[package]] <- TRUE
-    return(TRUE)
-  }
-
-  # if this is a call to `[`, then the first argument is the package name
-  ok <-
+  # otherwise, if it's a call to `[`, the first argument is the package name
+  name <- if (is.symbol(node) && ! identical(node, quote(expr = ))) {
+    as.character(node)
+  } else if (
     is.call(node) &&
-    length(node) > 1 &&
-    identical(node[[1L]], as.name("[")) &&
-    is.symbol(node[[2L]])
-
-  if (ok) {
-    package <- as.character(node[[2L]])
-    envir[[package]] <- TRUE
-    return(TRUE)
+      length(node) > 1L &&
+      identical(node[[1L]], as.name("[")) &&
+      is.symbol(node[[2L]])) {
+    as.character(node[[2L]])
   }
+
+  # the names `.` and `..` are special place holders and don't refer to packages
+  if (is.null(name) || name == "." || name == "..")
+    return(FALSE)
+
+  envir[[name]] <- TRUE
+  TRUE
 
 }
 
@@ -1098,6 +1169,75 @@ renv_dependencies_discover_r_targets <- function(node, stack, envir) {
 
 }
 
+renv_dependencies_discover_r_glue <- function(node, stack, envir) {
+
+  node <- renv_call_expect(node, "glue", "glue")
+  if (is.null(node))
+    return(FALSE)
+
+  # analyze all unnamed strings in the call
+  args <- as.list(node)[-1L]
+  nm <- names(args) %||% rep.int("", length(args))
+  strings <- args[!nzchar(nm) & map_lgl(args, is.character)]
+
+  # construct pattern
+  open  <- node$.open  %||% "{"
+  close <- node$.close %||% "}"
+  pattern <- sprintf("\\Q%s\\E(.*?)\\Q%s\\E", open, close)
+
+  for (string in strings) {
+    m <- gregexpr(pattern, string, perl = TRUE)
+    matches <- unlist(regmatches(string, m), recursive = FALSE)
+    code <- substring(matches, 2L, nchar(matches) - 1L)
+    renv_dependencies_discover_r_impl(text = code, envir = envir)
+  }
+
+  TRUE
+
+}
+
+renv_dependencies_discover_r_parsnip <- function(node, stack, envir) {
+
+  node <- renv_call_expect(node, "parsnip", "set_engine")
+  if (is.null(node))
+    return(FALSE)
+
+  matched <- catch(match.call(function(object, engine, ...) {}, node))
+  if (inherits(matched, "error"))
+    return(FALSE)
+
+  engine <- matched$engine
+  if (!is.character(engine) || length(engine) != 1L)
+    return(FALSE)
+
+  map <- getOption("renv.parsnip.engines", default = list(
+    glm    = "stats",
+    glmnet = "glmnet",
+    keras  = "keras",
+    kknn   = "kknn",
+    nnet   = "nnet",
+    rpart  = "rpart",
+    spark  = "sparklyr",
+    stan   = "rstanarm"
+  ))
+
+  packages <- if (is.function(map))
+    tryCatch(map(engine), error = function(e) NULL)
+  else
+    map[[engine]]
+
+  if (is.null(packages))
+    return(FALSE)
+
+  for (package in packages)
+    envir[[package]] <- TRUE
+
+  # TODO: a number of model routines appear to depend on dials;
+  # should we just assume it's required by default? or should
+  # users normally be using tidymodels instead of parsnip directly?
+  TRUE
+
+}
 
 renv_dependencies_discover_r_database <- function(node, stack, envir) {
 
@@ -1251,6 +1391,7 @@ renv_dependencies_error <- function(path, error = NULL, packages = NULL) {
   # check for missing state (e.g. if internal method called directly)
   state <- renv_dependencies_state()
   if (!is.null(state)) {
+    path <- path %||% state$path
     problem <- list(file = path, error = error)
     state$problems$push(problem)
   }

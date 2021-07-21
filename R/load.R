@@ -14,6 +14,10 @@
 #' preferred or necessary, one can call `renv::load("<project>")` to explicitly
 #' load an `renv` project located at a particular path.
 #'
+#' Use [renv::activate()] to activate (or re-activate) an `renv` project, so
+#' that newly-launched \R sessions can automatically load the associated
+#' project.
+#'
 #' @inherit renv-params
 #'
 #' @param quiet Boolean; be quiet during load?
@@ -49,10 +53,8 @@ load <- function(project = getwd(), quiet = FALSE) {
   renv_envvars_save()
 
   # load a minimal amount of state when testing
-  if (renv_tests_running()) {
-    renv_load_libpaths(project)
-    return(invisible(project))
-  }
+  if (renv_tests_running())
+    return(renv_load_minimal(project))
 
   # load rest of renv components
   renv_load_init(project)
@@ -83,6 +85,18 @@ load <- function(project = getwd(), quiet = FALSE) {
   renv_load_finish(project, lockfile)
 
   invisible(project)
+}
+
+renv_load_minimal <- function(project) {
+
+  renv_load_libpaths(project)
+
+  lockfile <- renv_lockfile_load(project)
+  if (length(lockfile))
+    renv_load_python(project, lockfile$Python)
+
+  invisible(project)
+
 }
 
 renv_load_r <- function(project, fields) {
@@ -297,6 +311,63 @@ renv_load_sandbox <- function(project) {
 
 renv_load_python <- function(project, fields) {
 
+  python <- tryCatch(
+    renv_load_python_impl(project, fields),
+    error = function(e) {
+      warning(e)
+      NULL
+    }
+  )
+
+  if (is.null(python))
+    return(FALSE)
+
+  # set environment variables
+  # - RENV_PYTHON is the version of Python renv was configured to use
+  # - RETICULATE_PYTHON used to configure version of Python used by reticulate
+  Sys.setenv(
+    RENV_PYTHON       = python,
+    RETICULATE_PYTHON = python
+  )
+
+  # place python + relevant utilities on the PATH
+  bindir <- normalizePath(dirname(python), mustWork = FALSE)
+  renv_envvar_prepend("PATH", bindir)
+
+  # on Windows, for conda environments, we may also have a Scripts directory
+  # which will need to be pre-pended to the PATH
+  if (renv_platform_windows()) {
+    scriptsdir <- file.path(bindir, "Scripts")
+    if (file.exists(scriptsdir))
+      renv_envvar_prepend("PATH", scriptsdir)
+  }
+
+  # for conda environments, we should try to find conda and place the conda
+  # executable on the PATH, in case users want to use conda e.g. from
+  # the terminal or even via R system calls
+  #
+  # we'll also need to set some environment variables to ensure that conda
+  # uses this environment by default
+  info <- renv_python_info(python)
+  if (identical(info$type, "conda")) {
+    conda <- renv_conda_find(python)
+    if (file.exists(conda)) {
+      renv_envvar_prepend("PATH", dirname(conda))
+      Sys.setenv(CONDA_PREFIX = info$root)
+    }
+  }
+
+  TRUE
+
+}
+
+renv_load_python_impl <- function(project, fields) {
+
+  # if RENV_PYTHON is already set, just use it
+  python <- Sys.getenv("RENV_PYTHON", unset = NA)
+  if (!is.na(python))
+    return(python)
+
   # set a default reticulate Python environment path
   components <- c(project, renv_profile_prefix(), "renv/python/r-reticulate")
   envpath <- paste(components, collapse = "/")
@@ -304,51 +375,56 @@ renv_load_python <- function(project, fields) {
 
   # nothing more to do if no lockfile fields set
   if (is.null(fields))
-    return(FALSE)
+    return(NULL)
 
   # delegate based on type appropriately
   type <- fields$Type
   if (is.null(type))
-    return(FALSE)
+    return(NULL)
 
   python <- switch(type,
-    system     = renv_load_python_default(fields),
-    virtualenv = renv_load_python_env(fields, renv_use_python_virtualenv),
-    conda      = renv_load_python_env(fields, renv_use_python_condaenv),
+    system     = renv_load_python_default(project, fields),
+    virtualenv = renv_load_python_virtualenv(project, fields),
+    conda      = renv_load_python_condaenv(project, fields),
     stopf("unrecognized Python type '%s'", type)
   )
 
-  if (is.null(python))
-    return(FALSE)
-
-  Sys.setenv(RENV_PYTHON = python, RETICULATE_PYTHON = python)
-
-  if (type %in% c("virtualenv", "conda")) {
-    info <- renv_python_info(python)
-    Sys.setenv(RETICULATE_PYTHON_ENV = info$root)
-  }
-
-  TRUE
+  renv_path_canonicalize(python)
 
 }
 
-renv_load_python_default <- function(fields) {
+renv_load_python_default <- function(project, fields) {
+
+  # if 'Name' points to a valid copy of Python, use it
+  name <- fields$Name
+  if (!is.null(name) && file.exists(name))
+    return(name)
+
+  # otherwise, try to find a compatible version of Python
   renv_python_find(fields$Version)
+
 }
 
-renv_load_python_virtualenv <- function(fields) {
-  renv_load_python_env(fields, renv_use_python_virtualenv)
+renv_load_python_virtualenv <- function(project, fields) {
+
+  renv_use_python_virtualenv_impl(
+    project = project,
+    name    = fields[["Name"]]    %NA% NULL,
+    version = fields[["Version"]] %NA% NULL,
+    python  = fields[["Python"]]  %NA% NULL
+  )
+
 }
 
-renv_load_python_conda <- function(fields) {
-  renv_load_python_env(fields, renv_use_python_condaenv)
-}
+renv_load_python_condaenv <- function(project, fields) {
 
-renv_load_python_env <- function(fields, loader) {
-  project <- renv_project()
-  version <- fields$Version
-  name    <- fields$Name %NA% NULL
-  loader(project = project, version = version, name = name)
+  renv_use_python_condaenv_impl(
+    project = project,
+    name    = fields[["Name"]]    %NA% NULL,
+    version = fields[["Version"]] %NA% NULL,
+    python  = fields[["Python"]]  %NA% NULL
+  )
+
 }
 
 renv_load_switch <- function(project) {
@@ -419,24 +495,26 @@ renv_load_cache <- function(project) {
 
 }
 
+renv_load_quiet <- function() {
+  default <- identical(renv_verbose(), FALSE) || renv_session_quiet()
+  config$startup.quiet(default = default)
+}
+
 renv_load_finish <- function(project, lockfile) {
 
-  renv_load_report_project(project)
+  if (!renv_load_quiet()) {
+    renv_load_report_project(project)
+    renv_load_report_python(project)
+  }
+
   renv_load_report_updates(project)
   renv_load_report_synchronized(project, lockfile)
+
   renv_snapshot_auto_update(project = project)
 
 }
 
 renv_load_report_project <- function(project) {
-
-  quiet <- config$startup.quiet() %||% (
-    identical(renv_verbose(), FALSE) ||
-    renv_session_quiet()
-  )
-
-  if (quiet)
-    return()
 
   profile <- renv_profile_get()
   version <- renv_package_version("renv")
@@ -448,6 +526,17 @@ renv_load_report_project <- function(project) {
     fmt <- "* Project '%s' loaded. [renv %s]"
     vwritef(fmt, aliased_path(project), renv_package_version("renv"))
   }
+
+}
+
+renv_load_report_python <- function(project) {
+
+  python <- Sys.getenv("RENV_PYTHON", unset = NA)
+  if (is.na(python))
+    return(FALSE)
+
+  # fmt <- "* Using Python %s. [%s]"
+  # vwritef(fmt, renv_python_version(python), renv_python_type(python))
 
 }
 

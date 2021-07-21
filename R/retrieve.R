@@ -4,7 +4,7 @@
 # this routine retrieves a package + its dependencies, and as a side
 # effect populates the restore state's `retrieved` member with a
 # list of package records which can later be used for install
-renv_retrieve <- function(packages) {
+retrieve <- function(packages) {
 
   # confirm that we have restore state set up
   state <- renv_restore_state()
@@ -202,7 +202,7 @@ renv_retrieve_bitbucket <- function(record) {
   fmt <- "%s/repositories/%s/%s"
   url <- sprintf(fmt, origin, username, repo)
 
-  destfile <- renv_tempfile_path("renv-bitbucket-")
+  destfile <- renv_scope_tempfile("renv-bitbucket-")
   download(url, destfile = destfile, quiet = TRUE)
   json <- renv_json_read(destfile)
 
@@ -262,10 +262,17 @@ renv_retrieve_gitlab <- function(record) {
 
 renv_retrieve_git <- function(record) {
 
-  renv_git_preflight()
-
   path <- tempfile("renv-git-")
   ensure_directory(path)
+
+  renv_retrieve_git_impl(record, path)
+
+  renv_retrieve_successful(record, path)
+
+}
+
+renv_retrieve_git_impl <- function(record, path) {
+  renv_git_preflight()
 
   template <- c(
     "cd \"${DIR}\"",
@@ -298,9 +305,9 @@ renv_retrieve_git <- function(record) {
     stopf(fmt, record$Package, record$RemoteUrl, status)
   }
 
-  renv_retrieve_successful(record, path)
-
+  TRUE
 }
+
 
 renv_retrieve_local_find <- function(record, project = NULL) {
 
@@ -388,6 +395,15 @@ renv_retrieve_libpaths_impl <- function(record, libpath) {
   if (!compatible)
     return(FALSE)
 
+  # check that it was built for a compatible version of R
+  built <- desc[["Built"]]
+  if (is.null(built))
+    return(FALSE)
+
+  ok <- catch(renv_description_built_version(desc))
+  if (!identical(ok, TRUE))
+    return(FALSE)
+
   # OK: treat as restore from local source
   record$Source <- "Local"
   renv_retrieve_successful(record, source)
@@ -423,14 +439,15 @@ renv_retrieve_repos <- function(record) {
   )
 
   # only attempt to retrieve binaries when explicitly requested by user
-  if (!identical(getOption("pkgType"), "source"))
-  {
+  if (!identical(getOption("pkgType"), "source")) {
+
     # attempt to retrieve binaries from MRAN when enabled as well
     if (config$mran.enabled())
       methods <- c(renv_retrieve_repos_mran, methods)
 
     # prefer using default CRAN mirror over MRAN when possible
     methods <- c(renv_retrieve_repos_binary, methods)
+
   }
 
   # capture errors for reporting
@@ -447,8 +464,10 @@ renv_retrieve_repos <- function(record) {
       )
     )
 
-    if (inherits(status, "error"))
+    if (inherits(status, "error")) {
       warning(status)
+      next
+    }
 
     if (identical(status, TRUE))
       return(TRUE)
@@ -505,9 +524,9 @@ renv_retrieve_url <- function(record) {
 
 }
 
-renv_retrieve_repos_archive_name <- function(record, type) {
-  fmt <- "%s_%s%s"
-  sprintf(fmt, record$Package, record$Version, renv_package_ext(type))
+renv_retrieve_repos_archive_name <- function(record, type = "source") {
+  ext <- renv_package_ext(type)
+  paste0(record$Package, "_", record$Version, ext)
 }
 
 renv_retrieve_repos_mran <- function(record) {
@@ -577,7 +596,7 @@ renv_retrieve_repos_archive <- function(record) {
       next
 
     # attempt download
-    name <- renv_retrieve_name(record, ext = ".tar.gz")
+    name <- renv_retrieve_repos_archive_name(record, type = "source")
     status <- catch(renv_retrieve_repos_impl(record, "source", name, url))
     if (identical(status, TRUE))
       return(TRUE)
@@ -654,7 +673,8 @@ renv_retrieve_repos_impl <- function(record,
       renv_available_packages_entry(
         package = package,
         type    = type,
-        filter  = version
+        filter  = version,
+        prefer  = record[["Repository"]]
       )
     )
 
@@ -694,10 +714,18 @@ renv_retrieve_package <- function(record, url, path) {
     renv_condition_signal("renv.retrieve.error", status)
   }
 
-  # handle failures
-  if (inherits(status, "error") || identical(status, FALSE))
-    return(status)
+  # handle FALSE returns (shouldn't normally happen?)
+  if (identical(status, FALSE)) {
+    fmt <- "an unknown error occurred installing '%s' (%s)"
+    msg <- sprintf(fmt, record$Package, renv_record_format_remote(record))
+    status <- simpleError(msg)
+  }
 
+  # handle errors
+  if (inherits(status, "error"))
+    stop(status)
+
+  # handle success
   renv_retrieve_successful(record, path)
 
 }
@@ -732,7 +760,7 @@ renv_retrieve_successful <- function(record, path, install = TRUE) {
   # ensure its dependencies are retrieved as well
   if (state$recursive)
     for (package in unique(deps$Package))
-      renv_retrieve(package)
+      retrieve(package)
 
   # mark package as requiring install if needed
   if (install)
@@ -794,8 +822,12 @@ renv_retrieve_handle_remotes <- function(record) {
         next
     }
 
-    # update the record
-    state$records[[package]] <- remote
+    # only update the record if we don't have an existing instance
+    # of the record. the intention here is that remotes specified in,
+    # say, the project DESCRIPTION file should take precedence over
+    # remotes defined by packages themselves. there is some obvious
+    # potential for breakage here though
+    state$records[[package]] <- state$records[[package]] %||% remote
 
   }
 

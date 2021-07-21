@@ -8,7 +8,7 @@ test_that("all renv paths live within tempdir() during tests", {
 })
 
 test_that("the cache path can be set through an environment variable", {
-  cachepath <- renv_tempfile_path("renv-cache-")
+  cachepath <- renv_scope_tempfile("renv-cache-")
   renv_scope_envvars(RENV_PATHS_CACHE = cachepath)
   expect_true(startswith(renv_paths_cache(), cachepath))
 })
@@ -70,5 +70,14 @@ test_that("UTF-8 paths can be normalized", {
   expected <- path
   actual   <- renv_path_normalize(path)
   expect_equal(expected, actual)
+
+})
+
+test_that("our fallback R_user_dir() implementation is compatible", {
+
+  skip_if(getRversion() < "4.0.0")
+  actual   <- renv_paths_root_default_impl_fallback()
+  expected <- tools::R_user_dir("renv", which = "cache")
+  expect_true(renv_path_same(actual, expected))
 
 })

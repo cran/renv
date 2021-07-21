@@ -59,9 +59,28 @@ test_that("we can parse a variety of remotes", {
   expect_equal(record$RemoteRef, "master")
   expect_equal(record$RemoteSha, "958296dbbbf7f1d82f7f5dd1b121c7558604809f")
 
+  # git - https
+  record <- renv_remotes_resolve("git::https://github.com/kevinushey/renv.git1.git@main")
+  expect_equal(record$Package, "renv.git1")
+  expect_equal(record$Version, "0.0.0.9000")
+  expect_equal(record$RemoteUrl, "https://github.com/kevinushey/renv.git1.git")
+  expect_equal(record$RemoteRef, "main")
+
+  # # git - ssh
+  # # this test appears to fail on CI (ssh access to GitHub disallowed?)
+  # record <- renv_remotes_resolve("git::git@github.com:kevinushey/renv.git1.git@main")
+  # expect_equal(record$Package, "renv.git1")
+  # expect_equal(record$Version, "0.0.0.9000")
+  # expect_equal(record$RemoteUrl, "git@github.com:kevinushey/renv.git1.git")
+  # expect_equal(record$RemoteRef, "main")
+
   # error
   expect_error(renv_remotes_resolve("can't parse this"))
 
+})
+
+test_that("git remotes with subdirectories &/or pull requests can be resolved!", {
+  skip("Need to make test repos")
 })
 
 test_that("subdirectories are parsed in remotes", {
@@ -117,5 +136,52 @@ test_that("paths specified with '.' are treated as local", {
   entry <- renv_remotes_resolve(".")
   expect_equal(entry$Package, "test")
   expect_equal(entry$Version, "1.0")
+
+})
+
+test_that("packages can be installed from GitLab groups", {
+
+  # test parsing of entry
+  entry <- "gitlab::renv-group/renv-subgroup/subpackage"
+  parsed <- renv_remotes_parse(entry)
+
+  expected <- list(
+    entry  = entry,
+    type   = "gitlab",
+    host   = NULL,
+    user   = "renv-group",
+    repo   = "renv-subgroup/subpackage",
+    subdir = NULL,
+    pull   = NULL,
+    ref    = NULL
+  )
+
+  expect_equal(parsed, expected)
+
+  # test installation
+  skip_sometimes()
+  renv_tests_scope()
+  renv::install(entry)
+  expect_true(renv_package_installed("subpackage"))
+
+})
+
+test_that("remote entries referencing packages in sub-sub-directories are parsed correctly", {
+
+  entry <- "github::user/repo/subdir/subsubdir"
+  parsed <- renv_remotes_parse(entry)
+
+  expected <- list(
+    entry  = entry,
+    type   = "github",
+    host   = NULL,
+    user   = "user",
+    repo   = "repo",
+    subdir = "subdir/subsubdir",
+    pull   = NULL,
+    ref    = NULL
+  )
+
+  expect_equal(parsed, expected)
 
 })
