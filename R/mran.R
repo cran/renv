@@ -67,7 +67,7 @@ renv_mran_database_save <- function(database, path = NULL) {
 
 renv_mran_database_load <- function(path = NULL) {
   path <- path %||% renv_mran_database_path()
-  renv_filebacked("mran", path, renv_mran_database_load_impl)
+  filebacked("mran", path, renv_mran_database_load_impl)
 }
 
 renv_mran_database_load_impl <- function(path) {
@@ -223,7 +223,7 @@ renv_mran_database_refresh_required <- function() {
   }
 
   # read the file mtime
-  info <- file.info(path)
+  info <- renv_file_info(path)
   if (is.na(info$mtime))
     return(FALSE)
 
@@ -276,8 +276,10 @@ renv_mran_database_sync <- function(platform, version) {
     return(FALSE)
 
   # invoke update for missing dates
+  vwritef("==> Synchronizing MRAN database (%s/%s)", platform, version)
   dates <- as.Date(seq(last + 1L, now, by = 1L), origin = "1970-01-01")
   renv_mran_database_update(platform, version, dates)
+  vwritef("Finished synchronizing MRAN database (%s/%s)", platform, version)
 
   # return TRUE to indicate update occurred
   return(TRUE)

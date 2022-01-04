@@ -75,6 +75,26 @@ renv_tests_root_impl <- function(path = getwd()) {
 
 }
 
+renv_tests_init_envvars <- function() {
+
+  Sys.unsetenv("RENV_PROFILE")
+  Sys.unsetenv("RENV_PROJECT")
+  Sys.unsetenv("RENV_PATHS_ROOT")
+  Sys.unsetenv("RENV_PATHS_LIBRARY")
+  Sys.unsetenv("RENV_PATHS_LIBRARY_ROOT")
+  Sys.unsetenv("RENV_PATHS_RENV")
+
+  Sys.unsetenv("RENV_PYTHON")
+  Sys.unsetenv("RETICULATE_PYTHON")
+  Sys.unsetenv("RETICULATE_PYTHON_ENV")
+  Sys.unsetenv("RETICULATE_PYTHON_FALLBACK")
+
+  envvars <- Sys.getenv()
+  configvars <- grep("^RENV_CONFIG_", names(envvars), value = TRUE)
+  Sys.unsetenv(configvars)
+
+}
+
 renv_tests_init_workarounds <- function() {
 
   if (renv_platform_macos()) {
@@ -211,7 +231,7 @@ renv_tests_init_packages <- function() {
 renv_tests_init_packages_find <- function() {
   fields <- c("Depends", "Imports", "Suggests", "LinkingTo")
   descpath <- system.file("DESCRIPTION", package = "renv")
-  deps <- renv_dependencies_discover_description(descpath, fields = fields)
+  deps <- renv_dependencies_discover_description(descpath, fields)
   deps[["Package"]]
 }
 
@@ -235,8 +255,13 @@ renv_tests_init_packages_load_impl <- function(package, envir) {
     return()
 
   # try to load the package
-  if (!package %in% loadedNamespaces())
-    loadNamespace(package)
+  if (!package %in% loadedNamespaces()) {
+    if (!requireNamespace(package, quietly = TRUE)) {
+      fmt <- "Failed to load package '%s' (required for testing)"
+      writef(fmt, package)
+      return()
+    }
+  }
 
   # try to find this package
   pkgpath <- renv_package_find(package)
@@ -294,17 +319,7 @@ renv_tests_init <- function() {
   if (renv_tests_running())
     return()
 
-  Sys.unsetenv("RENV_PROFILE")
-  Sys.unsetenv("RENV_PATHS_ROOT")
-  Sys.unsetenv("RENV_PATHS_LIBRARY")
-  Sys.unsetenv("RENV_PATHS_LIBRARY_ROOT")
-  Sys.unsetenv("RENV_CONFIG_CACHE_ENABLED")
-
-  Sys.unsetenv("RENV_PYTHON")
-  Sys.unsetenv("RETICULATE_PYTHON")
-  Sys.unsetenv("RETICULATE_PYTHON_ENV")
-  Sys.unsetenv("RETICULATE_PYTHON_FALLBACK")
-
+  renv_tests_init_envvars()
   renv_tests_init_workarounds()
   renv_tests_init_working_dir()
   renv_tests_init_options()
@@ -322,8 +337,7 @@ renv_tests_running <- function() {
 renv_tests_verbose <- function() {
 
   # if we're not running tests, mark as true
-  running <- renv_tests_running()
-  if (!running)
+  if (!renv_tests_running())
     return(TRUE)
 
   # otherwise, respect option

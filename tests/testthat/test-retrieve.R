@@ -254,6 +254,8 @@ test_that("explicit path to binary packages work", {
 
 test_that("remotes::install_local() records are handled", {
 
+  renv_scope_envvars(RENV_PATHS_LOCAL = "")
+
   record <- list(
     Package    = "skeleton",
     Version    = "1.0.1",
@@ -343,4 +345,11 @@ test_that("we respect the default branch for gitlab repositories", {
   skip_on_cran()
   remote <- renv_remotes_resolve("gitlab::kevinushey/main")
   expect_equal(remote$RemoteRef, "main")
+})
+
+test_that("renv can retrieve the latest release associated with a project", {
+  skip_on_cran()
+  skip_on_ci()
+  remote <- renv_remotes_resolve("rstudio/keras@*release")
+  expect_true(is.list(remote))
 })

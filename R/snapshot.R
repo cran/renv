@@ -76,6 +76,10 @@
 #' @param type The type of snapshot to perform. See **Snapshot Type** for
 #'   more details.
 #'
+#' @param repos The \R repositories to be recorded in the lockfile. Defaults
+#'   to the currently active package repositories, as retrieved by
+#'   `getOption("repos")`.
+#'
 #' @param packages A vector of packages to be included in the lockfile. When
 #'   `NULL` (the default), all packages relevant for the type of snapshot being
 #'   performed will be included. When set, the `type` argument is ignored.
@@ -101,6 +105,7 @@ snapshot <- function(project  = NULL,
                      library  = NULL,
                      lockfile = paths$lockfile(project = project),
                      type     = settings$snapshot.type(project = project),
+                     repos    = getOption("repos"),
                      packages = NULL,
                      prompt   = interactive(),
                      force    = FALSE,
@@ -115,7 +120,11 @@ snapshot <- function(project  = NULL,
   project <- renv_project_resolve(project)
   renv_scope_lock(project = project)
 
-  renv_activate_prompt("snapshot", library, prompt, project)
+  repos <- renv_repos_validate(repos)
+  renv_scope_options(repos = repos)
+
+  if (!is.null(lockfile))
+    renv_activate_prompt("snapshot", library, prompt, project)
 
   libpaths <- library %||% renv_libpaths_all()
   if (config$snapshot.validate())
@@ -314,15 +323,16 @@ renv_snapshot_validate_bioconductor <- function(project, lockfile, libpaths) {
   # check that Bioconductor packages are from correct release
   version <-
     lockfile$Bioconductor$Version %||%
-    renv_bioconductor_version()
+    renv_bioconductor_version(project = project)
 
-  renv_scope_options(repos = renv_bioconductor_repos(version = version))
+  biocrepos <- renv_bioconductor_repos(version = version)
+  renv_scope_options(repos = biocrepos)
 
   # collect Bioconductor records
   bioc <- records %>%
     filter(function(record) renv_record_source(record) == "bioconductor") %>%
     map(function(record) record[c("Package", "Version")]) %>%
-    bind_list()
+    bind()
 
   # collect latest versions of these packages
   bioc$Latest <- vapply(bioc$Package, function(package) {
@@ -468,7 +478,7 @@ renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, li
 
   })
 
-  bad <- bind_list(bad)
+  bad <- bind(bad)
   if (empty(bad))
     return(TRUE)
 
@@ -476,7 +486,7 @@ renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, li
   requires <- sprintf("%s (%s %s)", bad$Package, bad$Require, bad$Version)
   request  <- bad$Requested
 
-  fmt <- "'%s' requires '%s', but version '%s' will be snapshotted"
+  fmt <- "%s requires %s, but version %s is installed"
   txt <- sprintf(fmt, format(package), format(requires), format(request))
 
   if (!renv_tests_running()) {
@@ -586,7 +596,7 @@ renv_snapshot_r_library_diagnose_broken_link <- function(library, pkgs) {
   renv_pretty_print(
     basename(pkgs)[broken],
     "The following package(s) have broken symlinks into the cache:",
-    "Consider reinstalling these packages."
+    "Use `renv::repair()` to try and reinstall these packages."
   )
 
   pkgs[!broken]
@@ -633,26 +643,46 @@ renv_snapshot_r_library_diagnose_missing_description <- function(library, pkgs) 
 
 renv_snapshot_description <- function(path = NULL, package = NULL) {
 
+  # read DESCRIPTION file
   path <- path %||% renv_package_find(package)
   dcf <- catch(renv_description_read(path, package))
   if (inherits(dcf, "error"))
     return(dcf)
 
+  # figure out the package source
   source <- renv_snapshot_description_source(dcf)
   dcf[names(source)] <- source
-  dcf[["Hash"]] <- renv_hash_description(path)
 
-  fields <- c("Package", "Version", "Source")
-  missing <- renv_vector_diff(fields, names(dcf))
+  # check for required fields
+  required <- c("Package", "Version", "Source")
+  missing <- renv_vector_diff(required, names(dcf))
   if (length(missing)) {
     fmt <- "required fields %s missing from DESCRIPTION at path '%s'"
     msg <- sprintf(fmt, paste(shQuote(missing), collapse = ", "), path)
     return(simpleError(msg))
   }
 
+  # generate a hash
+  dcf[["Hash"]] <- renv_hash_description(path)
+
+  # normalize whitespace in some dependency fields
+  fields <- c("Depends", "Imports", "LinkingTo")
+  for (field in fields) {
+    if (!is.null(dcf[[field]])) {
+      parts <- strsplit(dcf[[field]], "\\s*,\\s*", perl = TRUE)[[1L]]
+      parts <- gsub("\\s+", " ", parts, perl = TRUE)
+      dcf[[field]] <- parts[nzchar(parts)]
+    }
+  }
+
+  # only keep relevant fields
+  git <- grep("^git", names(dcf), value = TRUE)
   remotes <- grep("^Remote", names(dcf), value = TRUE)
-  all <- c(fields, "Repository", "OS_type", remotes, "Hash")
+  extra <- c("Repository", "OS_type")
+  all <- c(required, fields, extra, remotes, git, "Hash")
   keep <- renv_vector_intersect(all, names(dcf))
+
+  # return as list
   as.list(dcf[keep])
 
 }
@@ -683,6 +713,9 @@ renv_snapshot_description_source <- function(dcf) {
   # still, this has the awkward side-effect of a package's source potentially
   # depending on what repositories happen to be active at the time of snapshot,
   # so it'd be nice to tighten up the logic here if possible
+  #
+  # NOTE: local sources are also searched here as part of finding the 'latest'
+  # available package, so we need to handle local packages discovered here
   entry <- local({
     renv_scope_options(renv.verbose = FALSE)
     catch(renv_available_packages_latest(package))
@@ -690,19 +723,20 @@ renv_snapshot_description_source <- function(dcf) {
 
   if (!inherits(entry, "error")) {
 
-    # check for and handle local repositories
-    repos <- entry[["Repository"]]
-    if (identical(repos, "Local"))
-      return(list(Source = "Local"))
+    # check for entry in cellar
+    source <- entry[["Source"]]
+    if (identical(source, "Cellar"))
+      return(list(Source = "Cellar"))
 
     # otherwise, treat as regular entry
+    repos <- entry[["Repository"]]
     return(list(Source = "Repository", Repository = repos))
 
   }
 
-  location <- catch(renv_retrieve_local_find(dcf))
+  location <- catch(renv_retrieve_cellar_find(dcf))
   if (!inherits(location, "error"))
-    return(list(Source = "Local"))
+    return(list(Source = "Cellar"))
 
   list(Source = "unknown")
 

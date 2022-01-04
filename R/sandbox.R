@@ -46,7 +46,8 @@ renv_sandbox_activate_impl <- function(project) {
   syslibs <- renv_path_normalize(syslibs, winslash = "/", mustWork = FALSE)
 
   # generate the sandbox
-  sandbox <- file.path(tempdir(), "renv-system-library")
+  default <- file.path(tempdir(), "renv-system-library")
+  sandbox <- Sys.getenv("RENV_PATHS_SANDBOX", unset = default)
   ensure_directory(sandbox)
   renv_sandbox_generate(sandbox)
 
@@ -78,7 +79,7 @@ renv_sandbox_activate_check <- function(libs) {
 
   danger <-
     exists(".First", envir = envir, inherits = FALSE) &&
-    !is.na(Sys.getenv("RENV_R_INITIALIZING", unset = NA))
+    identical(getOption("renv.autoloader.running"), TRUE)
 
   if (!danger)
     return(FALSE)

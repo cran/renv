@@ -142,10 +142,10 @@ dependencies <- function(
   )
 
   if (empty(deps) || nrow(deps) == 0L)
-    return(deps)
+    return(renv_dependencies_list_empty())
 
-  if (identical(dev, FALSE))
-    deps <- deps[!deps$Dev, ]
+  # drop NAs, and only keep 'dev' dependencies if requested
+  deps <- deps[deps$Dev %in% c(dev, FALSE), ]
 
   deps
 }
@@ -229,6 +229,7 @@ renv_dependencies_callback <- function(path) {
     "DESCRIPTION"   = function(path) renv_dependencies_discover_description(path),
     "_bookdown.yml" = function(path) renv_dependencies_discover_bookdown(path),
     "_pkgdown.yml"  = function(path) renv_dependencies_discover_pkgdown(path),
+    "_quarto.yml"   = function(path) renv_dependencies_discover_quarto(path),
     "renv.lock"     = function(path) renv_dependencies_discover_renv_lock(path),
     "rsconnect"     = function(path) renv_dependencies_discover_rsconnect(path)
   )
@@ -236,26 +237,26 @@ renv_dependencies_callback <- function(path) {
   cbext <- list(
     ".rproj"       = function(path) renv_dependencies_discover_rproj(path),
     ".r"           = function(path) renv_dependencies_discover_r(path),
-    ".qmd"         = function(path) renv_dependencies_discover_multimode(path, "rmd"),
+    ".qmd"         = function(path) renv_dependencies_discover_multimode(path, "qmd"),
     ".rmd"         = function(path) renv_dependencies_discover_multimode(path, "rmd"),
     ".rmarkdown"   = function(path) renv_dependencies_discover_multimode(path, "rmd"),
     ".rnw"         = function(path) renv_dependencies_discover_multimode(path, "rnw")
   )
 
-  cbname[[basename(path)]] %||% cbext[[tolower(fileext(path))]] %||% {
-    if (is_r_executable(path)) function(path) renv_dependencies_discover_r(path)
+  name <- basename(path)
+  ext  <- tolower(fileext(path))
+
+  callback <- cbname[[name]] %||% cbext[[ext]]
+  if (!is.null(callback))
+    return(callback)
+
+  # for files without an extension, check if those might be executable by R
+  if (!nzchar(ext)) {
+    shebang <- renv_file_shebang(path)
+    if (grepl("\\b(?:R|r|Rscript)\\b", shebang))
+      return(function(path) renv_dependencies_discover_r(path))
   }
 
-}
-
-is_r_executable <- function(path) {
-  # don't check executability via `file.access` since this is implemented
-  # differently on Windows, and would thus lead to different dependencies being
-  # discovered across platforms
-  if (nzchar(fileext(path)))
-    return(FALSE)
-
-  grepl("\\b(R|r|Rscript)\\b", renv_file_shebang(path))
 }
 
 renv_dependencies_find_extra <- function(root) {
@@ -265,17 +266,18 @@ renv_dependencies_find_extra <- function(root) {
     return(NULL)
 
   # only run for root-level dependency checks
-  if (!renv_path_same(root, renv_project_resolve()))
+  project <- renv_project_resolve()
+  if (!renv_path_same(root, project))
     return(NULL)
 
   # only run if we have a custom profile
-  prefix <- renv_profile_prefix()
-  if (is.null(prefix))
+  profile <- renv_profile_get()
+  if (is.null(profile))
     return(NULL)
 
-  # collect deps
-  path <- file.path(root, prefix)
-  renv_dependencies_find_impl(path, root, 0)
+  # look for dependencies in the associated 'renv' folder
+  path <- renv_paths_renv(project = project)
+  renv_dependencies_find_impl(path, root, 0L)
 
 }
 
@@ -288,7 +290,7 @@ renv_dependencies_find <- function(path = getwd(), root = getwd()) {
 renv_dependencies_find_impl <- function(path, root, depth) {
 
   # check file type
-  info <- file.info(path, extra_cols = FALSE)
+  info <- renv_file_info(path)
 
   # the file might have been removed after listing -- if so, just ignore it
   if (is.na(info$isdir))
@@ -308,8 +310,8 @@ renv_dependencies_find_impl <- function(path, root, depth) {
 renv_dependencies_find_dir <- function(path, root, depth) {
 
   # check if this path should be ignored
-  path <- renv_renvignore_exec(path, root, path)
-  if (empty(path))
+  excluded <- renv_renvignore_exec(path, root, path)
+  if (excluded)
     return(character())
 
   # check if we've already scanned this directory
@@ -353,8 +355,11 @@ renv_dependencies_find_dir_children <- function(path, root, depth) {
   ignored <- c("renv", "packrat", "revdep", if (depth) "DESCRIPTION")
   children <- children[!basename(children) %in% ignored]
 
-  # exclude ignored paths
-  renv_renvignore_exec(path, root, children)
+  # compute exclusions
+  excluded <- renv_renvignore_exec(path, root, children)
+
+  # keep only non-excluded children
+  children[!excluded]
 
 }
 
@@ -375,7 +380,7 @@ renv_dependencies_discover <- function(paths, progress, errors) {
   deps <- lapply(paths, discover)
   vwritef("Done!")
 
-  bind_list(deps)
+  bind(deps)
   # nocov end
 
 }
@@ -432,9 +437,11 @@ renv_dependencies_discover_renv_lock <- function(path) {
   renv_dependencies_list(path, "renv")
 }
 
-renv_dependencies_discover_description <- function(path, fields = NULL) {
-
-  dcf <- catch(renv_description_read(path))
+renv_dependencies_discover_description <- function(path,
+                                                   fields = NULL,
+                                                   subdir = NULL)
+{
+  dcf <- catch(renv_description_read(path = path, subdir = subdir))
   if (inherits(dcf, "error"))
     return(renv_dependencies_error(path, error = dcf))
 
@@ -444,6 +451,7 @@ renv_dependencies_discover_description <- function(path, fields = NULL) {
     renv_dependencies_discover_description_fields() %||%
     c("Depends", "Imports", "LinkingTo")
 
+  # build pattern used to split DESCRIPTION fields
   pattern <- paste0(
     "([a-zA-Z0-9._]+)",                      # package name
     "(?:\\s*\\(([><=]+)\\s*([0-9.-]+)\\))?"  # optional version specification
@@ -497,7 +505,7 @@ renv_dependencies_discover_description <- function(path, fields = NULL) {
 
   })
 
-  bind_list(data)
+  bind(data)
 
 }
 
@@ -525,16 +533,19 @@ renv_dependencies_discover_description_fields <- function() {
 
 }
 
-renv_dependencies_discover_pkgdown <- function(path) {
+renv_dependencies_discover_bookdown <- function(path) {
+  # TODO: other dependencies to parse from bookdown?
+  renv_dependencies_list(path, "bookdown")
+}
 
+renv_dependencies_discover_pkgdown <- function(path) {
   # TODO: other dependencies to parse from pkgdown?
   renv_dependencies_list(path, "pkgdown")
 }
 
-renv_dependencies_discover_bookdown <- function(path) {
-
-  # TODO: other dependencies to parse from bookdown?
-  renv_dependencies_list(path, "bookdown")
+renv_dependencies_discover_quarto <- function(path) {
+  # TODO: other dependencies to parse from quarto?
+  renv_dependencies_list(path, "quarto")
 }
 
 renv_dependencies_discover_rsconnect <- function(path) {
@@ -546,27 +557,50 @@ renv_dependencies_discover_multimode <- function(path, mode) {
   # TODO: find in-line R code?
   deps <- stack()
 
-  if (identical(mode, "rmd"))
-    deps$push(renv_dependencies_discover_rmd_yaml_header(path))
+  if (mode %in% c("rmd", "qmd"))
+    deps$push(renv_dependencies_discover_rmd_yaml_header(path, mode))
 
-  deps$push(renv_dependencies_discover_chunks(path))
+  deps$push(renv_dependencies_discover_chunks(path, mode))
 
-  bind_list(Filter(NROW, deps$data()))
+  bind(Filter(NROW, deps$data()))
 
 }
 
-renv_dependencies_discover_rmd_yaml_header <- function(path) {
+renv_dependencies_discover_rmd_yaml_header <- function(path, mode) {
 
-  for (package in c("rmarkdown", "yaml"))
-    if (!renv_dependencies_require(package, "R Markdown"))
-      return(renv_dependencies_list(path, packages = "rmarkdown"))
+  deps <- stack(mode = "character")
 
-  yaml <- catch(rmarkdown::yaml_front_matter(path))
+  # R Markdown documents always depend on rmarkdown
+  if (identical(mode, "rmd"))
+    deps$push("rmarkdown")
+
+  # try and read the document's YAML header
+  contents <- renv_file_read(path)
+  pattern <- "(?:^|\n)\\s*---\\s*(?:$|\n)"
+  matches <- gregexpr(pattern, contents, perl = TRUE)[[1L]]
+
+  # check that we have something that looks like a YAML header
+  ok <- length(matches) > 1L && matches[[1L]] == 1L
+  if (!ok)
+    return(renv_dependencies_list(path, packages = deps$data()))
+
+  # require yaml package for parsing YAML header
+  name <- case(
+    mode == "rmd" ~ "R Markdown",
+    mode == "qmd" ~ "Quarto Markdown"
+  )
+
+  # validate that we actually have the yaml package available
+  if (!renv_dependencies_require("yaml", name)) {
+    packages <- deps$data()
+    return(renv_dependencies_list(path, packages))
+  }
+
+  # extract YAML text
+  yamltext <- substring(contents, matches[[1L]] + 4L, matches[[2L]] - 1L)
+  yaml <- catch(renv_yaml_load(yamltext))
   if (inherits(yaml, "error"))
     return(renv_dependencies_error(path, error = yaml, packages = "rmarkdown"))
-
-  deps <- stack()
-  deps$push("rmarkdown")
 
   # check for Shiny runtime
   runtime <- yaml[["runtime"]] %||% ""
@@ -580,58 +614,94 @@ renv_dependencies_discover_rmd_yaml_header <- function(path) {
   if (is.list(server) && identical(server[["type"]], "shiny"))
     deps$push("shiny")
 
-  # check for custom output function from another package
-  for (output in list(yaml[["output"]], yaml[["site"]])) {
+  pattern <- renv_regexps_package_name()
 
-    # if the output is named, then the output is mapping the
-    # function name to the parameters to be used; use names
-    output <- names(output) %||% output
+  # check recursively for package usages of the form 'package::method'
+  recurse(yaml, function(node, stack) {
 
-    # skip non-character arguments
-    if (!is.character(output))
-      next
+    # look for keys of the form 'package::method'
+    values <- c(names(node), if (pstring(node)) node)
+    for (value in values) {
+      parts <- strsplit(value, ":{2,3}")[[1L]]
+      if (length(parts) == 2L) {
+        name <- parts[[1L]]
+        if (grepl(pattern, name))
+          deps$push(parts[[1L]])
+      }
+    }
 
-    # parse calls of the form <package>::<function>
-    parts <- strsplit(output, ":{2,3}")
-    map(parts, function(part) {
-      if (length(part) == 2L)
-        deps$push(part[[1L]])
-    })
-
-  }
+  })
 
   # check for dependency on bslib
   theme <- catchall(yaml[[c("output", "html_document", "theme")]])
   if (!inherits(theme, "error") && is.list(theme))
     deps$push("bslib")
 
-  packages <- as.character(deps$data())
+  # check for parameterized documents
+  status <- catch(renv_dependencies_discover_rmd_yaml_header_params(yaml, deps))
+  if (inherits(status, "error"))
+    renv_error_report(status)
+
+  # get list of dependencies
+  packages <- deps$data()
   renv_dependencies_list(path, packages)
+
+}
+
+renv_dependencies_discover_rmd_yaml_header_params <- function(yaml, deps) {
+
+  # check for declared params
+  params <- yaml[["params"]]
+  if (!is.list(params))
+    return()
+
+  # infer dependency on shiny
+  deps$push("shiny")
+
+  # iterate through params, parsing dependencies from R code
+  for (param in params) {
+
+    # check for r types
+    type <- attr(param, "type", exact = TRUE)
+    if (!identical(type, "r"))
+      next
+
+    # attempt to parse dependencies
+    rdeps <- catch(renv_dependencies_discover_r(text = param))
+    if (inherits(rdeps, "error"))
+      next
+
+    # add each dependency
+    for (package in sort(unique(rdeps$Package)))
+      deps$push(package)
+
+  }
 
 }
 
 renv_dependencies_discover_chunks_ignore <- function(chunk) {
 
   # if renv.ignore is set, respect it
-  ignore <- chunk$params$renv.ignore
+  ignore <- chunk$params[["renv.ignore"]]
   if (!is.null(ignore))
     return(truthy(ignore))
 
   # skip non-R chunks
-  engine <- chunk$params$engine
-  if (!(identical(engine, "r") || identical(engine, "rscript")))
+  engine <- chunk$params[["engine"]]
+  ok <- is.character(engine) && engine %in% c("r", "rscript")
+  if (!ok)
     return(TRUE)
 
   # skip un-evaluated chunks
-  if (!truthy(chunk$params$eval, default = TRUE))
+  if (!truthy(chunk$params[["eval"]], default = TRUE))
     return(TRUE)
 
   # skip learnr exercises
-  if (truthy(chunk$params$exercise, default = FALSE))
+  if (truthy(chunk$params[["exercise"]], default = FALSE))
     return(TRUE)
 
   # skip chunks whose labels end in '-display'
-  label <- chunk$params$label %||% ""
+  label <- chunk$params[["label"]] %||% ""
   if (grepl("-display$", label))
     return(TRUE)
 
@@ -640,18 +710,15 @@ renv_dependencies_discover_chunks_ignore <- function(chunk) {
 
 }
 
-renv_dependencies_discover_chunks <- function(path) {
-
-  # ensure 'knitr' is installed / available
-  if (!renv_dependencies_require("knitr", "multi-mode"))
-    return(list())
+renv_dependencies_discover_chunks <- function(path, mode) {
 
   # figure out the appropriate begin, end patterns
   type <- tolower(tools::file_ext(path))
   if (type %in% c("rmd", "qmd", "rmarkdown"))
     type <- "md"
 
-  patterns <- knitr::all_patterns[[type]]
+  allpatterns <- renv_knitr_patterns()
+  patterns <- allpatterns[[type]]
   if (is.null(patterns)) {
     condition <- simpleCondition("not a recognized multi-mode R document")
     return(renv_dependencies_error(path, error = condition))
@@ -704,7 +771,20 @@ renv_dependencies_discover_chunks <- function(path) {
   # check for dependencies in inline chunks as well
   ideps <- renv_dependencies_discover_chunks_inline(path, contents)
 
-  deps <- bind_list(list(cdeps, ideps))
+  # if this is a .qmd, infer a dependency on rmarkdown if we have any R chunks
+  qdeps <- NULL
+  if (mode %in% "qmd") {
+    for (chunk in chunks) {
+      engine <- chunk$params[["engine"]]
+      if (is.character(engine) && engine %in% c("r", "rscript")) {
+        qdeps <- renv_dependencies_list(path, "rmarkdown")
+        break
+      }
+    }
+  }
+
+  # paste them all together
+  deps <- bind(list(cdeps, ideps, qdeps))
   if (is.null(deps))
     return(deps)
 
@@ -768,7 +848,7 @@ renv_dependencies_discover_chunks_ranges <- function(path, contents, patterns) {
     renv_dependencies_error(path, error = error)
   }
 
-  bind_list(output)
+  bind(output)
 
 }
 
@@ -788,19 +868,8 @@ renv_dependencies_discover_rproj <- function(path) {
 
 renv_dependencies_discover_r <- function(path = NULL,
                                          text = NULL,
-                                         expr = NULL)
-{
-  packages <- renv_dependencies_discover_r_impl(path, text, expr)
-  if (empty(packages))
-    return(list())
-
-  renv_dependencies_list(path, packages)
-}
-
-renv_dependencies_discover_r_impl <- function(path  = NULL,
-                                              text  = NULL,
-                                              expr  = NULL,
-                                              envir = NULL)
+                                         expr = NULL,
+                                         envir = NULL)
 {
   expr <- case(
     is.function(expr)  ~ body(expr),
@@ -851,8 +920,8 @@ renv_dependencies_discover_r_impl <- function(path  = NULL,
 
   })
 
-  ls(envir = envir, all.names = TRUE)
-
+  packages <- ls(envir = envir, all.names = TRUE)
+  renv_dependencies_list(path, packages)
 }
 
 renv_dependencies_discover_r_methods <- function(node, stack, envir) {
@@ -1156,10 +1225,10 @@ renv_dependencies_discover_r_targets <- function(node, stack, envir) {
     error = identity
   )
 
-  if (inherits(packages, "error")) {
-    warning(packages)
+  # TODO: evaluation can fail for a multitude of reasons;
+  # are any of these worth signalling to the user?
+  if (inherits(packages, "error"))
     return(TRUE)
-  }
 
   if (is.character(packages))
     for (package in packages)
@@ -1180,19 +1249,135 @@ renv_dependencies_discover_r_glue <- function(node, stack, envir) {
   nm <- names(args) %||% rep.int("", length(args))
   strings <- args[!nzchar(nm) & map_lgl(args, is.character)]
 
-  # construct pattern
-  open  <- node$.open  %||% "{"
-  close <- node$.close %||% "}"
-  pattern <- sprintf("\\Q%s\\E(.*?)\\Q%s\\E", open, close)
-
-  for (string in strings) {
-    m <- gregexpr(pattern, string, perl = TRUE)
-    matches <- unlist(regmatches(string, m), recursive = FALSE)
-    code <- substring(matches, 2L, nchar(matches) - 1L)
-    renv_dependencies_discover_r_impl(text = code, envir = envir)
-  }
+  # start iterating through the strings, looking for code chunks
+  for (string in strings)
+    renv_dependencies_discover_r_glue_impl(string, node, envir)
 
   TRUE
+
+}
+
+renv_dependencies_discover_r_glue_impl <- function(string, node, envir) {
+
+  # get open, close delimiters
+  ropen    <- charToRaw(node$.open    %||% "{")
+  rclose   <- charToRaw(node$.close   %||% "}")
+  rcomment <- charToRaw(node$.comment %||% "#")
+
+  # constants
+  rcomment   <- charToRaw("#")
+  rbackslash <- charToRaw("\\")
+  rquotes <- c(
+    charToRaw("'"),
+    charToRaw("\""),
+    charToRaw("`")
+  )
+
+  # iterate through characters in string
+  raw <- c(charToRaw(string), as.raw(0L))
+  i <- 0L
+  n <- length(raw)
+  quote <- raw()
+
+  # index for open delimiter match
+  index <- 0L
+  count <- 0L
+
+  while (i < n) {
+
+    # ensure we always advance index
+    i <- i + 1L
+
+    # handle quoted states
+    if (length(quote)) {
+
+      # skip escaped characters
+      if (raw[[i]] == rbackslash) {
+        i <- i + 1L
+        next
+      }
+
+      # check for escape from quote
+      if (raw[[i]] == quote) {
+        quote <- raw()
+        next
+      }
+
+    }
+
+    # skip comments
+    if (raw[[i]] == rcomment) {
+      i <- grepRaw("(?:$|\n)", raw, i)
+      next
+    }
+
+    # skip escaped characters
+    if (raw[[i]] == rbackslash) {
+      i <- i + 1L
+      next
+    }
+
+    # check for quotes
+    idx <- match(raw[[i]], rquotes, nomatch = 0L)
+    if (idx > 0) {
+      quote <- rquotes[[idx]]
+      next
+    }
+
+    # check for open delimiter
+    if (i %in% grepRaw(ropen, raw, i, fixed = TRUE)) {
+
+      # check for duplicate (escape)
+      j <- i + length(ropen)
+      if (j %in% grepRaw(ropen, raw, j, fixed = TRUE)) {
+        i <- j + length(ropen) - 1L
+        next
+      }
+
+      # save index if we're starting a match
+      if (count == 0L) {
+        index <- i
+      }
+
+      # increment match count
+      count <- count + 1L
+      next
+
+    }
+
+    # check for close delimiter
+    if (i %in% grepRaw(rclose, raw, i, fixed = TRUE)) {
+
+      # check for duplicate (escape)
+      j <- i + length(rclose)
+      if (j %in% grepRaw(rclose, raw, j, fixed = TRUE)) {
+        i <- j + length(rclose) - 1L
+        next
+      }
+
+      if (count > 0L) {
+
+        # decrement count if we have a match
+        count <- count - 1L
+
+        # check for match and parse dependencies within
+        if (count == 0L) {
+
+          # extract inner code
+          lhs <- index + length(ropen)
+          rhs <- i - 1L
+          code <- rawToChar(raw[lhs:rhs])
+
+          # parse dependencies
+          deps <- renv_dependencies_discover_r(text = code, envir = envir)
+
+        }
+
+      }
+
+    }
+
+  }
 
 }
 
@@ -1291,7 +1476,7 @@ renv_dependencies_list <- function(source,
                                    dev = FALSE)
 {
   if (empty(packages))
-    return(list())
+    return(renv_dependencies_list_empty())
 
   source <- source %||% rep.int(NA_character_, length(packages))
 
@@ -1306,10 +1491,25 @@ renv_dependencies_list <- function(source,
 
 }
 
+renv_dependencies_list_empty <- function() {
+
+  data.frame(
+    Source  = character(),
+    Package = character(),
+    Require = character(),
+    Version = character(),
+    Dev     = logical(),
+    stringsAsFactors = FALSE
+  )
+
+}
+
+
 renv_dependencies_discover_parse_params <- function(header, type) {
 
   engine <- "r"
-  rest <- sub(knitr::all_patterns[[type]]$chunk.begin, "\\1", header)
+  patterns <- renv_knitr_patterns()
+  rest <- sub(patterns[[type]]$chunk.begin, "\\1", header)
 
   # if this is an R Markdown document, parse the initial engine chunk
   if (type == "md") {
@@ -1466,6 +1666,8 @@ renv_dependencies_scope <- function(path, action, .envir = NULL) {
 
   envir <- .envir %||% parent.frame()
   defer(rm(list = path, envir = `_renv_dependencies`), envir = envir)
+
+  invisible(deps)
 
 }
 

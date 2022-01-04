@@ -13,7 +13,9 @@ checkout(
 )
 }
 \arguments{
-\item{repos}{The \R package repositories to check out.}
+\item{repos}{The \R package repositories to check out. When \code{NULL} (the default),
+\code{renv} will attempt to determine the packages used in the project via
+a call to \code{\link[=dependencies]{dependencies()}}.}
 
 \item{...}{Unused arguments, reserved for future expansion. If any arguments
 are matched to \code{...}, \code{renv} will signal an error.}
@@ -30,8 +32,6 @@ be used. If no project is currently active, then the current working
 directory is used instead.}
 }
 \description{
-\code{renv::checkout()} can be used to install and use the latest packages
-available from the requested repositories. This can be useful for cleaning
-up a library which has become a mish-mash of packages installed from a
-variety of disparate sources.
+\code{renv::checkout()} can be used to install the latest packages available from
+the requested repositories.
 }

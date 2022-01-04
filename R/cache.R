@@ -27,17 +27,15 @@ renv_cache_find <- function(record) {
   if (!is.null(record$Hash)) {
 
     # generate path to package installations in cache
-    path <- with(record, renv_paths_cache(Package, Version, Hash, Package))
+    paths <- with(record, renv_paths_cache(Package, Version, Hash, Package))
 
     # if there are multiple cache entries, return the first existing one
     # if no entries exist, return path into first cache entry
-    if (length(path) > 1L) {
-      existing <- filter(path, file.exists)
-      if (length(existing))
-        path <- existing[[1L]]
-    }
+    for (path in paths)
+      if (file.exists(path))
+        return(path)
 
-    return(path[[1L]])
+    return(paths[[1L]])
 
   }
 
@@ -195,9 +193,12 @@ renv_cache_synchronize_impl <- function(cache, record, linkable, path) {
 }
 
 renv_cache_list <- function(cache = NULL, packages = NULL) {
+  caches <- cache %||% renv_paths_cache()
+  paths <- map(caches, renv_cache_list_impl, packages = packages)
+  unlist(paths, recursive = TRUE, use.names = FALSE)
+}
 
-  # get path to cache
-  cache <- cache %||% renv_paths_cache()
+renv_cache_list_impl <- function(cache, packages) {
 
   # paths to packages in the cache have the following format:
   #
@@ -449,7 +450,7 @@ renv_cache_diagnose <- function(verbose = NULL) {
   paths <- renv_cache_diagnose_bad_hash(paths, problems, verbose)
   paths <- renv_cache_diagnose_wrong_built_version(paths, problems, verbose)
 
-  invisible(bind_list(problems$data()))
+  invisible(bind(problems$data()))
 
 }
 
@@ -480,7 +481,17 @@ renv_cache_clean_empty <- function(cache = NULL) {
     return(FALSE)
 
   # move to cache root
-  cache <- cache %||% renv_paths_cache()
+  caches <- cache %||% renv_paths_cache()
+  for (cache in caches)
+    renv_cache_clean_empty_impl(cache)
+
+  TRUE
+
+}
+
+renv_cache_clean_empty_impl <- function(cache) {
+
+  # move to cache directory
   owd <- setwd(cache)
   on.exit(setwd(owd), add = TRUE)
 
@@ -516,11 +527,39 @@ renv_cache_package_validate <- function(path) {
 }
 
 renv_cache_config_enabled <- function(project) {
-  config$cache.enabled() && settings$use.cache()
+  config$cache.enabled() && settings$use.cache(project = project)
 }
 
 renv_cache_config_symlinks <- function(project) {
-  config$cache.symlinks() && settings$use.cache()
+
+  usesymlinks <-
+    config$cache.symlinks() %||%
+    renv_cache_config_symlinks_default(project = project)
+
+  usesymlinks && settings$use.cache(project = project)
+
+}
+
+renv_cache_config_symlinks_default <- function(project) {
+
+  # on linux, we can always use symlinks
+  if (renv_platform_unix())
+    return(TRUE)
+
+  # on Windows, only try to use symlinks (junction points) if the cache
+  # and the project library appear to live on the same drive
+  libpath <- renv_paths_library(project = project)
+  cachepath <- renv_paths_cache()
+
+  # TODO: with this change, anyone using networks not mapped to a local drive
+  # would need to opt-in to using symlinks, but that's probably okay?
+  all(
+    substring(libpath, 1L, 2L) == substring(cachepath, 1L, 2L),
+    substring(libpath, 2L, 2L) == ":",
+    substring(cachepath, 2L, 2L) == ":"
+  )
+
+
 }
 
 renv_cache_linkable <- function(project, library) {

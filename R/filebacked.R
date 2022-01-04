@@ -48,7 +48,7 @@ renv_filebacked_set <- function(scope, path, value) {
   stopifnot(renv_path_absolute(path))
 
   # create our cache entry
-  info <- file.info(path, extra_cols = FALSE)
+  info <- renv_file_info(path)
   entry <- list(value = value, info = info)
 
   # store it
@@ -75,7 +75,7 @@ renv_filebacked_get <- function(scope, path) {
   # extract pieces of interest
   value   <- entry$value
   oldinfo <- entry$info
-  newinfo <- file.info(path, extra_cols = FALSE)
+  newinfo <- renv_file_info(path)
 
   # if the file didn't exist when we set the entry,
   # check and see if it's still not there
@@ -96,7 +96,7 @@ renv_filebacked_envir <- function(scope) {
   get(scope, envir = `_renv_filebacked`)
 }
 
-renv_filebacked <- function(scope, path, callback, ...) {
+filebacked <- function(scope, path, callback, ...) {
 
   # don't use filebacked cache when disabled
   config <- config$filebacked.cache()

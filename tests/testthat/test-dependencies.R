@@ -22,16 +22,12 @@ test_that("usages of library, etc. are properly handled", {
 })
 
 test_that("parse errors are okay in .Rmd documents", {
-  skip_if_not_installed("knitr")
-  skip_if_not_installed("rmarkdown")
   deps <- dependencies("resources/chunk-errors.Rmd", quiet = TRUE)
   pkgs <- deps$Package
   expect_setequal(pkgs, c("rmarkdown", "dplyr"))
 })
 
 test_that("inline chunks are parsed for dependencies", {
-  skip_if_not_installed("knitr")
-  skip_if_not_installed("rmarkdown")
   deps <- dependencies("resources/inline-chunks.Rmd")
   pkgs <- deps$Package
   expect_setequal(pkgs, c("rmarkdown", "inline", "multiple", "separate"))
@@ -51,8 +47,6 @@ test_that("the package name is validated when inferring dependencies", {
 })
 
 test_that("empty chunks don't cause issues during dependency resolution", {
-  skip_if_not_installed("knitr")
-  skip_if_not_installed("rmarkdown")
   deps <- dependencies("resources/empty-chunk.Rmd")
   pkgs <- deps$Package
   expect_setequal(pkgs, c("rmarkdown"))
@@ -103,8 +97,6 @@ test_that("renv warns when large number of files found", {
 })
 
 test_that("evil knitr chunks are handled", {
-  skip_if_not_installed("knitr")
-  skip_if_not_installed("rmarkdown")
   deps <- dependencies("resources/evil.Rmd")
   packages <- deps$Package
   expect_setequal(packages, c("rmarkdown", "a", "b"))
@@ -147,9 +139,6 @@ test_that("dependencies can infer the root directory", {
 
 test_that("no warnings are produced when crawling dependencies", {
 
-  skip_if_not_installed("knitr")
-  skip_if_not_installed("rmarkdown")
-
   expect_warning(
     regexp = NA,
     dependencies(
@@ -185,9 +174,6 @@ test_that("packages referenced by modules::import() are discovered", {
 })
 
 test_that("dependencies specified in R Markdown site generators are found", {
-
-  skip_if_not_installed("knitr")
-  skip_if_not_installed("rmarkdown")
 
   renv_tests_scope()
   writeLines(
@@ -249,21 +235,6 @@ test_that("recursive symlinks are handled", {
 
 })
 
-test_that(".renvignore can be used to ignore all but certain files", {
-
-  renv_tests_scope()
-
-  writeLines(c("*", "!dependencies.R"), con = ".renvignore")
-  writeLines("library(oatmeal)", con = "script.R")
-  writeLines("library(bread)", con = "dependencies.R")
-
-  deps <- dependencies(quiet = TRUE)
-
-  expect_true("bread" %in% deps$Package)
-  expect_false("oatmeal" %in% deps$Package)
-
-})
-
 test_that("exercise chunks are ignored", {
   deps <- dependencies("resources/learnr-exercise.Rmd")
   expect_true("A" %in% deps$Package)
@@ -313,7 +284,8 @@ test_that("multiple output formats are handled", {
 
 test_that("glue::glue() package usages are found", {
   deps <- dependencies("resources/glue.R", progress = FALSE)
-  expect_true(all(c("A", "B", "C") %in% deps$Package))
+  expect_true(all(c("A", "B", "C", "D", "E", "F", "G") %in% deps$Package))
+  expect_false(any(letters %in% deps$Package))
 })
 
 test_that("set_engine() package usages are found", {
@@ -352,4 +324,67 @@ test_that("utility script dependencies are discovered", {
 test_that("we handle shiny_prerendered documents", {
   deps <- dependencies("resources/shiny-prerendered.Rmd", progress = FALSE)
   expect_true("shiny" %in% deps$Package)
+})
+
+test_that("we don't infer a dependency on rmarkdown for empty .qmd", {
+  deps <- dependencies("resources/quarto-empty.qmd", progress = FALSE)
+  expect_true(is.null(deps) || !"rmarkdown" %in% deps$Package)
+})
+
+test_that("we do infer dependency on rmarkdown for .qmd with R chunks", {
+  deps <- dependencies("resources/quarto-r-chunks.qmd", progress = FALSE)
+  expect_true("rmarkdown" %in% deps$Package)
+})
+
+test_that("we parse package references from arbitrary yaml fields", {
+  deps <- dependencies("resources/rmd-base-format.Rmd", progress = FALSE)
+  expect_true("bookdown" %in% deps$Package)
+  expect_true("rticles" %in% deps$Package)
+})
+
+test_that("dependencies in parameterized documents are discovered", {
+  deps <- dependencies("resources/params.Rmd", progress = FALSE)
+  expect_true(all(c("shiny", "A") %in% deps$Package))
+  expect_false("B" %in% deps$Package)
+})
+
+test_that("dependencies in hidden folders are not scoured", {
+  renv_tests_scope()
+
+  dir.create(".hidden")
+  writeLines("library(A)", con = ".hidden/deps.R")
+
+  deps <- dependencies(progress = FALSE)
+  expect_false("A" %in% deps$Package)
+
+  writeLines("!.hidden", con = ".renvignore")
+  deps <- dependencies(progress = FALSE)
+  expect_true("A" %in% deps$Package)
+
+})
+
+test_that("dependencies() doesn't barf on files without read permission", {
+
+  skip_on_windows()
+  renv_tests_scope()
+
+  dir.create("secrets")
+  writeLines("library(dplyr)", con = "secrets/secrets.R")
+  Sys.chmod("secrets/secrets.R", mode = "0000")
+
+  expect_error(renv_file_read("secrets/secrets.R"))
+  deps <- dependencies(quiet = TRUE)
+  expect_true(NROW(deps) == 0L)
+
+})
+
+test_that("dependencies() doesn't barf on malformed DESCRIPTION files", {
+
+  skip_on_windows()
+  renv_tests_scope()
+
+  writeLines("Depends: A, B\n\nImports: C, D", con = "DESCRIPTION")
+  deps <- dependencies(quiet = TRUE)
+  expect_setequal(deps$Package, c("A", "B", "C", "D"))
+
 })

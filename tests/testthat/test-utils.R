@@ -11,63 +11,6 @@ test_that("common utils work as expected", {
     expect_error(git())
 })
 
-test_that("bind_list handles named lists", {
-
-  data <- list(
-    alpha = list(A = 1, B = 2),
-    beta  = list(A = 3, B = 4),
-    gamma = list(A = 5, B = 6)
-  )
-
-  actual <- bind_list(data)
-  expected <- data.frame(
-    Index = names(data),
-    A = c(1, 3, 5),
-    B = c(2, 4, 6),
-    stringsAsFactors = FALSE
-  )
-
-  expect_equal(actual, expected)
-
-})
-
-test_that("bind_list warns on name collision", {
-  data <- list(alpha = list(Index = 1), beta = list(Index = 2))
-  expect_error(bind_list(data))
-})
-
-test_that("bind_list() handles data.frames with potentially different names", {
-
-  data <- list(
-    a = data.frame(A = 1, B = 2),
-    b = data.frame(A = 1, C = 3)
-  )
-
-  bound <- bind_list(data)
-  expected <- data.frame(
-    Index = c("a", "b"),
-    A     = c(1, 1),
-    B     = c(2, NA),
-    C     = c(NA, 3),
-    stringsAsFactors = FALSE
-  )
-
-  expect_identical(bound, expected)
-
-})
-
-test_that("bind_list() preserves order where possible", {
-
-  data <- list(
-    a = data.frame(A = 1,        C = 3),
-    b = data.frame(A = 1, B = 2, C = 3)
-  )
-
-  bound <- bind_list(data)
-  expect_equal(names(bound), c("Index", "A", "B", "C"))
-
-})
-
 test_that("versions are compared as expected", {
 
   expect_equal(renv_version_compare("0.1.0", "0.2.0"), -1L)
@@ -129,3 +72,47 @@ test_that("sink captures both stdout and stderr", {
 
 
 })
+
+test_that("find() returns first non-null matching value", {
+
+  data <- list(x = 1, y = 2, z = 3)
+
+  value <- find(data, function(datum) {
+    if (datum == 2)
+      return(42)
+  })
+  expect_equal(value, 42)
+
+  value <- find(data, function(datum) {
+    if (datum == 4)
+      return(42)
+  })
+  expect_null(value)
+
+})
+
+test_that("recursing() reports if we're recursing", {
+
+  f <- function(i) {
+
+    if (recursing())
+      expect_true(i == 2)
+    else
+      expect_true(i == 1)
+
+
+    if (i < 2)
+      f(i + 1)
+
+    if (recursing())
+      expect_true(i == 2)
+    else
+      expect_true(i == 1)
+
+  }
+
+  f(1)
+
+
+})
+

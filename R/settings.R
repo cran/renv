@@ -57,7 +57,7 @@ renv_settings_decode <- function(name, value) {
 }
 
 renv_settings_read <- function(path) {
-  renv_filebacked("settings", path, renv_settings_read_impl)
+  filebacked("settings", path, renv_settings_read_impl)
 }
 
 renv_settings_read_impl <- function(path) {
@@ -99,6 +99,11 @@ renv_settings_get <- function(project, name = NULL) {
     names(settings) <- names
     return(settings[order(names(settings))])
   }
+
+  # check for an override via option
+  override <- renv_options_override("renv.settings", name)
+  if (!is.null(override))
+    return(override)
 
   # try to read settings file
   path <- renv_settings_path(project)
@@ -245,6 +250,16 @@ renv_settings_impl <- function(name, validate, default, update) {
 #'
 #' \describe{
 #'
+#' \item{\code{bioconductor.version}}{
+#'
+#'   The Bioconductor version to be used with this project. Use this if you'd
+#'   like to lock the version of Bioconductor used on a per-project basis.
+#'   When unset, `renv` will try to infer the appropriate Bioconductor release
+#'   using the `BiocVersion` package if installed; if not, `renv` uses
+#'   `BiocManager::version()` to infer the appropriate Bioconductor version.
+#'
+#' }
+#'
 #' \item{\code{external.libraries}}{
 #'
 #'   A vector of library paths, to be used in addition to the project's own
@@ -294,11 +309,19 @@ renv_settings_impl <- function(name, validate, default, update) {
 #'
 #' \item{\code{use.cache}}{
 #'
-#'   Use a global cache of \R packages. When active, `renv` will install
-#'   packages into a global cache, and link packages from the cache into your
-#'   `renv` projects as appropriate. This can greatly save on disk space
+#'   Enable the `renv` package cache with this project. When active, `renv` will
+#'   install packages into a global cache, and link packages from the cache into
+#'   your `renv` projects as appropriate. This can greatly save on disk space
 #'   and install time when for \R packages which are used across multiple
 #'   projects in the same environment.
+#'
+#' }
+#'
+#' \item{\code{vcs.ignore.local}}{
+#'
+#'   Set whether packages within a project-local package cellar are excluded
+#'   from version control. See `vignette("cellar", package = "renv")` for
+#'   more information.
 #'
 #' }
 #'
@@ -310,7 +333,8 @@ renv_settings_impl <- function(name, validate, default, update) {
 #'
 #' \item{\code{vcs.ignore.local}}{
 #'
-#'   Set whether `renv` project-specific local sources are excluded from version control.
+#'   Set whether `renv` project-specific local sources are excluded from version
+#'   control.
 #'
 #' }
 #'
@@ -346,6 +370,13 @@ renv_settings_impl <- function(name, validate, default, update) {
 #'
 #' }
 settings <- list(
+
+  bioconductor.version = renv_settings_impl(
+    name     = "bioconductor.version",
+    validate = is.character,
+    default  = character(),
+    update   = NULL
+  ),
 
   ignored.packages = renv_settings_impl(
     name     = "ignored.packages",
@@ -387,6 +418,13 @@ settings <- list(
     validate = is.logical,
     default  = TRUE,
     update   = renv_settings_updated_cache
+  ),
+
+  vcs.ignore.cellar = renv_settings_impl(
+    name     = "vcs.ignore.cellar",
+    validate = is.logical,
+    default  = TRUE,
+    update   = renv_settings_updated_ignore
   ),
 
   vcs.ignore.library = renv_settings_impl(

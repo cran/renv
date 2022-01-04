@@ -1,4 +1,22 @@
 
+`_renv_root` <- NULL
+
+renv_paths_override <- function(name) {
+
+  # # check for value from option
+  # optname <- paste("renv.paths", name, sep = ".")
+  # optval <- getOption(optname)
+  # if (!is.null(optval))
+  #   return(optval)
+
+  # check for value from envvar
+  envname <- paste("RENV_PATHS", toupper(name), sep = "_")
+  envval  <- Sys.getenv(envname, unset = NA)
+  if (!is.na(envval))
+    return(envval)
+
+}
+
 renv_paths_common <- function(name, prefixes = NULL, ...) {
 
   # check for single absolute path supplied by user
@@ -7,16 +25,11 @@ renv_paths_common <- function(name, prefixes = NULL, ...) {
   if (length(end) == 1 && renv_path_absolute(end))
     return(end)
 
-  # compute root path
-  envvar <- paste("RENV_PATHS", toupper(name), sep = "_")
-  root <-
-    Sys.getenv(envvar, unset = NA) %NA%
-    renv_paths_root(name)
+  # check for path provided via option
+  root <- renv_paths_override(name) %||% renv_paths_root(name)
 
-  # check if the cache consists of multiple paths, if yes then split the paths
-  # this allows mixing read-only and read+write cache directories.
-  # https://github.com/rstudio/renv/issues/628
-  if (identical(name, "cache")) {
+  # split path entries containing a separator
+  if (name %in% c("cache", "local", "cellar")) {
     pattern <- if (renv_platform_windows()) "[;]" else "[;:]"
     root <- strsplit(root, pattern)[[1L]]
   }
@@ -47,15 +60,38 @@ renv_paths_library <- function(..., project = NULL) {
 }
 
 renv_paths_lockfile <- function(project = NULL) {
+
+  # allow override
+  # TODO: profiles?
+  override <- Sys.getenv("RENV_PATHS_LOCKFILE", unset = NA)
+  if (!is.na(override)) {
+    last <- substr(override, nchar(override), nchar(override))
+    if (last %in% c("/", "\\"))
+      override <- paste0(override, "renv.lock")
+    return(override)
+  }
+
+  # otherwise, use default location (location location relative to renv folder)
   project <- renv_project_resolve(project)
-  components <- c(project, renv_profile_prefix(), "renv.lock")
-  paste(components, collapse = "/")
+  renv <- renv_paths_renv(project = project)
+  file.path(dirname(renv), "renv.lock")
+
 }
 
 renv_paths_settings <- function(project = NULL) {
-  project <- renv_project_resolve(project)
-  components <- c(project, renv_profile_prefix(), "renv/settings.dcf")
-  paste(components, collapse = "/")
+  renv_paths_renv("settings.dcf", project = project)
+}
+
+renv_paths_activate <- function(project = NULL) {
+  renv_paths_renv("activate.R", profile = FALSE, project = project)
+}
+
+renv_paths_renv <- function(..., profile = TRUE, project = NULL) {
+  renv_bootstrap_paths_renv(..., profile = profile, project = project)
+}
+
+renv_paths_cellar <- function(...) {
+  renv_paths_common("cellar", c(), ...)
 }
 
 renv_paths_local <- function(...) {
@@ -78,17 +114,12 @@ renv_paths_cache <- function(..., version = NULL) {
 
 renv_paths_rtools <- function(...) {
 
-  root <- Sys.getenv("RENV_PATHS_RTOOLS", unset = NA)
-  if (!is.na(root))
-    return(root)
+  root <- renv_paths_override("rtools")
+  if (is.null(root)) {
+    spec <- renv_rtools_find()
+    root <- spec$root
+  }
 
-  # TODO: this was a typo in a previous usage; preserved
-  # for backwards compatibility
-  root <- Sys.getenv("RENV_PATH_RTOOLS", unset = NA)
-  if (!is.na(root))
-    return(root)
-
-  spec <- renv_rtools_find()
   file.path(spec$root, ...) %||% ""
 
 }
@@ -104,17 +135,16 @@ renv_paths_mran <- function(...) {
 
 
 renv_paths_root <- function(...) {
-
-  root <-
-    Sys.getenv("RENV_PATHS_ROOT", unset = NA) %NA%
-    renv_paths_root_default()
-
+  root <- renv_paths_override("root") %||% renv_paths_root_default()
   file.path(root, ...) %||% ""
-
 }
 
 # nocov start
 renv_paths_root_default <- function() {
+
+  # if we have a cached root value, use it
+  if (!is.null(`_renv_root`))
+    return(`_renv_root`)
 
   # use tempdir for cache when running tests
   # this check is necessary here to support packages which might use renv
@@ -122,78 +152,55 @@ renv_paths_root_default <- function() {
   checking <-
     "CheckExEnv" %in% search() ||
     !is.na(Sys.getenv("_R_CHECK_PACKAGE_NAME_", unset = NA)) ||
+    !is.na(Sys.getenv("_R_CHECK_SIZE_OF_TARBALL_", unset = NA)) ||
     !is.na(Sys.getenv("TESTTHAT", unset = NA))
 
-  if (checking)
-    return(renv_paths_root_default_tempdir())
+  # compute the root directory
+  root <- if (checking)
+    renv_paths_root_default_tempdir()
+  else
+    renv_paths_root_default_impl()
 
-  # resolve path to cache
-  path <- renv_paths_root_default_impl()
+  # cache the value
+  renv_binding_replace("_renv_root", root, renv_envir_self())
 
-  # check for user consent
-  consenting <- identical(getOption("renv.consenting"), TRUE)
-  if (consenting)
-    return(path)
-
-  consented <- renv_consent_check()
-  if (consented) {
-    ensure_directory(path)
-    return(path)
-  }
-
-  # if this root directory has not yet been created, then use a path
-  # in the temporary directory instead (users must call renv::consent
-  # to create this path explicitly)
-  type <- renv_file_type(path, symlinks = FALSE)
-  if (type == "directory")
-    return(path)
-
-  if (renv_once()) {
-    renv_pretty_print(
-      aliased_path(path),
-      "The renv support directory has not yet been created:",
-      c(
-        "A temporary support directory will be used instead.",
-        "Please call `renv::consent()` to allow renv to generate the support directory.",
-        "Please restart the R session after providing consent."
-      ),
-      wrap = FALSE
-    )
-  }
-
-  renv_paths_root_default_tempdir()
+  # return it
+  invisible(`_renv_root`)
 
 }
 
 renv_paths_root_default_impl <- function() {
 
-  # support renv projects created with the old root location
-  oldroot <- switch(
-    Sys.info()[["sysname"]],
-    Darwin  = Sys.getenv("XDG_DATA_HOME", "~/Library/Application Support"),
-    Windows = Sys.getenv("LOCALAPPDATA", Sys.getenv("APPDATA")),
-    Sys.getenv("XDG_DATA_HOME", "~/.local/share")
+  # compute known root directories
+  roots <- c(
+    renv_paths_root_default_impl_v2(),
+    renv_paths_root_default_impl_v1()
   )
 
-  # if we've already initialized renv with the old location, use it
-  oldpath <- file.path(oldroot, "renv")
-  if (file.exists(oldpath))
-    return(oldpath)
+  # iterate through those roots, finding the first existing
+  for (root in roots)
+    if (file.exists(root))
+      return(root)
 
-  # try using tools to get the user directory
-  tools <- asNamespace("tools")
-  path <- catch(tools$R_user_dir("renv", which = "cache"))
-  if (!inherits(path, "error"))
-    return(path)
-
-  # try using our own backfill for older versions of R
-  renv_paths_root_default_impl_fallback()
+  # if none exist, choose the most recent definition
+  roots[[1L]]
 
 }
 
-renv_paths_root_default_impl_fallback <- function() {
+renv_paths_root_default_impl_v2 <- function() {
 
-  # check for R_USER_CACHE_DIR + XDG_CACHE_HOME overrides
+  # try using tools to get the user directory
+  tools <- renv_namespace_load("tools")
+  if (is.function(tools$R_user_dir))
+    return(tools$R_user_dir("renv", "cache"))
+
+  renv_paths_root_default_impl_v2_fallback()
+
+}
+
+renv_paths_root_default_impl_v2_fallback <- function() {
+
+  # try using our own backfill for older versions of R
   envvars <- c("R_USER_CACHE_DIR", "XDG_CACHE_HOME")
   for (envvar in envvars) {
     root <- Sys.getenv(envvar, unset = NA)
@@ -213,31 +220,26 @@ renv_paths_root_default_impl_fallback <- function() {
 
 }
 
+renv_paths_root_default_impl_v1 <- function() {
+
+  base <- switch(
+    Sys.info()[["sysname"]],
+    Darwin  = Sys.getenv("XDG_DATA_HOME", "~/Library/Application Support"),
+    Windows = Sys.getenv("LOCALAPPDATA", Sys.getenv("APPDATA")),
+    Sys.getenv("XDG_DATA_HOME", "~/.local/share")
+  )
+
+  file.path(base, "renv")
+
+}
+
 renv_paths_root_default_tempdir <- function() {
   temp <- file.path(tempdir(), "renv")
   ensure_directory(temp)
   return(temp)
 }
+
 # nocov end
-
-renv_paths_init <- function() {
-  renv_paths_init_envvars()
-}
-
-renv_paths_init_envvars <- function() {
-
-  envvars <- Sys.getenv()
-
-  keys <- grep("^RENV_PATHS_", names(envvars), value = TRUE)
-  keys <- setdiff(keys, c("RENV_PATHS_PREFIX", "RENV_PATHS_PREFIX_AUTO"))
-
-  if (empty(keys))
-    return(character())
-
-  args <- lapply(envvars[keys], normalizePath, winslash = "/", mustWork = FALSE)
-  do.call(Sys.setenv, args)
-
-}
 
 #' Path Customization
 #'
@@ -280,7 +282,7 @@ renv_paths_init_envvars <- function() {
 #' \code{RENV_PATHS_LIBRARY}         \tab The path to the project library. \cr
 #' \code{RENV_PATHS_LIBRARY_ROOT}    \tab The parent path for project libraries. \cr
 #' \code{RENV_PATHS_LIBRARY_STAGING} \tab The parent path used for staged package installs. \cr
-#' \code{RENV_PATHS_LOCAL}           \tab The path containing local package sources. \cr
+#' \code{RENV_PATHS_CELLAR}          \tab The cellar, containing local package binaries and sources. \cr
 #' \code{RENV_PATHS_SOURCE}          \tab The path containing downloaded package sources. \cr
 #' \code{RENV_PATHS_BINARY}          \tab The path containing downloaded package binaries. \cr
 #' \code{RENV_PATHS_CACHE}           \tab The path containing cached package installations. \cr
@@ -350,22 +352,23 @@ renv_paths_init_envvars <- function() {
 #'
 #' Please see ?[Startup] for more details.
 #'
-#' @section Local Sources:
+#' @section Package Cellar:
 #'
 #' If your project depends on one or \R packages that are not available in any
 #' remote location, you can still provide a locally-available tarball for `renv`
 #' to use during restore. By default, these packages should be made available in
-#' the folder as specified by the `RENV_PATHS_LOCAL` environment variable. The
+#' the folder as specified by the `RENV_PATHS_CELLAR` environment variable. The
 #' package sources should be placed in a file at one of these locations:
 #'
-#' - `${RENV_PATHS_LOCAL}/<package>_<version>.<ext>`
-#' - `${RENV_PATHS_LOCAL}/<package>/<package>_<version>.<ext>`
-#' - `<project>/renv/local/<package>_<version>.<ext>`
-#' - `<project>/renv/local/<package>/<package>_<version>.<ext>`
+#' - `${RENV_PATHS_CELLAR}/<package>_<version>.<ext>`
+#' - `${RENV_PATHS_CELLAR}/<package>/<package>_<version>.<ext>`
+#' - `<project>/renv/cellar/<package>_<version>.<ext>`
+#' - `<project>/renv/cellar/<package>/<package>_<version>.<ext>`
 #'
 #' where `.<ext>` is `.tar.gz` for source packages, or `.tgz` for binaries on
-#' macOS and `.zip` for binaries on Windows. During a `restore()`, packages
-#' installed from an unknown source will be searched for in this location.
+#' macOS and `.zip` for binaries on Windows. During `restore()`, `renv` will
+#' search the cellar for a compatible package, and prefer installation with
+#' that copy of the package if appropriate.
 #'
 #' @section Projects:
 #'

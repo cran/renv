@@ -11,6 +11,11 @@ renv_methods_map <- function() {
     renv_file_list_impl = c(
       unix  = "renv_file_list_impl_unix",
       win32 = "renv_file_list_impl_win32"
+    ),
+
+    renv_file_broken = c(
+      unix  = "renv_file_broken_unix",
+      win32 = "renv_file_broken_win32"
     )
 
   )
@@ -27,10 +32,10 @@ renv_methods_init <- function() {
   alts <- map(methods, `[[`, key)
 
   # update methods in namespace
-  renv <- asNamespace("renv")
+  envir <- renv_envir_self()
   enumerate(alts, function(name, alt) {
-    replacement <- eval(parse(text = alt), envir = renv)
-    assign(name, replacement, envir = renv)
+    replacement <- eval(parse(text = alt), envir = envir)
+    assign(name, replacement, envir = envir)
   })
 
 }

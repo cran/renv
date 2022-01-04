@@ -33,10 +33,18 @@
 #' renv::load()
 #'
 #' }
-load <- function(project = getwd(), quiet = FALSE) {
+load <- function(project = NULL, quiet = FALSE) {
 
   renv_scope_error_handler()
+
+  project <- project %||% renv_project_find(project)
   renv_scope_lock(project = project)
+
+  # if load is being called via the autoloader,
+  # then ensure RENV_PROJECT is unset
+  # https://github.com/rstudio/renv/issues/887
+  if (identical(getOption("renv.autoloader.running"), TRUE))
+    renv_project_clear()
 
   # if we're loading a project different from the one currently loaded,
   # then unload the current project and reload the requested one
@@ -73,6 +81,7 @@ load <- function(project = getwd(), quiet = FALSE) {
   if (length(lockfile)) {
     renv_load_r(project, lockfile$R)
     renv_load_python(project, lockfile$Python)
+    renv_load_bioconductor(project, lockfile$Bioconductor)
   }
 
   # allow failure to write infrastructure here to be non-fatal
@@ -123,7 +132,7 @@ renv_load_r <- function(project, fields) {
 
   # only compare major, minor versions
   if (!identical(requested[1:2], current[1:2])) {
-    fmt <- "Project requested R version '%s' but '%s' is currently being used"
+    fmt <- "This project is configured to use R version '%s', but '%s' is currently being used."
     warningf(fmt, version, getRversion())
   }
 
@@ -180,14 +189,24 @@ renv_load_path <- function(project) {
   # nocov start
   if (renv_platform_macos()) {
 
+    # read the current PATH
+    old <- renv_envvar_get("PATH", unset = "") %>%
+      strsplit(split = .Platform$path.sep, fixed = TRUE) %>%
+      unlist()
+
+    # get the new PATH entries
     files <- c(
-      "/etc/paths",
+      if (file.exists("/etc/paths")) "/etc/paths",
       list.files("/etc/paths.d", full.names = TRUE)
     )
 
-    PATH <- unique(uapply(files, readLines, warn = FALSE))
-    Sys.setenv(PATH = paste(PATH, collapse = .Platform$path.sep))
-    return(TRUE)
+    new <- uapply(files, readLines, warn = FALSE)
+
+    # mix them together, preferring things in /etc/paths
+    mix <- unique(c(new, old))
+
+    # update the PATH
+    Sys.setenv(PATH = paste(mix, collapse = .Platform$path.sep))
 
   }
   # nocov end
@@ -203,7 +222,8 @@ renv_load_renviron <- function(project) {
 
   environs <- c(
     renv_paths_root(".Renviron"),
-    Sys.getenv("R_ENVIRON_USER", unset = "~/.Renviron"),
+    if (config$user.environ())
+      Sys.getenv("R_ENVIRON_USER", unset = "~/.Renviron"),
     file.path(project, ".Renviron")
   )
 
@@ -211,8 +231,7 @@ renv_load_renviron <- function(project) {
     if (file.exists(environ))
       readRenviron(environ)
 
-  Sys.setenv(R_LIBS_SITE = .expand_R_libs_env_var(Sys.getenv("R_LIBS_SITE")))
-  Sys.setenv(R_LIBS_USER = .expand_R_libs_env_var(Sys.getenv("R_LIBS_USER")))
+  renv_envvars_normalize()
 
 }
 
@@ -224,8 +243,7 @@ renv_load_profile <- function(project) {
 
 renv_load_settings <- function(project) {
 
-  components <- c(project, renv_profile_prefix(), "renv/settings.R")
-  settings <- paste(components, collapse = "/")
+  settings <- renv_paths_renv("settings.R", project = project)
   if (!file.exists(settings))
     return(FALSE)
 
@@ -244,6 +262,17 @@ renv_load_project <- function(project) {
   project <- renv_path_normalize(project, winslash = "/")
   Sys.setenv(RENV_PROJECT = project)
 
+  # update project list if enabled
+  enabled <- renv_cache_config_enabled(project = project)
+  if (enabled)
+    renv_load_project_projlist(project)
+
+  TRUE
+
+}
+
+renv_load_project_projlist <- function(project) {
+
   # read project list
   projects <- renv_paths_root("projects")
   projlist <- character()
@@ -254,9 +283,13 @@ renv_load_project <- function(project) {
   if (project %in% projlist)
     return(TRUE)
 
-  # otherwise, update the project list
-  renv_scope_locale("LC_COLLATE", "C")
-  projlist <- sort(c(projlist, project))
+  # sort with C locale (ensure consistent sorting across OSes)
+  projlist <- local({
+    renv_scope_locale("LC_COLLATE", "C")
+    sort(c(projlist, project))
+  })
+
+  # update the project list
   ensure_parent_directory(projects)
   catchall(writeLines(enc2utf8(projlist), projects, useBytes = TRUE))
 
@@ -268,15 +301,24 @@ renv_load_rprofile <- function(project = NULL) {
 
   project <- renv_project_resolve(project)
 
-  enabled <- config$user.profile()
+  # bail if not enabled by user
+  enabled <- identical(config$user.profile(), TRUE)
   if (!enabled)
     return(FALSE)
 
-  renv_scope_libpaths()
+  # callr will manage sourcing of user profile, so don't try
+  # to source the user profile if we're in callr
+  callr <- Sys.getenv("CALLR_CHILD_R_LIBS", unset = NA)
+  if (!is.na(callr))
+    return(FALSE)
 
+  # check for existence of profile
   profile <- Sys.getenv("R_PROFILE_USER", unset = "~/.Rprofile")
-  if (file.exists(profile))
-    renv_load_rprofile_impl(profile)
+  if (!file.exists(profile))
+    return(FALSE)
+
+  renv_scope_libpaths()
+  renv_load_rprofile_impl(profile)
 
   TRUE
 
@@ -369,8 +411,7 @@ renv_load_python_impl <- function(project, fields) {
     return(python)
 
   # set a default reticulate Python environment path
-  components <- c(project, renv_profile_prefix(), "renv/python/r-reticulate")
-  envpath <- paste(components, collapse = "/")
+  envpath <- renv_paths_renv("python/r-reticulate", project = project)
   Sys.setenv(RETICULATE_MINICONDA_PYTHON_ENVPATH = envpath)
 
   # nothing more to do if no lockfile fields set
@@ -427,6 +468,29 @@ renv_load_python_condaenv <- function(project, fields) {
 
 }
 
+renv_load_bioconductor <- function(project, bioconductor) {
+
+  if (is.null(bioconductor) || getRversion() < "3.4")
+    return()
+
+  renv_bioconductor_init()
+  BiocManager <- renv_namespace_load("BiocManager")
+  if (is.null(BiocManager$.version_validate))
+    return()
+
+  status <- catch(BiocManager$.version_validate(bioconductor))
+  if (!inherits(status, "error"))
+    return()
+
+  fmt <- lines(
+    "This project is configured to use Bioconductor '%s', which is not compatible with R '%s'.",
+    "Use 'renv::init(bioconductor = TRUE)' to re-initialize this project with the latest Bioconductor release."
+  )
+
+  warningf(fmt, bioconductor, getRversion())
+
+}
+
 renv_load_switch <- function(project) {
 
   # safety check: avoid recursive unload attempts
@@ -437,8 +501,14 @@ renv_load_switch <- function(project) {
     return(project)
   }
 
+  # unset the RENV_PATHS_RENV environment variable
+  # TODO: is there a path forward if different projects use
+  # different RENV_PATHS_RENV paths?
+  renvpath <- renv_envvar_get("RENV_PATHS_RENV")
+  renv_envvar_clear("RENV_PATHS_RENV")
+
   # validate that this project has an activate script
-  script <- file.path(project, "renv/activate.R")
+  script <- renv_paths_activate(project = project)
   if (!file.exists(script)) {
     fmt <- "project %s has no activate script and so cannot be activated"
     stopf(fmt, renv_path_pretty(project))
@@ -461,13 +531,14 @@ renv_load_switch <- function(project) {
   on.exit(setwd(owd), add = TRUE)
 
   # source the activate script
-  source("renv/activate.R")
+  source(script)
 
   # check and see if renv was successfully loaded
   if (!"renv" %in% loadedNamespaces()) {
     fmt <- "could not load renv from project %s; reloading previously-loaded renv"
     warningf(fmt, renv_path_pretty(project))
     loadNamespace("renv", lib.loc = dirname(path))
+    renv_envvar_set("RENV_PATHS_RENV", renvpath)
     if (!is.na(pos)) {
       args <- list(package = "renv", pos = pos, character.only = TRUE)
       do.call(base::library, args)
@@ -481,8 +552,8 @@ renv_load_cache <- function(project) {
   if (!interactive())
     return(FALSE)
 
-  oldcache <- renv_paths_cache(version = renv_cache_version_previous())
-  newcache <- renv_paths_cache(version = renv_cache_version())
+  oldcache <- renv_paths_cache(version = renv_cache_version_previous())[[1L]]
+  newcache <- renv_paths_cache(version = renv_cache_version())[[1L]]
   if (!file.exists(oldcache) || file.exists(newcache))
     return(FALSE)
 

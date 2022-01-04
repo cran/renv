@@ -1,22 +1,61 @@
 
-renv_dcf_read <- function(file, ...) {
+# similar to base::read.dcf(), but:
+# - allows for whitespace between fields
+# - allows for non-indented field continuations
+# - always keeps whitespace
+renv_dcf_read <- function(file, text = NULL, ...) {
 
-  # if the file is empty, then nothing to do (guard against NA
-  # file sizes if for some reason the filesystem / OS doesn't report it)
-  if (is.character(file)) {
-    info <- file.info(file, extra_cols = FALSE)
-    if (identical(as.numeric(info$size), 0))
-      return(data.frame())
-  }
+  # read the file as binary first to get encoding
+  contents <- text %||% renv_dcf_read_impl(file, ...)
 
-  # older versions of R could mutate LC_CTYPE (without resetting it)
-  # when reading DCF files, so be sure to manage that here
-  ctype <- Sys.getlocale("LC_CTYPE")
-  on.exit(Sys.setlocale("LC_CTYPE", ctype), add = TRUE)
+  # look for tags
+  pattern <- "(?:^|\n)[^\\s][^:\n]*:"
+  matches <- gregexpr(pattern, contents, perl = TRUE)[[1L]]
 
-  # read the file
-  dcf <- as.data.frame(read.dcf(file, ...), stringsAsFactors = FALSE)
-  lapply(dcf, trimws)
+  # compute substring indices
+  starts <- matches
+  ends   <- c(tail(matches, n = -1L), nchar(contents))
+  parts <- substring(contents, starts, ends)
+
+  # read as property list
+  properties <- renv_properties_read(text = parts, dequote = FALSE)
+
+  # set encoding if necessary
+  if (identical(properties$Encoding, "UTF-8"))
+    properties[] <- lapply(properties, renv_encoding_mark, "UTF-8")
+
+  # return as data.frame
+  as.list(properties)
+
+}
+
+renv_dcf_read_impl <- function(file, ...) {
+
+  # first, read the file as bytes to get encoding
+  contents <- readBin(
+    con  = file,
+    what = "raw",
+    n    = renv_file_size(file)
+  )
+
+  # try to find encoding -- if none is declared, assume native encoding?
+  start <- grepRaw("(?:^|\n)Encoding:", contents)
+  if (empty(start))
+    return(rawToChar(contents))
+
+  # try to find the end of the encoding field
+  end   <- grepRaw("(?:\r?\n|$)", contents, offset = start + 1L)
+  field <- rawToChar(contents[start:end])
+
+  # parse it
+  properties <- renv_properties_read(text = field)
+
+  # now convert from this encoding to UTF-8
+  iconv(
+    x    = list(contents),
+    from = properties$Encoding,
+    to   = "UTF-8"
+  )
 
 }
 

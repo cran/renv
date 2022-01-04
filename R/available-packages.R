@@ -13,9 +13,12 @@ renv_available_packages <- function(type, repos = NULL, limit = NULL, quiet = FA
   # since those could effect (or even re-direct?) repository URLs
   envkeys <- c("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY")
   envvals <- Sys.getenv(envkeys, unset = NA)
-  key <- list(repos = repos, type = type, envvals)
 
-  renv_timecache(
+  # invalidate the cache if 'renv.download.headers' changes as well
+  headers <- getOption("renv.download.headers")
+  key <- list(repos = repos, type = type, headers = headers, envvals)
+
+  timecache(
     key     = key,
     value   = renv_available_packages_impl(type, repos, quiet),
     limit   = as.integer(limit),
@@ -154,12 +157,14 @@ renv_available_packages_success <- function(db, url) {
 
 renv_available_packages_entry <- function(package,
                                           type   = "source",
+                                          repos  = NULL,
                                           filter = NULL,
                                           quiet  = FALSE,
                                           prefer = NULL)
 {
 
   # if filter is a string, treat it as an explicit version requirement
+  version <- NULL
   if (is.character(filter)) {
     version <- filter
     filter <- function(entries) {
@@ -177,7 +182,11 @@ renv_available_packages_entry <- function(package,
   }
 
   # read available packages
-  dbs <- renv_available_packages(type = type, quiet = quiet)
+  dbs <- renv_available_packages(
+    type  = type,
+    repos = repos,
+    quiet = quiet
+  )
 
   # if a preferred repository is marked and available, prefer using that
   if (length(prefer) == 1L && prefer %in% names(dbs)) {
@@ -205,8 +214,14 @@ renv_available_packages_entry <- function(package,
 
   }
 
-  fmt <- "failed to find %s for package %s in active repositories"
-  stopf(fmt, type, package)
+  # report package + version if both available
+  pkgver <- if (length(version))
+    paste(package, version)
+  else
+    package
+
+  fmt <- "failed to find %s for '%s' in package repositories"
+  stopf(fmt, type, pkgver)
 
 }
 
@@ -230,9 +245,15 @@ renv_available_packages_record <- function(entry, type) {
   # otherwise, construct it
   record <- entry
 
-  record$Source     <- "Repository"
-  record$Repository <- entry$Name
-  record$Name       <- NULL
+  if (identical(record$Name, "__renv_cellar__")) {
+    record$Source     <- "Cellar"
+    record$Repository <- NULL
+    record$Name       <- NULL
+  } else {
+    record$Source     <- "Repository"
+    record$Repository <- entry$Name
+    record$Name       <- NULL
+  }
 
   attr(record, "type") <- type
   attr(record, "url")  <- entry$Repository
@@ -241,15 +262,21 @@ renv_available_packages_record <- function(entry, type) {
 
 }
 
-renv_available_packages_latest_repos_impl <- function(package, type) {
+renv_available_packages_latest_repos_impl <- function(package, type, repos) {
 
   # get available packages
-  dbs <- renv_available_packages(type = type, quiet = TRUE)
+  dbs <- renv_available_packages(
+    type  = type,
+    repos = repos,
+    quiet = TRUE
+  )
 
   # prepend local sources if available
-  local <- renv_available_packages_local(type = type)
-  if (!is.null(local))
-    dbs <- c(list(Local = local), dbs)
+  cellar <- renv_available_packages_cellar(type = type)
+  if (!is.null(cellar)) {
+    db <- list("__renv_cellar__" = cellar)
+    dbs <- c(db, dbs)
+  }
 
   fields <- c("Package", "Version", "OS_type", "NeedsCompilation", "Repository")
   entries <- bapply(dbs, function(db) {
@@ -314,25 +341,39 @@ renv_available_packages_latest_repos_impl <- function(package, type) {
 
 }
 
-renv_available_packages_latest <- function(package, type = NULL) {
-
+renv_available_packages_latest <- function(package,
+                                           type = NULL,
+                                           repos = NULL)
+{
   methods <- list(
     renv_available_packages_latest_repos,
     renv_available_packages_latest_mran
   )
 
+  errors <- stack()
+
   for (method in methods) {
-    entry <- catch(method(package, type))
-    if (!inherits(entry, "error") && is.list(entry))
-      return(entry)
+
+    entry <- catch(method(package, type, repos))
+    if (inherits(entry, "error")) {
+      errors$push(entry)
+      next
+    }
+
+    return(entry)
+
   }
 
-  stopf("package '%s' is not available", package)
+  for (error in errors$data())
+    warning(error)
 
+  stopf("package '%s' is not available", package)
 }
 
-renv_available_packages_latest_mran <- function(package, type = NULL) {
-
+renv_available_packages_latest_mran <- function(package,
+                                                type = NULL,
+                                                repos = NULL)
+{
   if (!config$mran.enabled())
     stop("MRAN is not enabled")
 
@@ -392,24 +433,25 @@ renv_available_packages_latest_mran <- function(package, type = NULL) {
   attr(record, "type") <- "binary"
 
   record
-
 }
 
-renv_available_packages_latest_repos <- function(package, type = NULL) {
-
+renv_available_packages_latest_repos <- function(package,
+                                                 type = NULL,
+                                                 repos = NULL)
+{
   type <- type %||% getOption("pkgType")
 
   # detect requests for only source packages
   if (identical(type, "source"))
-    return(renv_available_packages_latest_repos_impl(package, "source"))
+    return(renv_available_packages_latest_repos_impl(package, "source", repos))
 
   # detect requests for only binary packages
   if (grepl("\\bbinary\\b", type))
-    return(renv_available_packages_latest_repos_impl(package, "binary"))
+    return(renv_available_packages_latest_repos_impl(package, "binary", repos))
 
   # otherwise, check both source and binary repositories
-  src <- renv_available_packages_latest_repos_impl(package, "source")
-  bin <- renv_available_packages_latest_repos_impl(package, "binary")
+  src <- renv_available_packages_latest_repos_impl(package, "source", repos)
+  bin <- renv_available_packages_latest_repos_impl(package, "binary", repos)
 
   # choose an appropriate record
   if (is.null(src) && is.null(bin))
@@ -420,7 +462,6 @@ renv_available_packages_latest_repos <- function(package, type = NULL) {
     renv_available_packages_record(src, "source")
   else
     renv_available_packages_latest_select(src, bin)
-
 }
 
 renv_available_packages_latest_select <- function(src, bin) {
@@ -462,15 +503,11 @@ renv_available_packages_latest_select <- function(src, bin) {
 
 }
 
-renv_available_packages_local <- function(type, project = NULL) {
+renv_available_packages_cellar <- function(type, project = NULL) {
 
+  # look in the cellar
   project <- renv_project_resolve(project)
-
-  # list files recursively in the local sources paths
-  roots <- c(
-    renv_paths_project("renv/local", project = project),
-    renv_paths_local()
-  )
+  roots <- renv_cellar_roots(project = project)
 
   # find all files used in the locals folder
   all <- list.files(
@@ -515,6 +552,6 @@ renv_available_packages_local <- function(type, project = NULL) {
   })
 
   # bind into data.frame for lookup
-  bind_list(records)
+  bind(records)
 
 }

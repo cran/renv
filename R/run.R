@@ -33,7 +33,7 @@ run <- function(script, ..., job = NULL, name = NULL, project = NULL) {
     paths <- file.path(path, c("renv", "renv.lock"))
     if (any(file.exists(paths)))
       return(path)
-  }, limit = 10L)
+  })
 
   if (is.null(project)) {
     fmt <- "could not determine project root for script '%s'"
@@ -41,7 +41,7 @@ run <- function(script, ..., job = NULL, name = NULL, project = NULL) {
   }
 
   # ensure that it has an activate script
-  activate <- file.path(project, "renv/activate.R")
+  activate <- renv_paths_activate(project = project)
   if (!file.exists(activate)) {
     fmt <- "project '%s' does not have an renv activate script"
     stopf(fmt, aliased_path(project))
@@ -67,13 +67,14 @@ run <- function(script, ..., job = NULL, name = NULL, project = NULL) {
 
 renv_run_job <- function(script, name, project) {
 
+  activate <- renv_paths_activate(project = project)
   jobscript <- tempfile("renv-job-", fileext = ".R")
 
   exprs <- substitute(local({
     on.exit(unlink(jobscript), add = TRUE)
-    source("renv/activate.R")
+    source(activate)
     source(script)
-  }), list(script = script, jobscript = jobscript))
+  }), list(activate = activate, script = script, jobscript = jobscript))
 
   code <- deparse(exprs)
   writeLines(code, con = jobscript)

@@ -8,17 +8,19 @@ renv_description_read <- function(path = NULL, package = NULL, subdir = NULL, ..
     stopf(fmt, renv_path_pretty(path))
   }
 
-  # validate that the path is absolute
-  if (!renv_path_absolute(path)) {
-    fmt <- "internal error: path %s is not absolute"
-    stopf(fmt, renv_path_pretty(path))
+  # normalize non-absolute paths
+  if (!renv_path_absolute(path))
+    path <- renv_path_normalize(path)
+
+  # if 'path' refers to a directory, try to resolve the DESCRIPTION file
+  info <- renv_file_info(path)
+  if (identical(info$isdir, TRUE)) {
+    components <- c(path, if (nzchar(subdir %||% "")) subdir, "DESCRIPTION")
+    path <- paste(components, collapse = "/")
   }
 
-  # accept package directories
-  path <- renv_description_path(path)
-
   # read value with filebacked cache
-  renv_filebacked(
+  filebacked(
     scope    = "DESCRIPTION",
     path     = path,
     callback = renv_description_read_impl,
@@ -29,13 +31,6 @@ renv_description_read <- function(path = NULL, package = NULL, subdir = NULL, ..
 }
 
 renv_description_read_impl <- function(path = NULL, subdir = NULL, ...) {
-
-  # ensure that we have a real file
-  info <- file.info(path, extra_cols = FALSE)
-  if (is.na(info$isdir))
-    stopf("file '%s' does not exist", path)
-  else if (info$isdir)
-    stopf("file '%s' exists but is a directory", path)
 
   # if we have an archive, attempt to unpack the DESCRIPTION
   type <- renv_archive_type(path)
@@ -49,7 +44,6 @@ renv_description_read_impl <- function(path = NULL, subdir = NULL, ...) {
     # just consume everything up to the first slash
     subdir <- subdir %||% ""
     parts <- c("^[^/]+", if (nzchar(subdir)) subdir, "DESCRIPTION$")
-
     pattern <- paste(parts, collapse = "/")
 
     descs <- grep(pattern, files, value = TRUE)
@@ -69,12 +63,10 @@ renv_description_read_impl <- function(path = NULL, subdir = NULL, ...) {
 
   }
 
+  # read DESCRIPTION as dcf
   dcf <- renv_dcf_read(path, ...)
   if (empty(dcf))
     stopf("DESCRIPTION file at '%s' is empty", path)
-
-  if (identical(dcf$Encoding, "UTF-8"))
-    dcf[] <- lapply(dcf, renv_encoding_mark, encoding = "UTF-8")
 
   dcf
 

@@ -38,7 +38,7 @@ test_that("RENV_PATHS_PREFIX is respected", {
 
 test_that("RENV_PATHS_PREFIX is not normalized", {
   renv_scope_envvars(RENV_PATHS_PREFIX = ".")
-  renv_paths_init()
+  renv_envvars_normalize()
   expect_identical(Sys.getenv("RENV_PATHS_PREFIX"), ".")
 })
 
@@ -74,10 +74,14 @@ test_that("UTF-8 paths can be normalized", {
 })
 
 test_that("our fallback R_user_dir() implementation is compatible", {
-
   skip_if(getRversion() < "4.0.0")
-  actual   <- renv_paths_root_default_impl_fallback()
+  actual   <- renv_paths_root_default_impl_v2_fallback()
   expected <- tools::R_user_dir("renv", which = "cache")
   expect_true(renv_path_same(actual, expected))
+})
 
+test_that("path environment variables can use ';' as separator", {
+  renv_scope_envvars(RENV_PATHS_LOCAL = "a;b;c")
+  paths <- renv_paths_local()
+  expect_equal(paths, c("a", "b", "c"))
 })

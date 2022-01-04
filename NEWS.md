@@ -1,4 +1,143 @@
 
+# renv 0.15.0
+
+* The development branch for `renv` has moved from master to main.
+
+* `renv` package records in the lockfile now include a `Requirements`
+  entry, which gives a list of R packages this package depends on
+  in some way. This is primarily for internal use by the `pak`
+  package.
+
+* Fixed an issue where packages containing DESCRIPTION files using
+  a latin1 encoding would not be read correctly by `renv`.
+
+* Fixed an issue that could cause `renv::dependencies()` to fail
+  when a malformed `DESCRIPTION` file was encountered. (#892)
+
+* The path to the project-local `renv` folder can now be configured
+  via the `RENV_PATHS_RENV` environment variable. This can be useful
+  if you'd prefer to store your project's `renv` resources within
+  an alternate location in the project. (#472)
+  
+* `renv` now uses an external library by default for R package projects,
+  with the library located within `tools::R_user_dir("renv", "cache")`.
+  This directory can be configured via the `RENV_PATHS_LIBRARY_ROOT`
+  environment variable if desired. See
+  `vignette("packages", package = "renv")` for more details. (#384)
+
+* `renv` now uses the repositories as defined within the project lockfile
+  (if any) when attempting to bootstrap itself in a project. (#820)
+
+* The `renv` sandbox is now disabled by default -- see #614 for more details.
+
+* `renv` gains the function `repair()`, to be used to attempt to repair
+  the project library when links into the global package cache appear to
+  be broken. (#378)
+
+* Fixed an issue where the staging library used during install could fail to
+  inherit the same directory permissions as the target library itself. (#331)
+
+* Fixed an regression which caused `renv::history()` to fail. (#886)
+
+* `renv` gains experimental support for the [pak](https://pak.r-lib.org/)
+  package. Set `RENV_CONFIG_PAK_ENABLED = TRUE` in an appropriate `.Renviron`
+  file to enable `pak` integration. When enabled, calls to `renv::install()`
+  will use `pak` to download and install packages.
+  
+* `renv::init()` gains the `bioconductor` argument, to be used to initialize
+  a project with a particular Bioconductor release. You can also use
+  `renv::init(bioconductor = TRUE)` to initialize with the latest-available
+  release for the version of R being used.
+
+* Project settings can now be overridden by setting an R option of the same
+  name. For example, one could force a project to use Bioconductor 3.14 by
+  setting `options(renv.settings.bioconductor.version = "3.14")` within
+  the project `.Rprofile` (or similar startup R profile).
+
+* The ad-hoc package repository called "local sources" has been renamed to
+  the "package cellar". In addition, the path to the cellar is now
+  controlled by the `RENV_PATHS_CELLAR` environment variable, rather than
+  `RENV_PATHS_LOCAL`. This change was made to reduce confusion between
+  "local sources" of packages located somewhere on the filesystem, as
+  opposed to packages explicitly placed in this ad-hoc repository.
+  `RENV_PATHS_LOCAL` remains supported for backwards compatibility.
+  
+* The `RENV_PATHS_LOCAL` environment variable can now be set to multiple
+  paths. Use `;` as a separator between paths; for example,
+  `RENV_PATHS_LOCAL=/path/to/sources/v1;/path/to/sources/v2`. (#550)
+  
+* Packages installed via e.g. `renv::install("./path/to/package")`
+  will now retain the relative path to that package within the lockfile.
+  (#873)
+  
+* Fixed an issue where invalid `config` option values were not properly
+  reported. (#773)
+
+* `renv` now supports restoration of packages installed via one of the
+  [r-universe](https://r-universe.dev/) repositories.
+
+* `renv` gains the `bioconductor.version` project setting, used to freeze
+  the version of Bioconductor used in a particular project. When set, this
+  will override any version that might be selected via the `BiocManager`
+  package. (#864)
+
+* `renv` now infers that parameterized R Markdown documents have a dependency
+  on the `shiny` package. In addition, R code included within the `params:`
+  list will be parsed for dependencies. (#859)
+  
+* `renv` now ignores hidden directories during dependency discovery by default.
+  If you want to force a particular hidden directory to be included for
+  discovery, you can use a `.renvignore` file with an explicit inclusion
+  criteria; e.g. `!.hidden/`.
+  
+* `renv` now supports the `*release` remotes specifier for GitHub repositories,
+  for requesting installation of the latest declared release of a package from
+  GitHub. (#792)
+  
+* `renv` now handles packages stored within the sub-directory of a Git
+  repository better. (#793)
+
+* Fixed an issue where `renv::history()` would fail to resolve the correct
+  lockfile path if the working directory was changed. (#834)
+
+* Refined dependency discovery within `glue::glue()` expressions.
+
+* `renv` now parses packages referenced via the `base_format` field within
+  an R Markdown document's YAML header. (#854)
+
+* Fixed an issue where `renv` would fail to produce the appropriate binary
+  repository URL for RSPM repositories built using Red Hat Enterprise Linux.
+
+* Fixed an issue where `renv::snapshot()` could cause the environment name
+  and / or path associated with a Python environment to be omitted from the
+  lockfile. (#843)
+
+* Fixed an issue where `renv::restore()` could fail to restore packages which
+  referred to their source via an explicit path in the `Source` field. (#849)
+  
+* `renv` no longer requires explicit user consent when used within Singularity
+  containers. (#824, @kiwiroy)
+
+* `renv` now respects the `R_PROFILE_USER` environment variable, in addition
+  to the `user.profile` configuration option, when considering whether the
+  user `.Rprofile` should be examined for package dependencies. (#821)
+
+* The `renv` auto-loader can now be disabled by setting the environment
+  variable `RENV_AUTOLOADER_ENABLED = FALSE`. This can be useful if you'd like
+  to explicitly control how a project is loaded, e.g. by calling `renv::load()`
+  explicitly.
+
+* `renv::snapshot()` gains the `repos` argument, to be used to force
+  the lockfile to be generated with the requested set of R repositories
+  encoded within.
+
+* `renv` now validates that the `repos` option, as used by `renv::snapshot()`,
+  is a named vector. (#811)
+
+* Fixed an issue where `renv`'s shims, e.g. for `install.packages()`, failed
+  to pass along other optional arguments to the shimmed function correctly.
+  (#808)
+  
 # renv 0.14.0
 
 * `renv` now uses `tools::R_user_dir()` to resolve the default path to the

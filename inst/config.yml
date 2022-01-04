@@ -8,6 +8,15 @@
     that calls to `renv::snapshot()` and `renv::restore()` use the project
     library. See `?renv::activate` for more details.
 
+- name: "autoloader.enabled"
+  type: "logical[1]"
+  default: true
+  description: >
+    Enable the `renv` auto-loader? When `FALSE`, `renv` will not not
+    automatically load a project containing an `renv` autoloader within
+    its `.Rprofile`. In addition, `renv` will not write out the project
+    auto-loader in calls to `renv::init()`.
+
 - name: "auto.snapshot"
   type: "logical[1]"
   default: false
@@ -54,12 +63,14 @@
 
 - name: "cache.symlinks"
   type: "logical[1]"
-  default: true
+  default: ~
   description: >
     Symlink packages from the global `renv` package cache into your project
     library? When `TRUE`, `renv` will use symlinks (or, on Windows, junction
     points) to reference packages installed in the cache. Set this to `FALSE`
     if you'd prefer to copy packages from the cache into your project library.
+    Enabled by default, except on Windows where this feature is only enabled
+    if the project library and global package cache are on the same volume.
 
 - name: "dependency.errors"
   type: "character[1]"
@@ -178,6 +189,12 @@
     Attempt to download binaries from [MRAN](https://mran.microsoft.com/)
     during restore? See `vignette("mran", package = "renv")` for more details.
 
+- name: "pak.enabled"
+  type: "logical[1]"
+  default: false
+  description: >
+    Use the [pak](https://pak.r-lib.org/) package to install packages?
+
 - name: "repos.override"
   type: "character[*]"
   default: ~
@@ -199,7 +216,7 @@
 
 - name: "sandbox.enabled"
   type: "logical[1]"
-  default: true
+  default: false
   description: >
     Enable sandboxing for `renv` projects? When active, `renv` will attempt
     to sandbox the system library, preventing non-system packages installed in the
@@ -260,6 +277,13 @@
     number of packages installed from non-CRAN remotes are installed, as these packages
     can then be checked for updates in parallel.
 
+- name: "user.environ"
+  type: "logical[1]"
+  default: true
+  description: >
+    Load the user R environ (typically located at `~/.Renviron`) when `renv`
+    is loaded?
+
 - name: "user.library"
   type: "logical[1]"
   default: false
@@ -274,6 +298,8 @@
   default: false
   description: >
     Load the user R profile (typically located at `~/.Rprofile`) when `renv`
-    is loaded? Consider disabling this if you require extra encapsulation in your
-    projects; e.g. if your `.Rprofile` attempts to load packages that you might not
-    install in your projects.
+    is loaded? This is disabled by default, as running arbitrary code from
+    the the user `~/.Rprofile` could risk breaking project encapsulation.
+    If your goal is to set environment variables that are visible within all
+    `renv` projects, then placing those in `~/.Renviron` is often a better
+    choice.

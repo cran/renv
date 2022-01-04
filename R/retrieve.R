@@ -69,21 +69,10 @@ renv_retrieve_impl <- function(package) {
     return()
 
   # if this is a package from Bioconductor, activate those repositories now
-  #
-  # TODO: we should consider making this more scoped; calls to `renv_available_packages_*`
-  # would need to be record-aware or source-aware to make this a bit cleaner
-  if (source %in% c("bioconductor"))
-    renv_scope_bioconductor()
-
-  # if the requested record is incompatible with the set
-  # of requested package versions thus far, request the
-  # latest version on the R package repositories
-  #
-  # TODO: handle more explicit dependency requirements
-  # TODO: report to the user if they have explicitly requested
-  # installation of this package version despite it being incompatible
-  if (renv_retrieve_incompatible(record))
-    record <- renv_available_packages_latest(package)
+  if (source %in% c("bioconductor")) {
+    project <- renv_restore_state(key = "project")
+    renv_scope_bioconductor(project = project)
+  }
 
   # if the record doesn't declare the package version,
   # treat it as a request for the latest version on CRAN
@@ -94,6 +83,20 @@ renv_retrieve_impl <- function(package) {
 
   if (uselatest)
     record <- renv_available_packages_latest(record$Package)
+
+  # if the requested record is incompatible with the set
+  # of requested package versions thus far, request the
+  # latest version on the R package repositories
+  #
+  # TODO: handle more explicit dependency requirements
+  # TODO: report to the user if they have explicitly requested
+  # installation of this package version despite it being incompatible
+  compat <- renv_retrieve_incompatible(record)
+  if (NROW(compat)) {
+    replacement <- renv_available_packages_latest(package)
+    renv_retrieve_incompatible_report(record, replacement, compat)
+    record <- replacement
+  }
 
   if (!renv_restore_rebuild_required(record)) {
 
@@ -119,16 +122,18 @@ renv_retrieve_impl <- function(package) {
   }
 
   # if this is a URL source, then it should already have a local path
-  path <- record$Path %||% ""
-  if (file.exists(path))
+  path <- record$Path %||% record$Source %||% ""
+  if (grepl("[/\\]", path) && file.exists(path)) {
+    path <- normalizePath(path, winslash = "/", mustWork = TRUE)
     return(renv_retrieve_successful(record, path))
+  }
 
   if (!renv_restore_rebuild_required(record)) {
 
     # try some early shortcut methods
     shortcuts <- c(
       renv_retrieve_explicit,
-      renv_retrieve_local,
+      renv_retrieve_cellar,
       if (!renv_tests_running() && config$install.shortcuts())
         renv_retrieve_libpaths
     )
@@ -187,8 +192,38 @@ renv_retrieve_path <- function(record, type = "source", ext = NULL) {
 }
 
 renv_retrieve_bioconductor <- function(record) {
-  renv_scope_bioconductor()
+
+  # try to read the bioconductor version from the record
+  version <- renv_retrieve_bioconductor_version(record)
+
+  # activate Bioconductor repositories in this context
+  project <- renv_restore_state(key = "project")
+  renv_scope_bioconductor(project = project, version = version)
+
+  # retrieve record using updated repositories
   renv_retrieve_repos(record)
+
+}
+
+renv_retrieve_bioconductor_version <- function(record) {
+
+  # read git branch
+  branch <- record[["git_branch"]]
+  if (is.null(branch))
+    return(NULL)
+
+  # try and parse version
+  parts <- strsplit(branch, "_", fixed = TRUE)[[1L]]
+  ok <-
+    length(parts) == 3L &&
+    tolower(parts[[1L]]) == "release"
+
+  if (!ok)
+    return(NULL)
+
+  # we have a version; use it
+  paste(tail(parts, n = -1L), collapse = ".")
+
 }
 
 renv_retrieve_bitbucket <- function(record) {
@@ -198,6 +233,9 @@ renv_retrieve_bitbucket <- function(record) {
   origin <- renv_retrieve_origin(host)
   username <- record$RemoteUsername
   repo <- record$RemoteRepo
+
+  # scope authentication
+  renv_scope_auth(repo)
 
   fmt <- "%s/repositories/%s/%s"
   url <- sprintf(fmt, origin, username, repo)
@@ -261,38 +299,43 @@ renv_retrieve_gitlab <- function(record) {
 }
 
 renv_retrieve_git <- function(record) {
-
   path <- tempfile("renv-git-")
   ensure_directory(path)
-
   renv_retrieve_git_impl(record, path)
-
   renv_retrieve_successful(record, path)
-
 }
 
 renv_retrieve_git_impl <- function(record, path) {
+
   renv_git_preflight()
 
-  template <- c(
-    "cd \"${DIR}\"",
-    "git init --quiet",
-    "git remote add origin \"${ORIGIN}\"",
-    "git fetch --quiet origin \"${REF}\"",
-    "git reset --quiet --hard FETCH_HEAD"
-  )
+  package <- record$Package
+  url     <- record$RemoteUrl
+  ref     <- record$RemoteRef
+  sha     <- record$RemoteSha
+
+  template <- heredoc('
+    cd "${DIR}"
+    git init --quiet
+    git remote add origin "${ORIGIN}"
+    git fetch --quiet origin "${REF}"
+    git reset --quiet --hard FETCH_HEAD
+  ')
 
   data <- list(
     DIR    = renv_path_normalize(path),
-    ORIGIN = record$RemoteUrl,
-    REF    = record$RemoteSha %||% record$RemoteRef
+    ORIGIN = url,
+    REF    = sha %||% ref
   )
 
   commands <- renv_template_replace(template, data)
-  command <- paste(commands, collapse = " && ")
+  command <- gsub("\n", " && ", commands, fixed = TRUE)
   if (renv_platform_windows())
     command <- paste(comspec(), "/C", command)
 
+  vwritef("Cloning '%s' ...", url)
+
+  before <- Sys.time()
 
   status <- local({
     renv_scope_auth(record)
@@ -300,16 +343,22 @@ renv_retrieve_git_impl <- function(record, path) {
     system(command)
   })
 
+  after <- Sys.time()
+
   if (status != 0L) {
-    fmt <- "cannot retrieve package '%s' from '%s' [status code %i]"
-    stopf(fmt, record$Package, record$RemoteUrl, status)
+    fmt <- "error cloning '%s' from '%s' [status code %i]"
+    stopf(fmt, package, url, status)
   }
 
+  fmt <- "\tOK [cloned repository in %s]"
+  vwritef(fmt, renv_difftime_format(after - before))
+
   TRUE
+
 }
 
 
-renv_retrieve_local_find <- function(record, project = NULL) {
+renv_retrieve_cellar_find <- function(record, project = NULL) {
 
   project <- renv_project_resolve(project)
 
@@ -322,12 +371,8 @@ renv_retrieve_local_find <- function(record, project = NULL) {
     return(named(path, type))
   }
 
-  # otherwise, use the user's local packages
-  roots <- c(
-    renv_paths_project("renv/local", project = project),
-    renv_paths_local()
-  )
-
+  # otherwise, look in the cellar
+  roots <- renv_cellar_roots(project)
   for (type in c("binary", "source")) {
 
     name <- renv_retrieve_name(record, type = type)
@@ -351,22 +396,22 @@ renv_retrieve_local_find <- function(record, project = NULL) {
 
 }
 
-renv_retrieve_local_report <- function(record) {
+renv_retrieve_cellar_report <- function(record) {
 
   source <- renv_record_source(record)
-  if (source == "local")
+  if (source == "cellar")
     return(record)
 
-  fmt <- "* Package %s [%s] will be installed from local sources."
+  fmt <- "* Package %s [%s] will be installed from the cellar."
   with(record, vwritef(fmt, Package, Version))
 
   record
 
 }
 
-renv_retrieve_local <- function(record) {
-  source <- renv_retrieve_local_find(record)
-  record <- renv_retrieve_local_report(record)
+renv_retrieve_cellar <- function(record) {
+  source <- renv_retrieve_cellar_find(record)
+  record <- renv_retrieve_cellar_report(record)
   renv_retrieve_successful(record, source)
 }
 
@@ -382,12 +427,12 @@ renv_retrieve_libpaths <- function(record) {
 renv_retrieve_libpaths_impl <- function(record, libpath) {
 
   # form path to installed package's DESCRIPTION
-  source <- file.path(libpath, record$Package)
-  if (!file.exists(source))
+  path <- file.path(libpath, record$Package)
+  if (!file.exists(path))
     return(FALSE)
 
   # read DESCRIPTION
-  desc <- renv_description_read(path = source)
+  desc <- renv_description_read(path = path)
 
   # check if it's compatible with the requested record
   fields <- c("Package", "Version", grep("^Remote", names(record), value = TRUE))
@@ -404,9 +449,13 @@ renv_retrieve_libpaths_impl <- function(record, libpath) {
   if (!identical(ok, TRUE))
     return(FALSE)
 
-  # OK: treat as restore from local source
-  record$Source <- "Local"
-  renv_retrieve_successful(record, source)
+  # check that this package has a known source
+  source <- renv_snapshot_description_source(desc)
+  if (identical(source$Source, "unknown"))
+    return(FALSE)
+
+  # OK: copy this package as-is
+  renv_retrieve_successful(record, path)
 
 }
 
@@ -432,34 +481,42 @@ renv_retrieve_repos <- function(record) {
   if (all(c("type", "url") %in% names(attributes(record))))
     return(renv_retrieve_repos_impl(record))
 
-  # always attempt to retrieve from source + archive
-  methods <- c(
-    renv_retrieve_repos_source,
-    renv_retrieve_repos_archive
-  )
+  # collect list of 'methods' for retrieval
+  methods <- stack(mode = "list")
 
   # only attempt to retrieve binaries when explicitly requested by user
   if (!identical(getOption("pkgType"), "source")) {
 
-    # attempt to retrieve binaries from MRAN when enabled as well
-    if (config$mran.enabled())
-      methods <- c(renv_retrieve_repos_mran, methods)
+    # prefer repository binaries if available
+    methods$push(renv_retrieve_repos_binary)
 
-    # prefer using default CRAN mirror over MRAN when possible
-    methods <- c(renv_retrieve_repos_binary, methods)
+    # if MRAN is enabled, check those binaries as well
+    if (config$mran.enabled())
+      methods$push(renv_retrieve_repos_mran)
 
   }
+
+  # next, try to retrieve from sources
+  methods$push(renv_retrieve_repos_source)
+
+  # if this is a package from r-universe, try restoring from github
+  # (currently inferred from presence for RemoteUrl field)
+  unifields <- c("RemoteUrl", "RemoteRef", "RemoteSha")
+  if (all(unifields %in% names(record)))
+    methods$push(renv_retrieve_git)
+  else
+    methods$push(renv_retrieve_repos_archive)
 
   # capture errors for reporting
   errors <- stack()
 
-  for (method in methods) {
+  for (method in methods$data()) {
 
     status <- catch(
       withCallingHandlers(
         method(record),
         renv.retrieve.error = function(error) {
-          errors$push(error)
+          errors$push(error$data)
         }
       )
     )
@@ -480,8 +537,13 @@ renv_retrieve_repos <- function(record) {
   }
 
   # if we couldn't download the package, report the errors we saw
-  renv_retrieve_repos_error_report(record, errors$data())
-  stopf("failed to retrieve package '%s'", record$Package)
+  local({
+    renv_scope_options(warn = 1)
+    for (error in errors$data())
+      warning(error)
+  })
+
+  stopf("failed to retrieve package '%s'", renv_record_format_remote(record))
 
 }
 
@@ -747,7 +809,10 @@ renv_retrieve_successful <- function(record, path, install = TRUE) {
   # record this package's requirements
   state <- renv_restore_state()
   requirements <- state$requirements
-  deps <- renv_dependencies_discover_description(path)
+  deps <- renv_dependencies_discover_description(path, subdir = subdir)
+  if (length(deps$Source))
+    deps$Source <- record$Package
+
   rowapply(deps, function(dep) {
     package <- dep$Package
     requirements[[package]] <- requirements[[package]] %||% stack()
@@ -773,7 +838,7 @@ renv_retrieve_successful <- function(record, path, install = TRUE) {
 renv_retrieve_unknown_source <- function(record) {
 
   # try to find a matching local package
-  status <- catch(renv_retrieve_local(record))
+  status <- catch(renv_retrieve_cellar(record))
   if (!inherits(status, "error"))
     return(status)
 
@@ -791,7 +856,9 @@ renv_retrieve_handle_remotes <- function(record) {
 
   # check and see if this package declares Remotes -- if so,
   # use those to fill in any missing records
-  desc <- renv_description_read(record$Path)
+  path <- record$Path
+  subdir <- record$RemoteSubdir
+  desc <- renv_description_read(path = path, subdir = subdir)
   if (is.null(desc$Remotes))
     return(NULL)
 
@@ -855,27 +922,61 @@ renv_retrieve_incompatible <- function(record) {
   # check and see if the installed version satisfies all requirements
   requirements <- state$requirements[[record$Package]]
   if (is.null(requirements))
-    return(FALSE)
+    return(NULL)
 
-  data <- bind_list(requirements$data())
+  data <- bind(requirements$data())
   explicit <- data[nzchar(data$Require) & nzchar(data$Version), ]
   if (nrow(explicit) == 0)
-    return(FALSE)
+    return(NULL)
 
-  expr <- c(
-    sprintf("version <- numeric_version('%s')", record$Version),
-    paste(
-      sprintf("version %s '%s'", explicit$Require, explicit$Version),
-      collapse = " && "
+  # drop 'Dev' column
+  explicit$Dev <- NULL
+
+  # retrieve record version
+  version <- record$Version
+  if (is.null(version))
+    return(NULL)
+
+  # for each row, compute whether we're compatible
+  rversion <- numeric_version(version)
+  compatible <- map_lgl(seq_len(nrow(explicit)), function(i) {
+    expr <- call(explicit$Require[[i]], rversion, explicit$Version[[i]])
+    eval(expr, envir = baseenv())
+  })
+
+  # keep whatever wasn't compatible
+  explicit[!compatible, ]
+
+}
+
+renv_retrieve_incompatible_report <- function(record, replacement, compat) {
+
+  # if the record + replacement look the same, bail
+  # (nothing useful to report to user; failure will happen later)
+  same <-
+    record$Package == replacement$Package &&
+    record$Version == replacement$Version
+
+  if (same)
+    return()
+
+  fmt <- "%s (requires %s %s %s)"
+  values <- with(compat, sprintf(fmt, Source, Package, Require, Version))
+
+  fmt <- "renv tried to install '%s %s', but the following constraints were not met:"
+  preamble <- with(record, sprintf(fmt, Package, Version))
+
+  fmt <- "renv will try to install '%s %s' instead."
+  postamble <- with(replacement, sprintf(fmt, Package, Version))
+
+  if (!renv_tests_running()) {
+    renv_pretty_print(
+      values = values,
+      preamble = preamble,
+      postamble = postamble,
+      wrap = FALSE
     )
-  )
-
-  envir <- new.env(parent = baseenv())
-  satisfied <- catch(eval(parse(text = expr), envir = envir))
-  if (inherits(satisfied, "error"))
-    warning(satisfied)
-
-  !identical(satisfied, TRUE)
+  }
 
 }
 

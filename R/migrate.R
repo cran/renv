@@ -111,9 +111,7 @@ renv_migrate_packrat_lockfile <- function(project) {
   contents <- read(plock)
   splat <- strsplit(contents, "\n{2,}")[[1]]
   dcf <- lapply(splat, function(section) {
-    conn <- textConnection(section)
-    on.exit(close(conn), add = TRUE)
-    renv_dcf_read(conn)
+    renv_dcf_read(text = section)
   })
 
   # split into header + package fields
@@ -171,7 +169,7 @@ renv_migrate_packrat_lockfile <- function(project) {
   renv_records(lockfile) <- records
 
   # finish
-  lockfile <- renv_lockfile_fini(lockfile)
+  lockfile <- renv_lockfile_fini(lockfile, project)
 
   # write the lockfile
   lockpath <- renv_lockfile_path(project = project)
@@ -318,7 +316,7 @@ renv_migrate_packrat_cache_impl <- function(targets) {
   vwritef("Done!")
 
   # report failures
-  status <- bind_list(result)
+  status <- bind(result)
   bad <- status[status$broken, ]
   if (nrow(bad) == 0)
     return(TRUE)

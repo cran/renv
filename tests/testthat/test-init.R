@@ -1,3 +1,4 @@
+
 context("Init")
 
 test_that("init() automatically installs referenced packages", {
@@ -103,28 +104,6 @@ test_that("init succeeds even if there are parse errors in project", {
 
 })
 
-test_that("init() restores project containing only a lockfile", {
-
-  renv_tests_scope("breakfast")
-  init()
-
-  unlink(".Rprofile")
-  unlink("renv", recursive = TRUE)
-
-  restored <- FALSE
-  trace(renv:::restore, print = FALSE, function() {
-    restored <<- TRUE
-  })
-  init()
-  untrace(renv:::restore)
-
-  expect_true(restored)
-  expect_true(file.exists(".Rprofile"))
-  expect_true(file.exists("renv/activate.R"))
-  expect_true(renv_package_installed("breakfast"))
-
-})
-
 test_that("init() works in path containing accented characters", {
 
   # ensure the project path can be represented in native encoding
@@ -151,5 +130,53 @@ test_that("init() works in path containing accented characters", {
   lockfile <- renv_lockfile_load(project = getwd())
   expect_true(!is.null(lockfile$Packages$bread))
   expect_true(!is.null(lockfile$Packages$toast))
+
+})
+
+test_that("we use an external library path for package projects", {
+
+  renv_tests_scope()
+
+  writeLines("Type: Package", con = "DESCRIPTION")
+  init()
+
+  library <- renv_libpaths_default()
+  userdir <- renv_bootstrap_user_dir()
+
+  expect_true(
+    object = renv_path_within(library, userdir),
+    info = sprintf("- %s\n- %s\n", library, userdir)
+  )
+
+})
+
+test_that("RENV_PATHS_RENV is respected on init", {
+
+  skip_on_cran()
+
+  renv_tests_scope()
+  renv_scope_envvars(
+    RENV_PATHS_LOCKFILE = ".renv/renv.lock",
+    RENV_PATHS_RENV = ".renv"
+  )
+
+  local({
+    args <- c("-s", "-e", shcode(renv::init()))
+    renv_system_exec(R(), args, action = "renv::init()")
+    expect_true(file.exists(".renv"))
+    expect_true(file.exists(".renv/renv.lock"))
+  })
+
+  script <- renv_test_code({
+    writeLines(Sys.getenv("RENV_PATHS_RENV"))
+  })
+
+  args <- c("-s", "-f", script)
+  renv <- local({
+    renv_scope_envvars(R_PROFILE_USER = NULL)
+    renv_system_exec(R(), args, action = "reading RENV_PATHS_RENV")
+  })
+
+  expect_equal(renv, ".renv")
 
 })

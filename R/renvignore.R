@@ -40,12 +40,18 @@ renv_renvignore_pattern <- function(path = getwd(), root = path) {
 
   # collect patterns read
   patterns <- ignores$data()
-  if (empty(patterns))
-    return(list())
 
   # separate exclusions, exclusions
   include <- unlist(extract(patterns, "include"))
   exclude <- unlist(extract(patterns, "exclude"))
+
+  # allow for inclusion / exclusion via option
+  # (primarily intended for internal use with packrat)
+  include <- c(include, renv_renvignore_pattern_extra("include", root))
+  exclude <- c(exclude, renv_renvignore_pattern_extra("exclude", root))
+
+  # ignore hidden directories by default
+  exclude <- c("/[.][^/]*/$", exclude)
 
   list(include = include, exclude = exclude)
 
@@ -82,11 +88,8 @@ renv_renvignore_parse_impl <- function(entries, prefix = "") {
   # remove trailing whitespace
   entries <- gsub("\\s+$", "", entries)
 
-  # remove trailing slashes
-  entries <- gsub("/+$", "", entries)
-
-  # entries without a slash should match in whole tree
-  noslash <- grep("/", entries, fixed = TRUE, invert = TRUE)
+  # entries without a slash (other than a trailing one) should match in tree
+  noslash <- grep("/", gsub("/*$", "", entries), fixed = TRUE, invert = TRUE)
   entries[noslash] <- paste("**", entries[noslash], sep = "/")
 
   # remove a leading slash (avoid double-slashing)
@@ -103,6 +106,10 @@ renv_renvignore_parse_impl <- function(entries, prefix = "") {
   # restore '**' entries
   entries <- gsub("\001", "\\E(?:.*/)?\\Q", entries, fixed = TRUE)
   entries <- gsub("\002", "/\\E.*\\Q",      entries, fixed = TRUE)
+
+  # if we don't have a trailing slash, then we can match both files and dirs
+  noslash <- grep("/$", entries, invert = TRUE)
+  entries[noslash] <- paste0(entries[noslash], "\\E(?:/)?\\Q")
 
   # enclose in \\Q \\E to ensure e.g. plain '.' are not treated
   # as regex characters
@@ -121,9 +128,21 @@ renv_renvignore_parse_impl <- function(entries, prefix = "") {
 
 renv_renvignore_exec <- function(path, root, children) {
 
+  # the root directory is always included
+  if (identical(root, children))
+    return(FALSE)
+
+  # compute exclusion patterns
   patterns <- renv_renvignore_pattern(path, root)
+
+  # if we have no patterns, then we're not excluding anything
   if (empty(patterns) || empty(patterns$exclude))
-    return(children)
+    return(logical(length(children)))
+
+  # append slashes to files which are directories
+  info <- renv_file_info(children)
+  dirs <- info$isdir %in% TRUE
+  children[dirs] <- paste0(children[dirs], "/")
 
   # get the entries that need to be excluded
   excludes <- logical(length = length(children))
@@ -145,7 +164,27 @@ renv_renvignore_exec <- function(path, root, children) {
 
   }
 
-  # keep paths not explicitly excluded
-  children[!excludes]
+  # return vector of excludes
+  excludes
+
+}
+
+renv_renvignore_pattern_extra <- function(key, root) {
+
+  # check for value from option
+  optname <- paste("renv.renvignore", key, sep = ".")
+  patterns <- getOption(optname)
+  if (is.null(patterns))
+    return(NULL)
+
+  # should we use the pattern as-is?
+  asis <- attr(patterns, "asis", exact = TRUE)
+  if (identical(asis, TRUE))
+    return(patterns)
+
+  # otherwise, process it as an .renvignore-style ignore
+  root <- attr(patterns, "root", exact = TRUE) %||% root
+  patterns <- renv_renvignore_parse(patterns, root)
+  patterns[[key]]
 
 }

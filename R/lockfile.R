@@ -3,8 +3,9 @@ renv_lockfile_init <- function(project) {
 
   lockfile <- list()
 
-  lockfile$R            <- renv_lockfile_init_r(project)
-  lockfile$Python       <- renv_lockfile_init_python(project)
+  lockfile$R        <- renv_lockfile_init_r(project)
+  lockfile$Python   <- renv_lockfile_init_python(project)
+  lockfile$Packages <- list()
 
   class(lockfile) <- "renv_lockfile"
   lockfile
@@ -90,12 +91,12 @@ renv_lockfile_init_python <- function(project) {
 
 }
 
-renv_lockfile_fini <- function(lockfile) {
-  lockfile$Bioconductor <- renv_lockfile_fini_bioconductor(lockfile)
+renv_lockfile_fini <- function(lockfile, project) {
+  lockfile$Bioconductor <- renv_lockfile_fini_bioconductor(lockfile, project)
   lockfile
 }
 
-renv_lockfile_fini_bioconductor <- function(lockfile) {
+renv_lockfile_fini_bioconductor <- function(lockfile, project) {
 
   records <- renv_records(lockfile)
   if (empty(records))
@@ -103,11 +104,11 @@ renv_lockfile_fini_bioconductor <- function(lockfile) {
 
   for (package in c("BiocManager", "BiocInstaller"))
     if (!is.null(records[[package]]))
-      return(list(Version = renv_bioconductor_version()))
+      return(list(Version = renv_bioconductor_version(project = project)))
 
   sources <- extract_chr(records, "Source")
   if ("Bioconductor" %in% sources)
-    return(list(Version = renv_bioconductor_version()))
+    return(list(Version = renv_bioconductor_version(project = project)))
 
 }
 
@@ -164,7 +165,7 @@ renv_lockfile_create <- function(project, libpaths, type, packages) {
 
     renv_snapshot_fixup()
 
-  lockfile <- renv_lockfile_fini(lockfile)
+  lockfile <- renv_lockfile_fini(lockfile, project)
 
   keys <- unique(c("R", "Bioconductor", names(lockfile)))
   lockfile <- lockfile[intersect(keys, names(lockfile))]

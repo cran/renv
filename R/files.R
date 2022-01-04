@@ -58,20 +58,7 @@ renv_file_copy_file <- function(source, target) {
 }
 
 renv_file_copy_dir_robocopy <- function(source, target) {
-
-  flags <- c("/E", "/Z", "/R:5", "/W:10")
-  args <- c(flags, shQuote(source), shQuote(target))
-
-  # https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
-  # > Any value greater than 8 indicates that there was at least one failure
-  # > during the copy operation.
-  renv_system_exec(
-    "robocopy",
-    args,
-    action = "copying directory",
-    success = 0:8
-  )
-
+  renv_robocopy_copy(source, target)
 }
 
 # TODO: the version of rsync distributed with macOS
@@ -84,9 +71,20 @@ renv_file_copy_dir_rsync <- function(source, target) {
 }
 
 renv_file_copy_dir_cp <- function(source, target) {
+
+  # ensure 'source' ends with a single trailing slash
   source <- sub("/*$", "/", source)
+
+  # ensure tildes are path-expanded
+  source <- path.expand(source)
+  target <- path.expand(target)
+
+  # build command arguments
   args <- c("-pPR", shQuote(source), shQuote(target))
+
+  # execute copy
   renv_system_exec("cp", args, action = "copying directory")
+
 }
 
 renv_file_copy_dir_r <- function(source, target) {
@@ -183,9 +181,14 @@ renv_file_move <- function(source, target, overwrite = FALSE) {
 
   # first, attempt to do a plain rename
   # use catchall since this might fail for e.g. cross-device links
+  # (note that junction points on Windows will be copies as-is)
   move <- catchall(file.rename(source, target))
   if (renv_file_exists(target))
     return(TRUE)
+
+  # expand tildes
+  source <- path.expand(source)
+  target <- path.expand(target)
 
   # on unix, try using 'mv' command directly
   # (can handle cross-device copies / moves a bit more efficiently)
@@ -196,17 +199,17 @@ renv_file_move <- function(source, target, overwrite = FALSE) {
       return(TRUE)
   }
 
-  # on Windows, similarly try 'move' command
+  # on Windows, similarly try 'robocopy' command
+  # (should be faster than 'move' for large directories)
   if (renv_platform_windows()) {
-    args <- c("/Y", shQuote(source), shQuote(target))
-    status <- catchall(system2("move", args, stdout = FALSE, stderr = FALSE))
+    status <- catchall(renv_robocopy_move(source, target))
     if (renv_file_exists(target))
       return(TRUE)
   }
 
   # nocov start
-  # rename failed; fall back to copying (and be sure to remove
-  # the source file / directory on success)
+  # rename failed; fall back to copying
+  # (and be sure to remove the source file / directory on success)
   copy <- catchall(renv_file_copy(source, target, overwrite = overwrite))
   if (identical(copy, TRUE) && file.exists(target)) {
     unlink(source, recursive = TRUE)
@@ -301,8 +304,8 @@ renv_file_same <- function(source, target) {
   # for hard links + junction points, it's difficult to detect
   # whether the two files point to the same object; use some
   # heuristics to guess (note that these aren't perfect)
-  sinfo <- file.info(source, extra_cols = FALSE)
-  tinfo <- file.info(target, extra_cols = FALSE)
+  sinfo <- renv_file_info(source)
+  tinfo <- renv_file_info(target)
   if (!identical(c(sinfo), c(tinfo)))
     return(FALSE)
 
@@ -350,6 +353,10 @@ renv_file_normalize <- function(path, winslash = "\\", mustWork = NA) {
   file.path(parent, basename(path))
 }
 
+renv_file_info <- function(paths, extra_cols = FALSE) {
+  suppressWarnings(file.info(paths, extra_cols = extra_cols))
+}
+
 # NOTE: returns true for files that are broken symlinks
 renv_file_exists <- function(path) {
 
@@ -376,7 +383,10 @@ renv_file_list <- function(path, full.names = TRUE) {
 }
 
 renv_file_list_impl <- function(path) {
-  renv_methods_error()
+  if (renv_platform_windows())
+    renv_file_list_impl_win32(path)
+  else
+    renv_file_list_impl_unix(path)
 }
 
 renv_file_list_impl_unix <- function(path) {
@@ -434,7 +444,7 @@ renv_file_list_impl_win32 <- function(path) {
 
 renv_file_type <- function(paths, symlinks = TRUE) {
 
-  info <- file.info(paths, extra_cols = FALSE)
+  info <- renv_file_info(paths)
 
   types <- character(length(paths))
   types[info$isdir %in% FALSE] <- "file"
@@ -467,10 +477,18 @@ renv_file_edit <- function(path) {
 }
 # nocov end
 
-renv_file_find <- function(path, predicate, limit = 8L) {
+renv_file_find <- function(path, predicate) {
 
+  # canonicalize path
+  # (note: don't normalize as we don't want to follow symlinks)
+  path <- renv_path_canonicalize(path)
   parent <- dirname(path)
-  while (path != parent && limit > 0L) {
+
+  # compute number of slashes (avoid searching beyond home directory)
+  slashes <- gregexpr("/", path, fixed = TRUE)[[1L]]
+  n <- length(slashes) - 2L
+
+  for (i in 1:n) {
 
     if (file.exists(path)) {
       status <- predicate(path)
@@ -478,8 +496,8 @@ renv_file_find <- function(path, predicate, limit = 8L) {
         return(status)
     }
 
-    path <- parent; parent <- dirname(path)
-    limit <- limit - 1
+    path <- parent
+    parent <- dirname(path)
 
   }
 
@@ -493,16 +511,79 @@ renv_file_read <- function(path) {
 }
 
 renv_file_shebang <- function(path) {
-  con <- file(path, open = "rb")
+
+  tryCatch(
+    renv_file_shebang_impl(path),
+    error = function(e) ""
+  )
+
+}
+
+renv_file_shebang_impl <- function(path) {
+
+  # open connection to file
+  con <- file(path, open = "rb", encoding = "native.enc")
   on.exit(close(con), add = TRUE)
 
-  signature <- charToRaw("#!")
-  first_two_bytes <- readBin(con, what = "raw", n = length(signature))
-  looks_like_script <- identical(first_two_bytes, signature)
+  # validate file starts with '#!' -- read using 'raw' vector to avoid
+  # issues which files that might start with null bytes
+  bytes <- readBin(con, what = "raw", n = 2L)
+  expected <- as.raw(c(0x23L, 0x21L))
+  if (!identical(bytes, expected))
+    return("")
 
-  # skip binary files with potentially very long first "lines"
-  if (looks_like_script)
-    readLines(con, n = 1L, warn = FALSE)
+  # read a single line from the connection
+  readLines(con, n = 1L, warn = FALSE)
+
+}
+
+# here, 'broken' implies a file which is a link pointing to a file that
+# doesn't exist, so only returns true if the file is "link"-y and the
+# file it points to doesn't exist
+renv_file_broken <- function(paths) {
+  if (renv_platform_unix())
+    renv_file_broken_unix(paths)
   else
-    ""
+    renv_file_broken_win32(paths)
+}
+
+renv_file_broken_unix <- function(paths) {
+  # a symlink is broken if:
+  # - the file is a symlink (tested via Sys.readlink)
+  # - the file it points to does not exist (tested via file.exists)
+  !is.na(Sys.readlink(paths)) & !file.exists(paths)
+}
+
+renv_file_broken_win32 <- function(paths) {
+  # TODO: the behavior of file.exists() for a broken junction point
+  # appears to have changed in the development version of R;
+  # we have to be extra careful here...
+  if (getRversion() < "4.2.0") {
+    info <- renv_file_info(paths)
+    (info$isdir %in% TRUE) & is.na(info$mtime)
+  } else {
+    file.access(paths, mode = 0L) == 0L & !file.exists(paths)
+  }
+}
+
+renv_file_size <- function(path) {
+  file.info(path, extra_cols = FALSE)$size
+}
+
+renv_file_remove <- function(paths) {
+  if (renv_platform_windows())
+    renv_file_remove_win32(paths)
+  else
+    renv_file_remove_unix(paths)
+}
+
+renv_file_remove_win32 <- function(paths) {
+  for (path in paths) {
+    command <- paste("rmdir /S /Q", shQuote(path))
+    shell(command)
+  }
+}
+
+renv_file_remove_unix <- function(paths) {
+  unlink(paths, recursive = TRUE, force = TRUE)
 }

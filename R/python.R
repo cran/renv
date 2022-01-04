@@ -89,7 +89,7 @@ renv_python_find_impl <- function(version, path = NULL) {
 renv_python_exe <- function(path) {
 
   # if this already looks like a Python executable, use it directly
-  info <- file.info(path, extra_cols = FALSE)
+  info <- renv_file_info(path)
   if (identical(info$isdir, FALSE) && startswith(basename(path), "python"))
     return(renv_path_canonicalize(path))
 
@@ -105,7 +105,7 @@ renv_python_exe <- function(path) {
 
 renv_python_version <- function(python) {
   python <- normalizePath(python, winslash = "/", mustWork = TRUE)
-  renv_filebacked("python.versions", python, renv_python_version_impl)
+  filebacked("python.versions", python, renv_python_version_impl)
 }
 
 renv_python_version_impl <- function(python) {
@@ -211,12 +211,12 @@ renv_python_restore_impl <- function(python, type, prompt, project) {
 
 renv_python_envpath_virtualenv <- function(version) {
   majmin <- paste(renv_version_components(version, 1L:2L), collapse = ".")
-  fmt <- "renv/python/virtualenvs/renv-python-%s"
+  fmt <- "python/virtualenvs/renv-python-%s"
   sprintf(fmt, majmin)
 }
 
 renv_python_envpath_condaenv <- function(version) {
-  "renv/python/condaenvs/renv-python"
+  "python/condaenvs/renv-python"
 }
 
 renv_python_envpath <- function(project, type, version = NULL) {
@@ -227,18 +227,18 @@ renv_python_envpath <- function(project, type, version = NULL) {
     ~ stopf("internal error: unrecognized environment type '%s'", type)
   )
 
-  components <- c(project, renv_profile_prefix(), suffix)
-  paste(components, collapse = "/")
+  renv_paths_renv(suffix, project = project)
 
 }
 
 renv_python_envname <- function(project, path, type) {
 
-  # we return NULL for environments within the project
-  # as these names get auto-constructed from other metadata
-  # related to the Python executable used
-  if (renv_path_within(path, project))
-    return(NULL)
+  # check for a project-local environment
+  if (renv_path_within(path, project)) {
+    stem <- substring(path, nchar(project) + 2L)
+    path <- paste(".", stem, sep = "/")
+    return(path)
+  }
 
   bn <- basename(path)
 

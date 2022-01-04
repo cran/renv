@@ -14,6 +14,15 @@ config <- list(
     )
   },
 
+  autoloader.enabled = function(..., default = TRUE) {
+    renv_config_get(
+      name    = "autoloader.enabled",
+      type    = "logical[1]",
+      default = default,
+      args    = list(...)
+    )
+  },
+
   auto.snapshot = function(..., default = FALSE) {
     renv_config_get(
       name    = "auto.snapshot",
@@ -68,7 +77,7 @@ config <- list(
     )
   },
 
-  cache.symlinks = function(..., default = TRUE) {
+  cache.symlinks = function(..., default = NULL) {
     renv_config_get(
       name    = "cache.symlinks",
       type    = "logical[1]",
@@ -194,6 +203,15 @@ config <- list(
     )
   },
 
+  pak.enabled = function(..., default = FALSE) {
+    renv_config_get(
+      name    = "pak.enabled",
+      type    = "logical[1]",
+      default = default,
+      args    = list(...)
+    )
+  },
+
   repos.override = function(..., default = NULL) {
     renv_config_get(
       name    = "repos.override",
@@ -212,7 +230,7 @@ config <- list(
     )
   },
 
-  sandbox.enabled = function(..., default = TRUE) {
+  sandbox.enabled = function(..., default = FALSE) {
     renv_config_get(
       name    = "sandbox.enabled",
       type    = "logical[1]",
@@ -270,6 +288,15 @@ config <- list(
     renv_config_get(
       name    = "updates.parallel",
       type    = "*",
+      default = default,
+      args    = list(...)
+    )
+  },
+
+  user.environ = function(..., default = TRUE) {
+    renv_config_get(
+      name    = "user.environ",
+      type    = "logical[1]",
       default = default,
       args    = list(...)
     )

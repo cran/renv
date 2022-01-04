@@ -168,7 +168,7 @@ r_cmd_install <- function(package, path, ...) {
     "CMD", "INSTALL", "--preclean", "--no-multiarch",
     r_cmd_install_option(package, "configure.args", TRUE),
     r_cmd_install_option(package, "configure.vars", TRUE),
-    r_cmd_install_option(package, "install.opts", FALSE),
+    r_cmd_install_option(package, c("install.opts", "INSTALL_opts"), FALSE),
     ...,
     shQuote(path)
   )
@@ -220,7 +220,7 @@ r_cmd_build <- function(package, path, ...) {
   matches <- regexec(pattern, pasted)
   text <- regmatches(pasted, matches)
 
-  tarball <- text[[1]][[2]]
+  tarball <- text[[1L]][[2L]]
   if (!file.exists(tarball))
     r_exec_error(package, output, "build", tarball)
 
@@ -228,20 +228,23 @@ r_cmd_build <- function(package, path, ...) {
 
 }
 
-r_cmd_install_option <- function(package, option, configure) {
+r_cmd_install_option <- function(package, options, configure) {
 
   # read option -- first, check for package-specific option, then
   # fall back to 'global' option
+  for (option in options) {
+    value <- r_cmd_install_option_impl(package, option, configure)
+    if (!is.null(value))
+      return(value)
+  }
+
+}
+
+r_cmd_install_option_impl <- function(package, option, configure) {
+
   value <-
     getOption(paste(option, package, sep = ".")) %||%
     getOption(option)
-
-  # check INSTALL_opts as well (in case that's used instead of install.opts)
-  if (is.null(value) && identical(option, "install.opts")) {
-    value <-
-      getOption(paste("INSTALL_opts", package, sep = ".")) %||%
-      getOption("INSTALL_opts")
-  }
 
   if (is.null(value))
     return(NULL)

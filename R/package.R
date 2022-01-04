@@ -60,7 +60,7 @@ renv_package_description_field <- function(package, field) {
 
 renv_package_type <- function(path, quiet = FALSE, default = "source") {
 
-  info <- file.info(path, extra_cols = FALSE)
+  info <- renv_file_info(path)
   if (is.na(info$isdir))
     stopf("no package at path '%s'", aliased_path(path))
 
@@ -327,4 +327,17 @@ renv_package_metadata <- function(package) {
   pkgpath <- renv_package_find(package)
   metapath <- file.path(pkgpath, "Meta/package.rds")
   readRDS(metapath)
+}
+
+renv_package_shlib <- function(package) {
+
+  pkgpath <- renv_package_find(package)
+
+  pkgname <- basename(package)
+  if (pkgname == "data.table")
+    pkgname <- "datatable"
+
+  libname <- paste0(pkgname, .Platform$dynlib.ext)
+  file.path(pkgpath, "libs", libname)
+
 }

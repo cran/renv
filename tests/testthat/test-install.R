@@ -1,3 +1,4 @@
+
 context("Install")
 
 test_that("install works when DESCRIPTION contains no dependencies", {
@@ -95,7 +96,7 @@ test_that("install forces update of dependencies as needed", {
 
 })
 
-test_that("packages can be installed from local sources", {
+test_that("packages can be installed from sources", {
 
   renv_tests_scope()
   renv::init()
@@ -307,18 +308,25 @@ test_that("install() installs inferred dependencies", {
 
 })
 
-test_that("install() prefers local sources when available", {
+test_that("install() prefers cellar when available", {
 
   skip_on_cran()
   renv_tests_scope()
 
   root <- renv_tests_root()
-  renv_scope_envvars(RENV_PATHS_LOCAL = file.path(root, "local"))
+  locals <- paste(
+    file.path(root, "nowhere"),
+    file.path(root, "local"),
+    sep = ";"
+  )
+
+  renv_scope_options(renv.config.cache.enabled = FALSE)
+  renv_scope_envvars(RENV_PATHS_CELLAR = locals)
 
   records <- install("skeleton")
 
   record <- records$skeleton
-  expect_equal(record$Repository, "Local")
+  expect_equal(record$Source, "Cellar")
 
   prefix <- if (renv_platform_windows()) "file:///" else "file://"
   uri <- paste0(prefix, root, "/local/skeleton")
@@ -350,4 +358,95 @@ test_that("issue #609", {
   options(configure.vars = c(breakfast = ""))
   install("bread")
   expect_true(renv_package_installed("bread"))
+})
+
+test_that("we can install packages from git remotes within subdirs", {
+
+  skip_on_cran()
+  skip_on_ci()
+  skip("unreliable test")
+
+  renv_tests_scope("subdir")
+
+  install("git@github.com:kevinushey/subdir.git:subdir", rebuild = TRUE)
+  expect_true(renv_package_installed("subdir"))
+
+  snapshot()
+
+  remove("subdir")
+  expect_false(renv_package_installed("subdir"))
+
+  restore(packages = "subdir", rebuild = TRUE)
+  expect_true(renv_package_installed("subdir"))
+
+})
+
+test_that("packages embedded in the project use a project-local RemoteURL", {
+
+  skip_if(getRversion() < "4.1")
+  skip_if_not_installed("usethis")
+
+  renv_tests_scope("example")
+
+  usethis <- renv_namespace_load("usethis")
+  skip_if(is.null(usethis$create_package))
+  renv_scope_options(usethis.quiet = TRUE)
+  unlink("example", recursive = TRUE)
+  usethis$create_package("example", rstudio = FALSE, open = FALSE)
+
+  install("./example")
+  lockfile <- snapshot(lockfile = NULL)
+  expect_equal(lockfile$Packages$example$RemoteUrl, "./example")
+
+  # TODO: if the user provides a "weird" path, we'll use it as-is.
+  # is that okay? what about relative paths that resolve outside of
+  # the project root directory?
+  install("./././example")
+  lockfile <- snapshot(lockfile = NULL)
+  expect_equal(lockfile$Packages$example$RemoteUrl, "./././example")
+
+})
+
+test_that("packages installed from cellar via direct path", {
+
+  skip_on_cran()
+  renv_tests_scope("skeleton")
+
+  root <- renv_tests_root()
+  locals <- paste(
+    file.path(root, "nowhere"),
+    file.path(root, "local"),
+    sep = ";"
+  )
+
+  renv_scope_options(renv.config.cache.enabled = FALSE)
+  renv_scope_envvars(RENV_PATHS_CELLAR = locals)
+
+  path <- file.path(root, "local/skeleton/skeleton_1.0.1.tar.gz")
+  records <- install(path, rebuild = TRUE)
+  expect_equal(records$skeleton$Source, "Cellar")
+
+  lockfile <- snapshot(lockfile = NULL)
+  expect_equal(lockfile$Packages$skeleton$Source, "Cellar")
+
+})
+
+test_that("staging library path has same permissions as library path", {
+
+  skip_on_cran()
+  skip_on_windows()
+
+  renv_tests_scope()
+
+  library <- renv_paths_library()
+  ensure_directory(library)
+  renv_scope_libpaths(library)
+
+  umask <- Sys.umask("0")
+  Sys.chmod(library, "0775")
+  Sys.umask(umask)
+
+  staging <- renv_install_staged_library_path()
+  expect_equal(file.mode(staging), file.mode(library))
+
 })

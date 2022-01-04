@@ -5,7 +5,7 @@
 \alias{settings}
 \title{Project Settings}
 \format{
-An object of class \code{list} of length 8.
+An object of class \code{list} of length 10.
 }
 \usage{
 settings
@@ -18,6 +18,16 @@ Define project-local settings that can be used to adjust the behavior of
 
 
 \describe{
+
+\item{\code{bioconductor.version}}{
+
+The Bioconductor version to be used with this project. Use this if you'd
+like to lock the version of Bioconductor used on a per-project basis.
+When unset, \code{renv} will try to infer the appropriate Bioconductor release
+using the \code{BiocVersion} package if installed; if not, \code{renv} uses
+\code{BiocManager::version()} to infer the appropriate Bioconductor version.
+
+}
 
 \item{\code{external.libraries}}{
 
@@ -68,11 +78,19 @@ details.
 
 \item{\code{use.cache}}{
 
-Use a global cache of \R packages. When active, \code{renv} will install
-packages into a global cache, and link packages from the cache into your
-\code{renv} projects as appropriate. This can greatly save on disk space
+Enable the \code{renv} package cache with this project. When active, \code{renv} will
+install packages into a global cache, and link packages from the cache into
+your \code{renv} projects as appropriate. This can greatly save on disk space
 and install time when for \R packages which are used across multiple
 projects in the same environment.
+
+}
+
+\item{\code{vcs.ignore.local}}{
+
+Set whether packages within a project-local package cellar are excluded
+from version control. See \code{vignette("cellar", package = "renv")} for
+more information.
 
 }
 
@@ -84,7 +102,8 @@ Set whether the \code{renv} project library is excluded from version control.
 
 \item{\code{vcs.ignore.local}}{
 
-Set whether \code{renv} project-specific local sources are excluded from version control.
+Set whether \code{renv} project-specific local sources are excluded from version
+control.
 
 }
 

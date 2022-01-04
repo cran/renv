@@ -20,10 +20,6 @@
 
 }
 
-`%||%` <- function(x, y) {
-  if (length(x) || is.environment(x)) x else y
-}
-
 `%""%` <- function(x, y) {
   if (length(x) && nzchar(x)) x else y
 }
@@ -82,65 +78,15 @@ trimws <- function(x) {
   gsub("^\\s+|\\s+$", "", x)
 }
 
-bind_list <- function(data, names = NULL, index = "Index") {
-
-  # keep only non-empty data
-  filtered <- Filter(NROW, data)
-  if (!length(filtered))
-    return(NULL)
-
-  # ensure all datasets have the same column names
-  # try to preserve the ordering of names if possible
-  # (try to find one dataset which has all column relevant column names)
-  nms <- character()
-  for (i in seq_along(filtered)) {
-    nmsi <- names(filtered[[i]])
-    if (empty(setdiff(nms, nmsi)))
-      nms <- nmsi
-  }
-
-  # check now if we've caught all relevant names; if we didn't,
-  # just fall back to a "dumb" union
-  allnms <- unique(unlist(lapply(filtered, names)))
-  if (!setequal(nms, allnms))
-    nms <- allnms
-
-  # we've collected all names; now fill with NAs as necessary
-  filled <- map(filtered, function(datum) {
-    datum[setdiff(nms, names(datum))] <- NA
-    datum[nms]
-  })
-
-  # we've collected and ordered each data.frame, now merge them
-  rhs <- .mapply(c, filled, list(use.names = FALSE))
-  names(rhs) <- names(filled[[1]])
-
-  if (is.null(names(data))) {
-    names(rhs) <- names(rhs) %||% names
-    return(as.data.frame(rhs, stringsAsFactors = FALSE))
-  }
-
-  if (index %in% names(rhs)) {
-    fmt <- "name collision: bound list already contains column called '%s'"
-    stopf(fmt, index)
-  }
-
-  lhs <- list()
-  rows <- function(item) nrow(item) %||% length(item[[1]])
-  lhs[[index]] <- rep.int(names(filled), times = map_dbl(filled, rows))
-
-  cbind(
-    as.data.frame(lhs, stringsAsFactors = FALSE),
-    as.data.frame(rhs, stringsAsFactors = FALSE)
-  )
-
-}
-
 case <- function(...) {
 
-  dots <- list(...)
-  for (dot in dots) {
+  dots <- eval(substitute(alist(...)))
+  for (i in seq_along(dots)) {
 
+    if (identical(dots[[i]], quote(expr = )))
+      next
+
+    dot <- eval(dots[[i]], envir = parent.frame())
     if (!inherits(dot, "formula"))
       return(dot)
 
@@ -187,8 +133,10 @@ ask <- function(question, default = FALSE) {
   if (!interactive())
     return(default)
 
-  initializing <- Sys.getenv("RENV_R_INITIALIZING", unset = NA)
-  if (identical(initializing, "true"))
+  # TODO: presumedly we don't want to prompt in the autoloader
+  # because it might cause issues in RStudio?
+  initializing <- getOption("renv.autoloader.running")
+  if (identical(initializing, TRUE))
     return(default)
 
   selection <- if (default) "[Y/n]" else "[y/N]"
@@ -294,7 +242,7 @@ visited <- function(name, envir) {
 
 rowapply <- function(X, FUN, ...) {
   lapply(seq_len(NROW(X)), function(I) {
-    FUN(X[I, ], ...)
+    FUN(X[I, , drop = FALSE], ...)
   })
 }
 
@@ -409,4 +357,39 @@ heredoc <- function(text) {
   common <- min(setdiff(indent, -1L))
   paste(substring(lines, common), collapse = "\n")
 
+}
+
+find <- function(x, f, ...) {
+  for (i in seq_along(x))
+    if (!is.null(value <- f(x[[i]], ...)))
+      return(value)
+}
+
+recursing <- function() {
+
+  nf <- sys.nframe()
+  if (nf < 2)
+    return(FALSE)
+
+  np <- sys.parent()
+  fn <- sys.function(np)
+  for (i in seq_len(np - 1L))
+    if (identical(fn, sys.function(i)))
+      return(TRUE)
+
+  FALSE
+
+}
+
+code <- function(x) {
+  paste(deparse(substitute(x)), collapse = "\n")
+}
+
+shcode <- function(x) {
+  shQuote(paste(deparse(substitute(x)), collapse = "\n"))
+}
+
+csort <- function(x, decreasing = FALSE, ...) {
+  renv_scope_locale("LC_COLLATE", "C")
+  sort(x, decreasing, ...)
 }

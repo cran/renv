@@ -21,11 +21,26 @@ project <- function(default = NULL) {
   renv_project(default = default)
 }
 
-renv_project <- function(default = getwd()) {
+renv_project_get <- function(default = NULL) {
+
   project <- Sys.getenv("RENV_PROJECT", unset = NA)
   if (is.na(project))
     return(default)
+
   project
+
+}
+
+renv_project_set <- function(project) {
+  Sys.setenv(RENV_PROJECT = project)
+}
+
+renv_project_clear <- function() {
+  Sys.unsetenv("RENV_PROJECT")
+}
+
+renv_project <- function(default = getwd()) {
+  renv_project_get(default = default)
 }
 
 renv_project_resolve <- function(project = NULL) {
@@ -48,13 +63,7 @@ renv_project_initialized <- function(project) {
 }
 
 renv_project_type <- function(path) {
-
-  descpath <- file.path(path, "DESCRIPTION")
-  if (!file.exists(descpath))
-    return("unknown")
-
-  renv_description_type(descpath)
-
+  renv_bootstrap_project_type(path)
 }
 
 renv_project_remotes <- function(project) {
@@ -265,5 +274,27 @@ renv_project_synchronized_check <- function(project = NULL, lockfile = NULL) {
   }
 
   TRUE
+
+}
+
+# TODO: this gets really dicey once the user starts configuring where
+# renv places its project-local state ...
+renv_project_find <- function(project = NULL) {
+
+  project <- project %||% getwd()
+
+  anchors <- c("renv.lock", "renv/activate.R")
+  resolved <- renv_file_find(project, function(parent) {
+    for (anchor in anchors)
+      if (file.exists(file.path(parent, anchor)))
+        return(parent)
+  })
+
+  if (is.null(resolved)) {
+    fmt <- "couldn't resolve renv project associated with path %s"
+    stopf(fmt, renv_path_pretty(project))
+  }
+
+  resolved
 
 }

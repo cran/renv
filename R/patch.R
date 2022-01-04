@@ -10,7 +10,7 @@ renv_patch_rprofile <- function() {
 
   # resolve path to user profile
   path <- Sys.getenv("R_PROFILE_USER", unset = "~/.Rprofile")
-  info <- file.info(path, extra_cols = FALSE)
+  info <- renv_file_info(path)
   if (!identical(info$isdir, FALSE))
     return(FALSE)
 
@@ -99,7 +99,7 @@ renv_patch_golem_impl <- function(...) {
       return()
 
     # skip files containing nul bytes
-    info <- file.info(file, extra_cols = FALSE)
+    info <- renv_file_info(file)
     bytes <- readBin(file, "raw", info$size)
     if (any(bytes == 0L))
       return()
@@ -129,19 +129,24 @@ renv_patch_methods_table <- function() {
 }
 
 renv_patch_methods_table_impl <- function() {
+
   # ensure promises in S3 methods table are forced
   # https://bugs.r-project.org/bugzilla/show_bug.cgi?id=16644
-  renv <- asNamespace("renv")
+  for (envir in list(.BaseNamespaceEnv, renv_namespace_load("utils"))) {
 
-  # unlock binding if it's locked
-  binding <- ".__S3MethodsTable__."
-  if (bindingIsLocked(binding, env = renv)) {
-    unlockBinding(binding, env = renv)
-    on.exit(lockBinding(binding, renv), add = TRUE)
+    # unlock binding if it's locked
+    binding <- ".__S3MethodsTable__."
+    base <- baseenv()
+    if (base$bindingIsLocked(binding, env = envir)) {
+      base$unlockBinding(binding, env = envir)
+      on.exit(base$lockBinding(binding, envir), add = TRUE)
+    }
+
+    # force everything defined in the environment
+    table <- envir[[binding]]
+    for (key in ls(envir = table, all.names = TRUE))
+      table[[key]] <- force(table[[key]])
+
   }
 
-  # force everything defined in the environment
-  table <- renv[[binding]]
-  for (key in ls(envir = table, all.names = TRUE))
-    table[[key]] <- force(table[[key]])
 }

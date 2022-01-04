@@ -159,13 +159,26 @@ install <- function(packages = NULL,
     return(invisible(list()))
   }
 
-  records <- renv_snapshot_r_packages(libpaths = libpaths, project = project)
-  remotes <- lapply(remotes, renv_remotes_resolve)
+  # if users have requested the use of pak, delegate there
+  if (config$pak.enabled() && !recursing()) {
 
-  # ensure remotes are named
+    renv_pak_init(
+      library = library,
+      type    = type,
+      rebuild = rebuild,
+      project = project
+    )
+
+    return(renv_pak_install(remotes, libpaths))
+
+  }
+
+  # resolve remotes
+  remotes <- lapply(remotes, renv_remotes_resolve)
   names(remotes) <- extract_chr(remotes, "Package")
 
   # update records with requested remotes
+  records <- renv_snapshot_r_packages(libpaths = libpaths, project = project)
   records[names(remotes)] <- remotes
 
   # read remotes from the package DESCRIPTION file and use those to
@@ -270,7 +283,7 @@ renv_install_staged_library_path_impl <- function() {
   root <- if (!is.na(staging))
     staging
   else if (!is.na(project))
-    file.path(project, "renv/staging")
+    renv_paths_renv("staging", project = project)
   else
     file.path(libpath, ".renv")
 
@@ -307,9 +320,25 @@ renv_install_staged_library_path_impl <- function() {
 # OneDrive and friends, and we don't want those to lock files
 # in the staging directory
 renv_install_staged_library_path <- function() {
+
+  # compute path
   path <- renv_install_staged_library_path_impl()
+
+  # create library directory
   ensure_directory(path)
+
+  # try to make sure it has the same permissions as the library itself
+  if (!renv_platform_windows()) {
+    libpath <- renv_libpaths_default()
+    umask <- Sys.umask("0")
+    on.exit(Sys.umask(umask), add = TRUE)
+    info <- renv_file_info(libpath)
+    Sys.chmod(path, info$mode)
+  }
+
+  # return the created path
   return(path)
+
 }
 
 renv_install_default <- function(records) {
@@ -437,9 +466,13 @@ renv_install_package_impl <- function(record, quiet = TRUE) {
   # get archive path for package
   path <- record$Path
 
-  # for packages living within a sub-directory, we need to
-  # unpack the archive explicitly and update the path
+  # for directories, we may need to use subdir to find the package path
+  info <- renv_file_info(path)
   subdir <- record$RemoteSubdir %||% ""
+  if (identical(info$isdir, TRUE) && nzchar(subdir)) {
+    components <- c(path, subdir)
+    path <- paste(components, collapse = "/")
+  }
 
   # for source packages downloaded as zips,
   # we need to extract before install
@@ -494,6 +527,10 @@ renv_install_package_impl <- function(record, quiet = TRUE) {
   installpath <- file.path(library, package)
   callback <- renv_file_backup(installpath)
   on.exit(callback(), add = TRUE)
+
+  # if this failed for some reason, just remove it
+  if (renv_file_broken(installpath))
+    renv_file_remove(installpath)
 
   # if this is the path to an unpacked binary archive,
   # we can just copy the folder over
@@ -557,7 +594,7 @@ renv_install_preflight_requirements <- function(records) {
 
   })
 
-  bad <- bind_list(unname(bad))
+  bad <- bind(unname(bad))
   if (empty(bad))
     return(TRUE)
 
@@ -648,7 +685,7 @@ renv_install_preflight_permissions <- function(library) {
   on.exit(unlink(file, recursive = TRUE), add = TRUE)
 
   # check if we created the directory successfully
-  info <- file.info(file, extra_cols = FALSE)
+  info <- renv_file_info(file)
   if (identical(info$isdir, TRUE))
     return(TRUE)
 

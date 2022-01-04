@@ -16,7 +16,7 @@ renv_scope_tempdir <- function(pattern = "renv-tempdir-", .envir = NULL) {
 
 renv_scope_auth <- function(record, .envir = NULL) {
 
-  package <- record$Package
+  package <- if (is.list(record)) record$Package else record
   auth <- renv_options_override("renv.auth", package)
 
   if (empty(auth))
@@ -277,7 +277,14 @@ renv_scope_git_auth <- function(.envir = NULL) {
 
   .envir <- .envir %||% parent.frame()
 
-  # TODO: not yet implemented for Windows
+  # try and tell git to be non-interactive
+  renv_scope_envvars(
+    GIT_TERMINAL_PROMPT = "0",
+    GIT_ASKPASS         = "/bin/echo",
+    .envir              = .envir
+  )
+
+  # TODO: rest is not yet implemented for Windows
   if (renv_platform_windows())
     return(FALSE)
 
@@ -309,18 +316,30 @@ renv_scope_git_auth <- function(.envir = NULL) {
 
 }
 
-renv_scope_bioconductor <- function(.envir = NULL) {
-
+renv_scope_bioconductor <- function(project = NULL,
+                                    version = NULL,
+                                    .envir = NULL)
+{
   .envir <- .envir %||% parent.frame()
 
   # ensure bioconductor support infrastructure initialized
   renv_bioconductor_init()
 
-  # activate bioconductor repositories in this context
+  # get current repository
   repos <- getOption("repos")
-  biocrepos <- c(renv_bioconductor_repos(), repos)
-  renv_scope_options(repos = renv_vector_unique(biocrepos), .envir = .envir)
 
+  # remove old / stale bioc repositories
+  stale <- grepl("Bioc", names(repos))
+  repos <- repos[!stale]
+
+  # retrieve bioconductor repositories appropriate for this record
+  biocrepos <- renv_bioconductor_repos(project = project, version = version)
+
+  # put it all together
+  allrepos <- c(repos, biocrepos)
+
+  # activate repositories in this context
+  renv_scope_options(repos = renv_vector_unique(allrepos), .envir = .envir)
 }
 
 renv_scope_lock <- function(path = NULL,
