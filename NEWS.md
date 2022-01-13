@@ -1,4 +1,27 @@
 
+# renv 0.15.1
+
+* Fixed an issue where `renv` inadvertently inserted extra newlines into
+  a `DESCRIPTION` file when adding `Remotes` fields after install. (#914)
+
+* Fixed an issue where packages installed from a remote sub-directory would
+  fail to install when later re-installed from the cache. (#913)
+
+* `renv` now recognizes YAML chunk options of the form `#| key: value` when
+  used in R Markdown documents. (#912)
+
+* Fixed an issue where the R site library was visible in `renv` projects with
+  the system library sandbox disabled.
+
+* Fixed an issue where `renv` could update the wrong `.gitignore` in R
+  processes launched by `callr` (e.g. in `devtools::install`). (#910)
+
+* Fixed an issue where `renv` could fail to read mis-encoded
+  DESCRIPTION files. (#908)
+
+* Fixed an issue where `config$cache.symlinks()` would report `NULL` when
+  unset. (#906)
+
 # renv 0.15.0
 
 * The development branch for `renv` has moved from master to main.
@@ -62,7 +85,7 @@
   opposed to packages explicitly placed in this ad-hoc repository.
   `RENV_PATHS_LOCAL` remains supported for backwards compatibility.
   
-* The `RENV_PATHS_LOCAL` environment variable can now be set to multiple
+* The `RENV_PATHS_CELLAR` environment variable can now be set to multiple
   paths. Use `;` as a separator between paths; for example,
   `RENV_PATHS_LOCAL=/path/to/sources/v1;/path/to/sources/v2`. (#550)
   
