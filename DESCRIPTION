@@ -1,7 +1,7 @@
 Package: renv
 Type: Package
 Title: Project Environments
-Version: 0.15.1
+Version: 0.15.2
 Authors@R: c(
     person("Kevin", "Ushey", role = c("aut", "cre"), email = "kevin@rstudio.com"),
     person("RStudio, PBC", role = c("cph"))
@@ -21,9 +21,9 @@ Encoding: UTF-8
 RoxygenNote: 7.1.2
 VignetteBuilder: knitr
 NeedsCompilation: no
-Packaged: 2022-01-13 20:01:29 UTC; kevin
+Packaged: 2022-01-24 20:11:37 UTC; kevin
 Author: Kevin Ushey [aut, cre],
   RStudio, PBC [cph]
 Maintainer: Kevin Ushey <kevin@rstudio.com>
 Repository: CRAN
-Date/Publication: 2022-01-13 20:52:43 UTC
+Date/Publication: 2022-01-24 21:02:42 UTC

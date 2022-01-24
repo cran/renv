@@ -238,14 +238,20 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<p><code>renv</code> uses a <strong>lockfile</strong> to capture the state of your library at some point in time. It is stored as a collection of <em>records</em>, with different records defining:</p>
+<p><code>renv</code> uses a <strong>lockfile</strong> to capture the
+state of your library at some point in time. It is stored as a
+collection of <em>records</em>, with different records defining:</p>
 <ul>
-<li>The version of <code>renv</code> used when generating the lockfile;</li>
+<li>The version of <code>renv</code> used when generating the
+lockfile;</li>
 <li>The version of <code>R</code> used in that project;</li>
-<li>The R repositories that were active when the lockfile was created;</li>
-<li><em>Package records</em> defining each R package, their version, and their installation source.</li>
+<li>The R repositories that were active when the lockfile was
+created;</li>
+<li><em>Package records</em> defining each R package, their version, and
+their installation source.</li>
 </ul>
-<p>Here is an example lockfile, including the packages <code>markdown</code> and <code>mime</code>:</p>
+<p>Here is an example lockfile, including the packages
+<code>markdown</code> and <code>mime</code>:</p>
 <pre><code>{
   &quot;R&quot;: {
     &quot;Version&quot;: &quot;4.1.2&quot;,
@@ -273,7 +279,11 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
     }
   }
 }</code></pre>
-<p>The function <code>renv::snapshot()</code> is used to create this lockfile, and by default writes these records to the file <code>renv.lock</code>. Later, if you need to reinstall the specific package versions as recorded in <code>renv.lock</code>, you can use <code>renv::restore()</code>.</p>
+<p>The function <code>renv::snapshot()</code> is used to create this
+lockfile, and by default writes these records to the file
+<code>renv.lock</code>. Later, if you need to reinstall the specific
+package versions as recorded in <code>renv.lock</code>, you can use
+<code>renv::restore()</code>.</p>
 
 
 

@@ -1,4 +1,6 @@
 
+# renv 0.15.2
+
 # renv 0.15.1
 
 * Fixed an issue where `renv` inadvertently inserted extra newlines into

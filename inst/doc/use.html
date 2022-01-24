@@ -333,7 +333,9 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<p>The <code>renv::use()</code> function can make it easier to define stand-alone R scripts that include their R package requirements directly in the script itself. For example:</p>
+<p>The <code>renv::use()</code> function can make it easier to define
+stand-alone R scripts that include their R package requirements directly
+in the script itself. For example:</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># write down the set of packages required by this script</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">use</span>(</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="st">&quot;digest&quot;</span>,         <span class="co"># use the latest-available version of digest</span></span>
@@ -344,18 +346,33 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>digest<span class="sc">::</span><span class="fu">digest</span>(<span class="fu">list</span>(<span class="at">answer =</span> <span class="dv">42</span>))</span></code></pre></div>
 <p>Running a script with these contents will:</p>
 <ol style="list-style-type: decimal">
-<li><p>Automatically download the requested packages – in this case, the latest release of <code>digest</code>, alongside <code>rlang 0.3.4</code>,</p></li>
-<li><p>Install the requested packages (plus their recursive package dependencies) to a temporary library path,</p></li>
-<li><p>Activate that library path, so that it’s used subsequently in the script.</p></li>
+<li><p>Automatically download the requested packages – in this case, the
+latest release of <code>digest</code>, alongside <code>rlang
+0.3.4</code>,</p></li>
+<li><p>Install the requested packages (plus their recursive package
+dependencies) to a temporary library path,</p></li>
+<li><p>Activate that library path, so that it’s used subsequently in the
+script.</p></li>
 </ol>
-<p><code>renv::use()</code> can hence be a useful way of sharing standalone R scripts with a set of specific package requirements. Running these scripts will ensure the requested packages are automatically downloaded and installed.</p>
-<p>In addition, you can also supply the path to a lockfile. For example:</p>
+<p><code>renv::use()</code> can hence be a useful way of sharing
+standalone R scripts with a set of specific package requirements.
+Running these scripts will ensure the requested packages are
+automatically downloaded and installed.</p>
+<p>In addition, you can also supply the path to a lockfile. For
+example:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># use a particular lockfile in the context of this script</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">use</span>(<span class="at">lockfile =</span> <span class="st">&quot;/path/to/renv.lock&quot;</span>)</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"># the rest of this script will run with the packages as declared</span></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co"># in that lockfile installed into a temporary library path</span></span></code></pre></div>
-<p>This can be useful in projects where you’d like to associate different lockfiles with different documents – for example, in a <a href="https://bookdown.org/yihui/blogdown/">blog</a> or a website where you’d like to associate a separate lockfile with each post. Once the post is complete, you could use <code>renv::snapshot(lockfile = &quot;/path/to/renv.lock&quot;)</code> to “save” the state that was active while authoring that lockfile, and then use <code>renv::use(lockfile = &quot;/path/to/renv.lock&quot;)</code> in that document to ensure the blog post is always run using that lockfile on future renders.</p>
+<p>This can be useful in projects where you’d like to associate
+different lockfiles with different documents – for example, in a <a href="https://bookdown.org/yihui/blogdown/">blog</a> or a website where
+you’d like to associate a separate lockfile with each post. Once the
+post is complete, you could use <code>renv::snapshot(lockfile =
+&quot;/path/to/renv.lock&quot;)</code> to “save” the state that was active while
+authoring that lockfile, and then use <code>renv::use(lockfile =
+&quot;/path/to/renv.lock&quot;)</code> in that document to ensure the blog post is
+always run using that lockfile on future renders.</p>
 
 
 

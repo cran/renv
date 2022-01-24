@@ -335,38 +335,77 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <div id="introduction" class="section level2">
 <h2>Introduction</h2>
-<p>Starting with <code>renv 0.13.0</code>, it is possible to activate and switch between different profiles associated with a project. A profile can be thought of as a different mode in which a project is used. For example:</p>
+<p>Starting with <code>renv 0.13.0</code>, it is possible to activate
+and switch between different profiles associated with a project. A
+profile can be thought of as a different mode in which a project is
+used. For example:</p>
 <ul>
-<li>A “development” profile might be used when developing and testing a project,</li>
-<li>A “production” profile might be used for production deployments,</li>
-<li>A “shiny” profile might be used when running the Shiny application.</li>
+<li>A “development” profile might be used when developing and testing a
+project,</li>
+<li>A “production” profile might be used for production
+deployments,</li>
+<li>A “shiny” profile might be used when running the Shiny
+application.</li>
 </ul>
-<p>At its heart, activating or using a particular profile implies using a different set of paths for the project library and lockfile. With this, it is possible to associate different packages, and different dependencies, with different workflows in a single project using <code>renv</code>.</p>
+<p>At its heart, activating or using a particular profile implies using
+a different set of paths for the project library and lockfile. With
+this, it is possible to associate different packages, and different
+dependencies, with different workflows in a single project using
+<code>renv</code>.</p>
 </div>
 <div id="usage" class="section level2">
 <h2>Usage</h2>
-<p>By default, <code>renv</code> projects use the “default” profile, which implies that library and lockfile paths are set in the typical way. To activate a particular profile, use:</p>
+<p>By default, <code>renv</code> projects use the “default” profile,
+which implies that library and lockfile paths are set in the typical
+way. To activate a particular profile, use:</p>
 <pre><code>renv::activate(profile = &quot;dev&quot;)</code></pre>
-<p>This creates a profile called <code>&quot;dev&quot;</code>, and sets it as the default for the project, so that newly-launched R sessions will operate using the <code>&quot;dev&quot;</code> profile. After setting this and re-launching R, you should see that the default library and lockfile paths are resolved within the <code>renv/profiles/dev</code> folder from the project root.</p>
-<p>Alternatively, if you want to activate a particular profile for an R session without setting it as the default for new R sessions, you can use:</p>
+<p>This creates a profile called <code>&quot;dev&quot;</code>, and sets it as the
+default for the project, so that newly-launched R sessions will operate
+using the <code>&quot;dev&quot;</code> profile. After setting this and
+re-launching R, you should see that the default library and lockfile
+paths are resolved within the <code>renv/profiles/dev</code> folder from
+the project root.</p>
+<p>Alternatively, if you want to activate a particular profile for an R
+session without setting it as the default for new R sessions, you can
+use:</p>
 <pre><code>Sys.setenv(RENV_PROFILE = &quot;dev&quot;)</code></pre>
-<p>and <code>renv</code> will automatically use that profile as appropriate when computing library and lockfile paths. Similarly, from the command line, you might enforce the use of a particular profile in an <code>renv</code> project with:</p>
+<p>and <code>renv</code> will automatically use that profile as
+appropriate when computing library and lockfile paths. Similarly, from
+the command line, you might enforce the use of a particular profile in
+an <code>renv</code> project with:</p>
 <pre><code>export RENV_PROFILE=dev</code></pre>
-<p>With that set, <code>renv</code> would default to using the <code>&quot;dev&quot;</code> profile for any newly-launched R sessions within <code>renv</code> projects.</p>
+<p>With that set, <code>renv</code> would default to using the
+<code>&quot;dev&quot;</code> profile for any newly-launched R sessions within
+<code>renv</code> projects.</p>
 <p>To activate the “default” profile used by a project, use:</p>
 <pre><code>renv::activate(profile = NULL)</code></pre>
 </div>
 <div id="managing-profile-specific-dependencies" class="section level2">
 <h2>Managing Profile-specific Dependencies</h2>
-<p>Profile-specific package dependencies can be declared within the project’s top-level <code>DESCRIPTION</code> file. For example, to declare that the <code>shiny</code> profile depends on the <a href="https://shiny.rstudio.com/">shiny</a> and <a href="https://www.tidyverse.org/">tidyverse</a> packages:</p>
+<p>Profile-specific package dependencies can be declared within the
+project’s top-level <code>DESCRIPTION</code> file. For example, to
+declare that the <code>shiny</code> profile depends on the <a href="https://shiny.rstudio.com/">shiny</a> and <a href="https://www.tidyverse.org/">tidyverse</a> packages:</p>
 <pre><code>Config/renv/profiles/shiny/dependencies: shiny, tidyverse</code></pre>
-<p>If you’d like to also declare that these packages should be installed from a custom remote (analogous to the <code>Remotes</code> field for the default profile), you can define those remotes with a separate field:</p>
+<p>If you’d like to also declare that these packages should be installed
+from a custom remote (analogous to the <code>Remotes</code> field for
+the default profile), you can define those remotes with a separate
+field:</p>
 <pre><code>Config/renv/profiles/shiny/remotes: rstudio/shiny, tidyverse/tidyverse</code></pre>
-<p>These remotes will then be respected in calls to <code>renv::install()</code>.</p>
-<p>The packages and remotes must be specified separately, as <code>renv</code> cannot determine the package name associated with a particular remote without explicitly resolving that remote. Remote resolution normally requires a web request, which <code>renv</code> tries to avoid in “regular” dependency discovery.</p>
-<p>If you’d prefer that only the packages enumerated in this field are used, you can opt-in to using <code>&quot;explicit&quot;</code> snapshots, and leave the <code>Imports</code>, <code>Depends</code> and <code>Suggests</code> fields blank:</p>
+<p>These remotes will then be respected in calls to
+<code>renv::install()</code>.</p>
+<p>The packages and remotes must be specified separately, as
+<code>renv</code> cannot determine the package name associated with a
+particular remote without explicitly resolving that remote. Remote
+resolution normally requires a web request, which <code>renv</code>
+tries to avoid in “regular” dependency discovery.</p>
+<p>If you’d prefer that only the packages enumerated in this field are
+used, you can opt-in to using <code>&quot;explicit&quot;</code> snapshots, and
+leave the <code>Imports</code>, <code>Depends</code> and
+<code>Suggests</code> fields blank:</p>
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>renv<span class="sc">::</span>settings<span class="sc">$</span><span class="fu">snapshot.type</span>(<span class="st">&quot;explicit&quot;</span>)</span></code></pre></div>
-<p>When set, only the dependencies listed in the project <code>DESCRIPTION</code> file will be used when the lockfile is generated. See <code>?renv::snapshot</code> for more details.</p>
+<p>When set, only the dependencies listed in the project
+<code>DESCRIPTION</code> file will be used when the lockfile is
+generated. See <code>?renv::snapshot</code> for more details.</p>
 </div>
 
 
