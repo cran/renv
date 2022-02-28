@@ -1,5 +1,43 @@
 
+# renv 0.15.3
+
+* A variety of fixes for R CMD check.
+
+* `renv` gains an experimental function, `renv::autoload()`, to be used as a
+  helper for automatically loading a project for R processes launched within a
+  sub-directory of that project. See `?renv::autoload` for more details.
+
+* `renv` will now print a warning message when attempting to read a lockfile
+  containing merge conflict markers (as from e.g. a git merge). (#945)
+
+* Fixed an issue where `renv::install()` could install into the wrong library
+  path on Windows, if the R installation had a site-wide profile that mutated
+  the library paths. (#941)
+
+* Fixed an issue where `renv::install()` would fail to find a package within
+  the cache when using an abbreviated commit hash for installation. (#943)
+
+* Fixed an issue where `renv`'s automatic snapshot was not run after calls to
+  `renv::install()` in some cases. (#939)
+  
+* Fixed an issue where `renv` would incorrectly copy a package from the cache,
+  if the cached version of the package and the requested version of the package
+  had the same package version, even if they were retrieved from different
+  sources. (#938)
+
+* The path to an `renv` tarball can now be set via the environment variable
+  `RENV_BOOTSTRAP_TARBALL`, to be used to help `renv` bootstrap from local
+  sources. This can either be the path to a directory containing `renv`
+  source tarballs, or the path to the tarball itself.
+  
+* Fixed an issue where the R site library would not be appropriately masked
+  for resumed RStudio sessions. (#936)
+
+
 # renv 0.15.2
+
+* Fixed issues encountered in R CMD check.
+
 
 # renv 0.15.1
 
@@ -23,6 +61,7 @@
 
 * Fixed an issue where `config$cache.symlinks()` would report `NULL` when
   unset. (#906)
+
 
 # renv 0.15.0
 
@@ -163,6 +202,7 @@
   to pass along other optional arguments to the shimmed function correctly.
   (#808)
   
+
 # renv 0.14.0
 
 * `renv` now uses `tools::R_user_dir()` to resolve the default path to the
@@ -277,6 +317,7 @@
   for example, `renv::load()` masking `base::load()`. When set, all usages
   of `renv` APIs must be explicitly qualified with the `renv::` prefix.
   
+
 # renv 0.13.2
 
 * `renv::install("user/repo/subdir with spaces")` now works as expected. (#694)
@@ -299,6 +340,7 @@
 * Fixed an issue where `renv::status()` could provide a misleading message
   for packages which are recorded in the lockfile, but not explicitly
   required by the project. (#684)
+
 
 # renv 0.13.1
 
@@ -423,9 +465,11 @@
 * Fixed an issue where package installation could fail if the `configure.vars`
   option was set to be a named character, rather than a named list. (#609)
 
+
 # renv 0.12.5
 
 * Fixed an issue where `renv` would fail to bootstrap. (#608)
+
 
 # renv 0.12.4
 
@@ -477,6 +521,7 @@
 * Fixed an issue where bootstrapping an older version of `renv` could
   fail if the R repositories had not been appropriately set.
 
+
 # renv 0.12.3
 
 * Fixed an issue where `renv::dependencies()` could give an error if called
@@ -516,9 +561,11 @@
 * When `RENV_PATHS_LIBRARY_ROOT` is set, `renv` will now disambiguate library
   paths based on a hash of the project's path. (#564)
 
+
 # renv 0.12.2
 
 * `renv` no longer errs when running tests with `_R_CHECK_SUGGESTS_ONLY_=false`.
+
 
 # renv 0.12.1
 
@@ -574,6 +621,7 @@
   enabled by setting `options(renv.config.locking.enabled = TRUE)` in an
   appropriate R startup file. (#525)
 
+
 # renv 0.12.0
 
 * `renv` now uses R's internal tar implementation by default on Windows. This is
@@ -610,6 +658,7 @@
 * Fixed an issue where the `RENV_PATHS_PREFIX` environment variable was
   inappropriately normalized when `renv` was loaded. (#465)
   
+
 # renv 0.11.0
 
 * Fixed an issue where `renv::install(..., type = "binary")` would
@@ -666,6 +715,7 @@
 * `renv` now records the `OS_type` reported in a package's `DESCRIPTION` file
   (if any), and ignores packages incompatible with the current operating
   system during restore. (#394)
+
 
 # renv 0.10.0
 
@@ -780,6 +830,7 @@
 * `renv` now tries to place Rtools on the PATH when a package is installed
   with the `install.packages()` hook active. (#335)
 
+
 # renv 0.9.3
 
 * Fixed an issue where attempts to specify `RENV_PATHS_RTOOLS` would
@@ -844,13 +895,16 @@
 * `renv` now updates its local `.gitignore` file, when part of a git repository
   whose git root lives in a parent directory. (#300)
 
+
 # renv 0.9.2
 
 * Fixed an issue in invoking `find` on Solaris.
 
+
 # renv 0.9.1
 
 * Fixed an issue in invoking `cp` on Solaris.
+
 
 # renv 0.9.0
 
@@ -925,6 +979,7 @@
 * `renv::install()` disables staged package install when running with the
   Windows Subsystem for Linux. (#239)
 
+
 # renv 0.8.3
 
 * `renv::dependencies()` gains a new argument `dev`, indicating whether
@@ -969,13 +1024,16 @@
 * Fixed an issue where attempts to call `renv::restore()` with the path to the
   lockfile explicitly provided would fail. (#227)
 
+
 # renv 0.8.2
 
 * Further fixes for checks run on CRAN.
 
+
 # renv 0.8.1
 
 * Fixes for checks run on CRAN.
+
 
 # renv 0.8.0
 

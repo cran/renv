@@ -254,10 +254,11 @@ environment. Alternatively, you can set the
 <code>renv</code> to use a different version of Python.</p>
 <p>If you’d rather tell <code>renv</code> to use an existing Python
 virtual environment, you can do so by passing the path of that virtual
-environment instead – use <code>renv::use_python(python =
-&quot;/path/to/python&quot;)</code> and <code>renv</code> will record and use that
-Python interpreter with your project. This can also be used with
-pre-existing virtual environments and Conda environments.</p>
+environment instead – use
+<code>renv::use_python(python = &quot;/path/to/python&quot;)</code> and
+<code>renv</code> will record and use that Python interpreter with your
+project. This can also be used with pre-existing virtual environments
+and Conda environments.</p>
 </div>
 <div id="understanding-python-integration" class="section level2">
 <h2>Understanding Python Integration</h2>
@@ -274,12 +275,12 @@ package dependencies).</p>
 <p>When using virtual environments, the following extensions are
 provided:</p>
 <ul>
-<li><p><code>renv::snapshot()</code> calls <code>pip freeze &gt;
-requirements.txt</code> to save the set of installed Python
-packages;</p></li>
-<li><p><code>renv::restore()</code> calls <code>pip install -r
-requirements.txt</code> to install the previously-recorded set of Python
-packages.</p></li>
+<li><p><code>renv::snapshot()</code> calls
+<code>pip freeze &gt; requirements.txt</code> to save the set of
+installed Python packages;</p></li>
+<li><p><code>renv::restore()</code> calls
+<code>pip install -r requirements.txt</code> to install the
+previously-recorded set of Python packages.</p></li>
 </ul>
 </div>
 <div id="conda-environments" class="section level3">
@@ -287,12 +288,12 @@ packages.</p></li>
 <p>When using Conda environments, the following extensions are
 provided:</p>
 <ul>
-<li><p><code>renv::snapshot()</code> calls <code>conda env export &gt;
-environment.yml</code> to save the set of installed Python
-packages;</p></li>
-<li><p><code>renv::restore()</code> calls <code>conda env
-[create/update] --file environment.yml</code> to install the
-previously-recorded set of Python packages.</p></li>
+<li><p><code>renv::snapshot()</code> calls
+<code>conda env export &gt; environment.yml</code> to save the set of
+installed Python packages;</p></li>
+<li><p><code>renv::restore()</code> calls
+<code>conda env [create/update] --file environment.yml</code> to install
+the previously-recorded set of Python packages.</p></li>
 </ul>
 </div>
 </div>

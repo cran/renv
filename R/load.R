@@ -40,6 +40,12 @@ load <- function(project = NULL, quiet = FALSE) {
   project <- project %||% renv_project_find(project)
   renv_scope_lock(project = project)
 
+  # indicate that we're now loading the project
+  renv_scope_options(renv.load.running = TRUE)
+
+  # avoid suppressing the next auto snapshot
+  renv_scope_var("running", TRUE, envir = `_renv_snapshot_auto`)
+
   # if load is being called via the autoloader,
   # then ensure RENV_PROJECT is unset
   # https://github.com/rstudio/renv/issues/887
@@ -571,6 +577,8 @@ renv_load_quiet <- function() {
 }
 
 renv_load_finish <- function(project, lockfile) {
+
+  options(renv.project.path = project)
 
   if (!renv_load_quiet()) {
     renv_load_report_project(project)

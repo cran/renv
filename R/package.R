@@ -341,3 +341,53 @@ renv_package_shlib <- function(package) {
   file.path(pkgpath, "libs", libname)
 
 }
+
+renv_package_built <- function(path) {
+
+  info <- renv_file_info(path)
+
+  # list files in package
+  isarchive <- identical(info$isdir, FALSE)
+  files <- if (isarchive)
+    renv_archive_list(path)
+  else
+    list.files(path, full.names = TRUE, recursive = TRUE)
+
+  # for a source package, the canonical way to determine if it has already
+  # been built is the presence of a 'Packaged:' field in the DESCRIPTION file
+  # ('Built:' for binary packages) but we want to avoid the overhead of
+  # unpacking the package if at all possible
+  pattern <- "/(?:MD5$|INDEX/|Meta/package\\.rds$)"
+  matches <- grep(pattern, files)
+  if (length(matches) != 0L)
+    return(TRUE)
+
+  # if the above failed, then we'll use the contents of the DESCRIPTION file
+  descpaths <- grep("/DESCRIPTION$", files, value = TRUE)
+  if (length(descpaths) == 0L)
+    return(FALSE)
+
+  n <- nchar(descpaths)
+  descpath <- descpaths[n == min(n)]
+  contents <- if (isarchive)
+    renv_archive_read(path, descpath)
+  else
+    readLines(descpath, warn = FALSE)
+
+  # check for signs it was built
+  pattern <- "^(?:Packaged|Built):"
+  matches <- grep(pattern, contents)
+  if (length(matches) != 0L)
+    return(TRUE)
+
+  # does not appear to be a source package
+  FALSE
+
+}
+
+renv_package_checking <- function() {
+  "CheckExEnv" %in% search() ||
+    !is.na(Sys.getenv("_R_CHECK_PACKAGE_NAME_", unset = NA)) ||
+    !is.na(Sys.getenv("_R_CHECK_SIZE_OF_TARBALL_", unset = NA)) ||
+    !is.na(Sys.getenv("TESTTHAT", unset = NA))
+}

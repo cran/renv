@@ -2,6 +2,7 @@
 renv_patch_init <- function() {
   renv_patch_rprofile()
   renv_patch_tar()
+  renv_patch_repos()
   renv_patch_golem()
   renv_patch_methods_table()
 }
@@ -148,5 +149,48 @@ renv_patch_methods_table_impl <- function() {
       table[[key]] <- force(table[[key]])
 
   }
+
+}
+
+# puts the current version of renv into an on-disk package repository,
+# so that packages using renv can find this version of renv in tests
+# this helps renv survive CRAN revdep checks (e.g. jetpack)
+renv_patch_repos <- function() {
+
+  # nothing to do if we're not running tests
+  checking <- renv_package_checking()
+  if (!checking)
+    return()
+
+  # nothing to do if we're running our own tests
+  name <- Sys.getenv("_R_CHECK_PACKAGE_NAME_", unset = NA)
+  if (identical(name, "renv"))
+    return()
+
+  # nothing to do if this version of 'renv' is already available
+  version <- renv_package_version("renv")
+  entry <- catch(renv_available_packages_entry("renv", filter = version, quiet = TRUE))
+  if (!inherits(entry, "error"))
+    return()
+
+  # check if we've already set repos
+  if ("RENV" %in% names(getOption("repos")))
+    return()
+
+  # use package-local repository path
+  repopath <- system.file("repos", package = "renv")
+  contrib <- file.path(repopath, "src/contrib")
+
+  # update our repos option
+  fmt <- if (renv_platform_windows()) "file:///%s" else "file://%s"
+  repourl <- sprintf(fmt, repopath)
+
+  # renv needs to be first so the right version is found?
+  repos <- c(RENV = repourl, getOption("repos"))
+  names(repos) <- make.names(names(repos))
+  options(repos = repos)
+
+  # make sure these repositories are used in restore too
+  options(renv.config.repos.override = repos)
 
 }

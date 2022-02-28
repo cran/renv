@@ -1,4 +1,7 @@
 
+# simulate running in R CMD check
+Sys.setenv("_R_CHECK_PACKAGE_NAME_" = "renv")
+
 context <- function(desc) {
   renv_tests_init()
   testthat::context(desc)
@@ -17,11 +20,19 @@ test_that <- function(desc, code) {
   oldrepos <- getOption("repos")
 
   repopath <- getOption("renv.tests.repopath")
-  oldfiles <- list.files(
+  oldrepofiles <- list.files(
     path = repopath,
     all.files = TRUE,
     full.names = TRUE,
     recursive = TRUE
+  )
+
+  olduserdir <- file.path(renv_bootstrap_user_dir(), "library")
+  olduserfiles <- list.files(
+    path       = olduserdir,
+    all.files  = TRUE,
+    full.names = TRUE,
+    no..       = TRUE
   )
 
   call <- sys.call()
@@ -47,17 +58,30 @@ test_that <- function(desc, code) {
     stopf("test %s has corrupted repos", shQuote(desc))
   }
 
-  newfiles <- list.files(
+  newrepofiles <- list.files(
     path = repopath,
     all.files = TRUE,
     full.names = TRUE,
     recursive = TRUE
   )
 
-  if (!setequal(oldfiles, newfiles)) {
-    writeLines(setdiff(oldfiles, newfiles))
-    writeLines(setdiff(newfiles, oldfiles))
+  if (!setequal(oldrepofiles, newrepofiles)) {
+    writeLines(setdiff(oldrepofiles, newrepofiles))
+    writeLines(setdiff(newrepofiles, oldrepofiles))
     stopf("test %s has corrupted packages in repository", shQuote(desc))
+  }
+
+  newuserfiles <- list.files(
+    path       = olduserdir,
+    all.files  = TRUE,
+    full.names = TRUE,
+    no..       = TRUE
+  )
+
+  if (!setequal(olduserfiles, newuserfiles)) {
+    writeLines(setdiff(olduserfiles, newuserfiles))
+    writeLines(setdiff(newuserfiles, olduserfiles))
+    stopf("test %s did not clean up in user cache directory", shQuote(desc))
   }
 
 }

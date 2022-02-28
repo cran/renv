@@ -151,6 +151,16 @@ r_cmd_install <- function(package, path, ...) {
   # normalize path to package
   path <- renv_path_normalize(path, winslash = "/", mustWork = TRUE)
 
+  # unpack source packages in zip archives
+  unpack <-
+    renv_archive_type(path) %in% "zip" &&
+    renv_package_type(path) %in% "source"
+
+  if (unpack) {
+    path <- renv_install_package_unpack(package, path, force = TRUE)
+    on.exit(unlink(path, recursive = TRUE), add = TRUE)
+  }
+
   # resolve default library path
   library <- renv_libpaths_default()
 
@@ -159,16 +169,19 @@ r_cmd_install <- function(package, path, ...) {
   if (renv_platform_macos() && renv_package_type(path) == "source")
     renv_xcode_check()
 
-  # perform platform-specific preinstall checks
+  # perform platform-specific pre-install checks
   renv_scope_install()
 
   # perform the install
+  # note that we need to supply '-l' below as otherwise the library paths
+  # could be changed by, for example, site-specific profiles
   args <- c(
     "--vanilla",
     "CMD", "INSTALL", "--preclean", "--no-multiarch",
     r_cmd_install_option(package, "configure.args", TRUE),
     r_cmd_install_option(package, "configure.vars", TRUE),
     r_cmd_install_option(package, c("install.opts", "INSTALL_opts"), FALSE),
+    "-l", shQuote(library),
     ...,
     shQuote(path)
   )

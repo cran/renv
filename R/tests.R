@@ -82,12 +82,16 @@ renv_tests_init_envvars <- function() {
   Sys.unsetenv("RENV_PATHS_ROOT")
   Sys.unsetenv("RENV_PATHS_LIBRARY")
   Sys.unsetenv("RENV_PATHS_LIBRARY_ROOT")
+  Sys.unsetenv("RENV_PATHS_LOCAL")
+  Sys.unsetenv("RENV_PATHS_LOCKFILE")
   Sys.unsetenv("RENV_PATHS_RENV")
 
   Sys.unsetenv("RENV_PYTHON")
   Sys.unsetenv("RETICULATE_PYTHON")
   Sys.unsetenv("RETICULATE_PYTHON_ENV")
   Sys.unsetenv("RETICULATE_PYTHON_FALLBACK")
+
+  Sys.setenv(RENV_AUTOLOAD_ENABLED = "FALSE")
 
   envvars <- Sys.getenv()
   configvars <- grep("^RENV_CONFIG_", names(envvars), value = TRUE)
@@ -128,7 +132,7 @@ renv_tests_init_repos <- function(repopath = NULL) {
   root <- renv_tests_root()
 
   # generate our dummy repository
-  repopath <- repopath %||% tempfile("renv-repos-")
+  repopath <- repopath %||% tempfile("renv-tests-repos-")
   contrib <- file.path(repopath, "src/contrib")
   ensure_directory(contrib)
 
@@ -305,6 +309,16 @@ renv_tests_init_sandbox <- function() {
 }
 
 renv_tests_init_finish <- function() {
+
+  # remove any leftover renv-test- directories in the userdir
+  userdir <- renv_bootstrap_user_dir()
+  libdir <- file.path(userdir, "library")
+  testdirs <- list.files(
+    path = libdir,
+    pattern = "^renv-test-",
+    full.names = TRUE
+  )
+  unlink(testdirs, recursive = TRUE)
 
   # don't perform transactional installs by default for now
   # (causes strange CI failures, especially on Windows?)

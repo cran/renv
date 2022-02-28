@@ -347,8 +347,8 @@ in the script itself. For example:</p>
 <p>Running a script with these contents will:</p>
 <ol style="list-style-type: decimal">
 <li><p>Automatically download the requested packages – in this case, the
-latest release of <code>digest</code>, alongside <code>rlang
-0.3.4</code>,</p></li>
+latest release of <code>digest</code>, alongside
+<code>rlang 0.3.4</code>,</p></li>
 <li><p>Install the requested packages (plus their recursive package
 dependencies) to a temporary library path,</p></li>
 <li><p>Activate that library path, so that it’s used subsequently in the
@@ -368,11 +368,12 @@ example:</p>
 <p>This can be useful in projects where you’d like to associate
 different lockfiles with different documents – for example, in a <a href="https://bookdown.org/yihui/blogdown/">blog</a> or a website where
 you’d like to associate a separate lockfile with each post. Once the
-post is complete, you could use <code>renv::snapshot(lockfile =
-&quot;/path/to/renv.lock&quot;)</code> to “save” the state that was active while
-authoring that lockfile, and then use <code>renv::use(lockfile =
-&quot;/path/to/renv.lock&quot;)</code> in that document to ensure the blog post is
-always run using that lockfile on future renders.</p>
+post is complete, you could use
+<code>renv::snapshot(lockfile = &quot;/path/to/renv.lock&quot;)</code> to “save”
+the state that was active while authoring that lockfile, and then use
+<code>renv::use(lockfile = &quot;/path/to/renv.lock&quot;)</code> in that document
+to ensure the blog post is always run using that lockfile on future
+renders.</p>
 
 
 

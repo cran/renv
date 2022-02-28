@@ -1,0 +1,9 @@
+Package: renv
+Version: 0.15.3
+Imports: utils
+Suggests: R6, BiocManager, cli, covr, devtools, knitr, miniUI, packrat,
+        pak, remotes, reticulate, rmarkdown, rstudioapi, shiny,
+        testthat, uuid, yaml
+License: MIT + file LICENSE
+MD5sum: d1eba1b2ec913737a7523397081ce6e2
+NeedsCompilation: no
