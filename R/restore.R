@@ -207,6 +207,21 @@ renv_restore_run_actions <- function(project, actions, current, lockfile, rebuil
 
 }
 
+renv_restore_state_debug <- function() {
+
+  state <- renv_restore_state()
+  if (is.null(state)) {
+    writeLines("renv_restore_state(): NULL")
+    return()
+  }
+
+  writeLines("renv_restore_state()")
+  data <- renv_envir_unwrap(state)
+  data$install <- data$install$data()
+  str(data)
+
+}
+
 renv_restore_state <- function(key = NULL) {
   state <- renv_global_get("restore.state")
   if (is.null(key)) state else state[[key]]
@@ -314,16 +329,17 @@ renv_restore_preflight <- function(project, libpaths, actions, current, lockfile
   renv_install_preflight(project, libpaths, matching, prompt)
 }
 
-renv_restore_find <- function(record) {
+renv_restore_find <- function(package, record) {
 
   # skip packages whose installation was explicitly requested
   state <- renv_restore_state()
-  if (record$Package %in% state$packages)
+  record <- renv_record_validate(package, record)
+  if (package %in% state$packages)
     return("")
 
   # check the active library paths to see if this package is already installed
   for (library in renv_libpaths_all()) {
-    path <- renv_restore_find_impl(record, library)
+    path <- renv_restore_find_impl(package, record, library)
     if (nzchar(path))
       return(path)
   }
@@ -332,9 +348,9 @@ renv_restore_find <- function(record) {
 
 }
 
-renv_restore_find_impl <- function(record, library) {
+renv_restore_find_impl <- function(package, record, library) {
 
-  path <- file.path(library, record$Package)
+  path <- file.path(library, package)
   if (!file.exists(path))
     return("")
 

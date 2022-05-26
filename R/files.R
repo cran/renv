@@ -510,9 +510,12 @@ renv_file_read <- function(path) {
 
 renv_file_shebang <- function(path) {
 
+  # NOTE: we use 'condition' as a cheap way to capture both errors and warnings
+  # since 'file()' may just report a warning rather than an error if it fails
+  # to open a file due to inadequate permissions
   tryCatch(
     renv_file_shebang_impl(path),
-    error = function(e) ""
+    condition = function(e) ""
   )
 
 }
@@ -584,4 +587,31 @@ renv_file_remove_win32 <- function(paths) {
 
 renv_file_remove_unix <- function(paths) {
   unlink(paths, recursive = TRUE, force = TRUE)
+}
+
+renv_file_writable <- function(path) {
+
+  # allow users to opt-out just in case
+  override <- getOption("renv.download.check_writable", default = TRUE)
+  if (!identical(override, TRUE))
+    return(TRUE)
+
+  # if we're given the path to a file, use the parent directory instead
+  info <- renv_file_info(path)
+  if (!identical(info$isdir, TRUE))
+    path <- dirname(path)
+
+  # if we still don't have a directory, bail
+  info <- renv_file_info(path)
+  if (!identical(info$isdir, TRUE))
+    return(FALSE)
+
+  # try creating and removing a temporary file in this directory
+  tfile <- tempfile(".renv-write-test-", tmpdir = path)
+  ok <- dir.create(tfile, showWarnings = FALSE)
+  on.exit(unlink(tfile, recursive = TRUE), add = TRUE)
+
+  # return ok if we succeeded
+  ok
+
 }

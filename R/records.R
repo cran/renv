@@ -89,10 +89,21 @@ renv_record_source_normalize <- function(record, source) {
 
 }
 
-renv_record_validate <- function(record, quiet = FALSE) {
+renv_record_validate <- function(package, record) {
 
-  # TODO
-  TRUE
+  # check for a record -- minimally, a list with a package name
+  if (is.list(record) && is.character(record$Package))
+    return(record)
+
+  # if we're running tests, or in CI, then report
+  if (renv_tests_running() || !is.na(Sys.getenv("CI", unset = NA))) {
+    fmt <- "! Internal error: unexpected record for package '%s'"
+    writef(fmt, package)
+    print(record)
+  }
+
+  # return record as-is
+  record
 
 }
 

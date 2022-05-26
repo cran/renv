@@ -1,4 +1,58 @@
 
+# renv 0.15.5
+
+* Fixed an issue where indexing of packages in the package cellar could
+  be slow. (#1014)
+
+* Fixed an issue where installation of packages from Bioconductor's binary
+  Linux package repositories could fail. (#1013)
+  
+* `renv::restore()` now supports restoration of packages installed from
+  [R-Forge](https://r-forge.r-project.org/). (#671)
+
+* Fixed an issue where `renv::init(bioconductor = TRUE)` would not update
+  the version of Bioconductor used if a project setting had already been
+  set.
+
+* It is now possible to "update" an existing lockfile by using
+  `renv::snapshot(update = TRUE)`. When set, any records existing in the
+  old lockfile, but not the new lockfile, will be preserved. (#727)
+
+* Fixed an issue where `renv` could fail to parse Git remotes for users
+  whose username contains a number. (#1004)
+
+* `renv` no longer infers a dependency on the "quarto" R package in projects
+  containing a `_quarto.yml` file. (#995)
+
+* Fixed an issue where `renv` could fail to download a package from MRAN if
+  a compatible source package of the same version was available from the
+  active R repositories. (#990)
+
+* `renv` now reports permission errors during download more clearly. (#985)
+
+* Fixed an issue where `RENV_PATHS_LIBRARY_ROOT_ASIS` was not interpreted
+  correctly. (#976)
+
+* `renv::modify()` gains the `changes` argument, which can be used to modify
+  a project lockfile non-interactively.
+  
+* `renv::clean()` now returns the project directory, as documented. (#922)
+
+* Fixed an issue where `renv` could fail to parse embedded YAML chunk options
+  in R Markdown documents. (#963)
+  
+* `renv` now sets default placeholder names for the `repos` R option, for
+  any repository URLs which happen to be unnamed. (#964)
+
+* Fixed an issue where `renv` didn't respect the `PATH` ordering when
+  discovering Python installations via `renv_python_discover()`. (#961)
+
+* Fixed an issue where `renv` could fail to install packages containing
+  multibyte unicode characters in their DESCRIPTION file. (#956)
+  
+* Fixed detection of Rtools 4.2 (#1002)
+
+
 # renv 0.15.4
 
 * Fixed an issue where package installation could fail when referencing the

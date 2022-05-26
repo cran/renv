@@ -169,6 +169,9 @@ renv_dependencies_impl <- function(
   if (renv_tests_running() && missing(errors))
     errors <- "ignored"
 
+  # resolve errors
+  errors <- match.arg(errors)
+
   # check and see if we've pre-computed dependencies for this path, and
   # retrieve those pre-computed dependencies if so
   if (length(path) == 1)
@@ -376,8 +379,8 @@ renv_dependencies_discover <- function(paths, progress, errors) {
 
   # nocov start
   vprintf("Finding R package dependencies ... ")
-  discover <- renv_progress(renv_dependencies_discover_impl, length(paths))
-  deps <- lapply(paths, discover)
+  callback <- renv_progress_callback(renv_dependencies_discover_impl, length(paths))
+  deps <- lapply(paths, callback)
   vwritef("Done!")
 
   bind(deps)
@@ -550,7 +553,13 @@ renv_dependencies_discover_pkgdown <- function(path) {
 
 renv_dependencies_discover_quarto <- function(path) {
   # TODO: other dependencies to parse from quarto?
-  renv_dependencies_list(path, "quarto")
+  #
+  # NOTE: we previously inferred a dependency on the R 'quarto' package here,
+  # but quarto is normally invoked directly (rather than via the package) and
+  # so such a dependency is not strictly necessary.
+  #
+  # https://github.com/rstudio/renv/issues/995
+  renv_dependencies_list_empty()
 }
 
 renv_dependencies_discover_rsconnect <- function(path) {
@@ -804,7 +813,7 @@ renv_dependencies_discover_chunks <- function(path, mode) {
 renv_dependencies_discover_chunks_inline <- function(path, contents) {
 
   pasted <- paste(contents, collapse = "\n")
-  matches <- gregexpr("`r ([^`]+)`", pasted)
+  matches <- gregexpr("`r ([^`]+)`", pasted, perl = TRUE)
   if (identical(c(matches[[1L]]), -1L))
     return(list())
 

@@ -30,9 +30,6 @@ knitr::opts_chunk$set(
 #  renv::install()
 
 ## ----eval=FALSE---------------------------------------------------------------
-#  RENV_CONFIG_SANDBOX_ENABLED = FALSE
-
-## ----eval=FALSE---------------------------------------------------------------
 #  getOption("download.file.method")
 
 ## ----eval=FALSE---------------------------------------------------------------

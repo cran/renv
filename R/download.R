@@ -23,6 +23,9 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
     if (inherits(result, "error"))
       renv_download_error(result, "%s", conditionMessage(result))
 
+    if (!file.exists(destfile))
+      renv_download_error(url, "%s does not exist", renv_path_pretty(destfile))
+
     return(destfile)
 
   }
@@ -100,6 +103,13 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
   # move the file to the requested location
   renv_file_move(tempfile, destfile)
 
+  # one final sanity check
+  if (!file.exists(destfile)) {
+    fmt <- "could not move %s to %s"
+    msg <- sprintf(fmt, renv_path_pretty(tempfile), renv_path_pretty(destfile))
+    renv_download_error(url, msg)
+  }
+
   # and return path to successfully retrieved file
   destfile
 
@@ -114,6 +124,12 @@ renv_download_impl <- function(url, destfile, type = NULL, request = "GET", head
   # slashes, even on Windows where the native separator is backslash)
   url      <- chartr("\\", "/", url)
   destfile <- chartr("\\", "/", destfile)
+
+  # check that the destination file is writable
+  if (!renv_file_writable(destfile)) {
+    fmt <- "destination path '%s' is not writable; cannot proceed"
+    stopf(fmt, renv_path_pretty(destfile))
+  }
 
   # select the appropriate downloader
   downloader <- switch(

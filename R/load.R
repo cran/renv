@@ -138,8 +138,8 @@ renv_load_r <- function(project, fields) {
 
   # only compare major, minor versions
   if (!identical(requested[1:2], current[1:2])) {
-    fmt <- "This project is configured to use R version '%s', but '%s' is currently being used."
-    warningf(fmt, version, getRversion())
+    fmt <- "Using R %s (lockfile was generated with R %s)"
+    infof(fmt, getRversion(), version)
   }
 
 }
@@ -157,6 +157,9 @@ renv_load_r_repos <- function(repos) {
   # convert to rspm if enabled
   if (renv_rspm_enabled())
     repos <- renv_rspm_transform(repos)
+
+  # normalize option
+  repos <- renv_repos_normalize(repos)
 
   # set sanitized repos
   options(repos = repos)

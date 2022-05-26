@@ -255,8 +255,14 @@ renv_available_packages_record <- function(entry, type) {
     record$Name       <- NULL
   }
 
+  # form url
+  url <- entry$Repository
+  path <- entry$Path
+  if (is.character(path) && !is.na(path))
+    url <- paste(url, path, sep = "/")
+
   attr(record, "type") <- type
-  attr(record, "url")  <- entry$Repository
+  attr(record, "url")  <- url
 
   record
 
@@ -278,7 +284,12 @@ renv_available_packages_latest_repos_impl <- function(package, type, repos) {
     dbs <- c(db, dbs)
   }
 
-  fields <- c("Package", "Version", "OS_type", "NeedsCompilation", "Repository")
+  fields <- c(
+    "Package", "Version",
+    "OS_type", "NeedsCompilation",
+    "Repository", "Path", "File"
+  )
+
   entries <- bapply(dbs, function(db) {
 
     # extract entries for this package
@@ -336,7 +347,7 @@ renv_available_packages_latest_repos_impl <- function(package, type, repos) {
   ordered <- order(version, decreasing = TRUE)
 
   # return newest-available version
-  entry <- as.list(entries[ordered[[1]], ])
+  entry <- as.list(entries[ordered[[1L]], ])
   renv_available_packages_record(entry, type)
 
 }
@@ -347,27 +358,63 @@ renv_available_packages_latest <- function(package,
 {
   methods <- list(
     renv_available_packages_latest_repos,
-    renv_available_packages_latest_mran
+    if (renv_mran_enabled())
+      renv_available_packages_latest_mran
   )
 
   errors <- stack()
 
-  for (method in methods) {
+  entries <- lapply(methods, function(method) {
+
+    if (is.null(method))
+      return(NULL)
 
     entry <- catch(method(package, type, repos))
     if (inherits(entry, "error")) {
       errors$push(entry)
-      next
+      return(NULL)
     }
 
-    return(entry)
+    entry
 
+  })
+
+  # if both entries are null, error
+  if (all(map_lgl(entries, is.null))) {
+    map(errors$data(), warning)
+    stopf("package '%s' is not available", package)
+  } else if (is.null(entries[[2L]])) {
+    return(entries[[1L]])
+  } else if (is.null(entries[[1L]])) {
+    return(entries[[2L]])
   }
 
-  for (error in errors$data())
-    warning(error)
+  # extract both entries
+  lhs <- entries[[1L]]
+  rhs <- entries[[2L]]
 
-  stopf("package '%s' is not available", package)
+  # extract versions
+  lhsv <- package_version(lhs$Version %||% "0.0")
+  rhsv <- package_version(rhs$Version %||% "0.0")
+
+  # if the versions don't match, take the newest one
+  if (lhsv > rhsv)
+    return(lhs)
+  else if (rhsv > lhsv)
+    return(rhs)
+
+  # otherwise, if we have a binary from the active package repositories,
+  # use those; otherwise, use the mran binary
+  if (identical(lhsv, rhsv)) {
+    if (identical(attr(lhs, "type", exact = TRUE), "binary"))
+      return(lhs)
+    else
+      return(rhs)
+  }
+
+  # otherwise, return the regular repository entry
+  lhs
+
 }
 
 renv_available_packages_latest_mran <- function(package,
@@ -509,7 +556,7 @@ renv_available_packages_cellar <- function(type, project = NULL) {
   project <- renv_project_resolve(project)
   roots <- renv_cellar_roots(project = project)
 
-  # find all files used in the locals folder
+  # look for packages
   all <- list.files(
     path         = roots,
     all.files    = TRUE,
@@ -522,36 +569,30 @@ renv_available_packages_cellar <- function(type, project = NULL) {
   ext <- renv_package_ext(type = type)
   keep <- all[fileext(all) %in% ext]
 
-  # read the DESCRIPTION files within the archive
-  descs <- lapply(keep, function(path) {
+  # construct records for each cellar entry
+  records <- lapply(keep, function(path) {
 
-    # read the DESCRIPTION
-    desc <- renv_description_read(path)
+    # infer package name, version from tarball name
+    base <- basename(keep)
+    idx <- regexpr("_", base, fixed = TRUE)
+    package <- substring(base, 1L, idx - 1L)
+    version <- substring(base, idx + 1L, nchar(base) - nchar(ext))
 
     # set the Repository field
     prefix <- if (renv_platform_windows()) "file:///" else "file://"
-    uri <- paste0(prefix, dirname(path))
-    desc[["Repository"]] <- uri
+    repository <- paste0(prefix, dirname(path))
 
-    # return it
-    desc
-
-  })
-
-  # extract DESCRIPTION fields of interest
-  fields <- c("Package", "Version", "OS_type", "NeedsCompilation", "Repository")
-  records <- map(descs, function(desc) {
-
-    # ensure missing fields are set as NA
-    missing <- setdiff(fields, names(desc))
-    desc[missing] <- NA
-
-    # return record with requested fields
-    desc[fields]
+    # build record
+    list(
+      Package = package,
+      Version = version,
+      OS_type = NA,
+      NeedsCompilation = NA,
+      Repository = repository
+    )
 
   })
 
-  # bind into data.frame for lookup
   bind(records)
 
 }

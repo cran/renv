@@ -100,8 +100,11 @@ init <- function(project = NULL,
   if (!is.null(profile))
     renv_profile_set(profile)
 
+  # normalize repos
+  repos <- renv_repos_normalize(repos %||% getOption("repos"))
+  options(repos = repos)
+
   # initialize bioconductor pieces
-  repos <- repos %||% getOption("repos")
   biocver <- renv_init_bioconductor(bioconductor, project)
   if (!is.null(biocver)) {
     vwritef("* Using Bioconductor version '%s'.", biocver)
@@ -288,7 +291,7 @@ renv_init_bioconductor <- function(bioconductor, project) {
   # resolve bioconductor argument
   case(
     is.character(bioconductor)     ~ bioconductor,
-    identical(bioconductor, TRUE)  ~ renv_bioconductor_version(project),
+    identical(bioconductor, TRUE)  ~ renv_bioconductor_version(project, refresh = TRUE),
     identical(bioconductor, FALSE) ~ NULL
   )
 
