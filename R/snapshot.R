@@ -659,6 +659,12 @@ renv_snapshot_description <- function(path = NULL, package = NULL) {
   if (inherits(dcf, "error"))
     return(dcf)
 
+  renv_snapshot_description_impl(dcf, path)
+
+}
+
+renv_snapshot_description_impl <- function(dcf, path = NULL) {
+
   # figure out the package source
   source <- renv_snapshot_description_source(dcf)
   dcf[names(source)] <- source
@@ -668,12 +674,15 @@ renv_snapshot_description <- function(path = NULL, package = NULL) {
   missing <- renv_vector_diff(required, names(dcf))
   if (length(missing)) {
     fmt <- "required fields %s missing from DESCRIPTION at path '%s'"
-    msg <- sprintf(fmt, paste(shQuote(missing), collapse = ", "), path)
+    msg <- sprintf(fmt, paste(shQuote(missing), collapse = ", "), path %||% "<unknown>")
     return(simpleError(msg))
   }
 
-  # generate a hash
-  dcf[["Hash"]] <- renv_hash_description(path)
+  # generate a hash if we can
+  dcf[["Hash"]] <- if (is.null(path))
+    renv_hash_description_impl(dcf)
+  else
+    renv_hash_description(path)
 
   # normalize whitespace in some dependency fields
   fields <- c("Depends", "Imports", "LinkingTo")
@@ -699,16 +708,25 @@ renv_snapshot_description <- function(path = NULL, package = NULL) {
 
 renv_snapshot_description_source <- function(dcf) {
 
+  # first, check for a declared remote type
+  # treat 'standard' remotes as packages installed from a repository
+  # https://github.com/rstudio/renv/issues/998
   type <- dcf[["RemoteType"]]
-  if (!is.null(type))
-    return(list(Source = renv_alias(type)))
+  if (identical(type, "standard"))
+    return(list(Source = "Repository", Repository = dcf[["Repository"]]))
+  else if (!is.null(type))
+    return(list(Source = alias(type)))
 
+  # next, check for a declared repository
   if (!is.null(dcf[["Repository"]]))
     return(list(Source = "Repository", Repository = dcf[["Repository"]]))
 
+  # packages from Bioconductor are normally tagged with a 'biocViews' entry;
+  # use that to infer a Bioconductor source
   if (!is.null(dcf[["biocViews"]]))
     return(list(Source = "Bioconductor"))
 
+  # check for a valid package name
   package <- dcf[["Package"]]
   if (is.null(package))
     return(list(Source = "unknown"))
@@ -739,11 +757,12 @@ renv_snapshot_description_source <- function(dcf) {
       return(list(Source = "Cellar"))
 
     # otherwise, treat as regular entry
-    repos <- entry[["Repository"]]
-    return(list(Source = "Repository", Repository = repos))
+    repository <- entry[["Repository"]]
+    return(list(Source = "Repository", Repository = repository))
 
   }
 
+  # last chance; try to see if this package lives in the cellar
   location <- catch(renv_retrieve_cellar_find(dcf))
   if (!inherits(location, "error"))
     return(list(Source = "Cellar"))
@@ -765,6 +784,17 @@ renv_snapshot_report_actions <- function(actions, old, new) {
     rhs[names(rhs) %in% names(actions)],
     "The following package(s) will be updated in the lockfile:"
   )
+
+  oldr <- old$R$Version
+  newr <- new$R$Version
+  rdiff <- renv_version_compare(oldr %||% "0", newr %||% "0")
+
+  if (rdiff != 0L) {
+    n <- max(nchar(names(actions)))
+    fmt <- paste("-", format("R", width = n), " ", "[%s] -> [%s]")
+    msg <- sprintf(fmt, oldr %||% "*", newr %||% "*")
+    writeLines(c("The version of R recorded in the lockfile will be updated:", msg, ""))
+  }
 
 }
 # nocov end

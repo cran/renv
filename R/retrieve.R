@@ -156,10 +156,34 @@ renv_retrieve_impl <- function(package) {
   }
 
   # if this is a URL source, then it should already have a local path
-  path <- record$Path %||% record$Source %||% ""
-  if (grepl("[/\\]", path) && file.exists(path)) {
+  # check for the Path and Source fields and see if they resolve
+  fields <- c("Path", "Source")
+  for (field in fields) {
+
+    # check for a valid field
+    path <- record[[field]]
+    if (is.null(path))
+      next
+
+    # check whether it looks like an explicit source
+    isurl <-
+      is.character(path) &&
+      nzchar(path) &&
+      grepl("[/\\]|[.](?:zip|tgz|gz)$", path)
+
+    if (!isurl)
+      next
+
+    # error if the field is declared but doesn't exist
+    if (!file.exists(path)) {
+      fmt <- "record for package '%s' declares local source '%s', but that file does not exist"
+      stopf(fmt, record$Package, path)
+    }
+
+    # otherwise, success
     path <- normalizePath(path, winslash = "/", mustWork = TRUE)
     return(renv_retrieve_successful(record, path))
+
   }
 
   if (!renv_restore_rebuild_required(record)) {
@@ -348,18 +372,30 @@ renv_retrieve_git_impl <- function(record, path) {
   ref     <- record$RemoteRef
   sha     <- record$RemoteSha
 
+  # figure out the default ref
+  gitref <- case(
+    nzchar(sha %||% "") ~ sha,
+    nzchar(ref %||% "") ~ ref,
+    "HEAD"
+  )
+
+  # be quiet if requested
+  quiet <- getOption("renv.git.quiet", default = TRUE)
+  quiet <- if (quiet) "--quiet" else ""
+
   template <- heredoc('
     cd "${DIR}"
-    git init --quiet
+    git init ${QUIET}
     git remote add origin "${ORIGIN}"
-    git fetch --quiet origin "${REF}"
-    git reset --quiet --hard FETCH_HEAD
+    git fetch ${QUIET} --depth=1 origin "${REF}"
+    git reset ${QUIET} --hard FETCH_HEAD
   ')
 
   data <- list(
     DIR    = renv_path_normalize(path),
     ORIGIN = url,
-    REF    = sha %||% ref
+    REF    = gitref,
+    QUIET  = quiet
   )
 
   commands <- renv_template_replace(template, data)
@@ -515,14 +551,25 @@ renv_retrieve_repos <- function(record) {
   if (all(c("type", "url") %in% names(attributes(record))))
     return(renv_retrieve_repos_impl(record))
 
+  # figure out what package sources are okay to use here
+  pkgtype <- getOption("pkgType", default = "source")
+
+  srcok <- pkgtype %in% c("both", "source") ||
+    getOption("install.packages.check.source", default = "yes") %in% "yes"
+
+  binok <- pkgtype %in% c("both") || grepl("binary", pkgtype, fixed = TRUE)
+
   # collect list of 'methods' for retrieval
   methods <- stack(mode = "list")
 
-  # only attempt to retrieve binaries when explicitly requested by user
-  if (!identical(getOption("pkgType"), "source")) {
+  # add binary package methods
+  if (binok) {
 
     # prefer repository binaries if available
     methods$push(renv_retrieve_repos_binary)
+
+    # also try fallback binary locations (for Nexus)
+    methods$push(renv_retrieve_repos_binary_fallback)
 
     # if MRAN is enabled, check those binaries as well
     if (config$mran.enabled())
@@ -531,15 +578,23 @@ renv_retrieve_repos <- function(record) {
   }
 
   # next, try to retrieve from sources
-  methods$push(renv_retrieve_repos_source)
+  if (srcok) {
 
-  # if this is a package from r-universe, try restoring from github
-  # (currently inferred from presence for RemoteUrl field)
-  unifields <- c("RemoteUrl", "RemoteRef", "RemoteSha")
-  if (all(unifields %in% names(record)))
-    methods$push(renv_retrieve_git)
-  else
-    methods$push(renv_retrieve_repos_archive)
+    # retrieve from source repositories
+    methods$push(renv_retrieve_repos_source)
+
+    # also try fallback source locations (for Nexus)
+    methods$push(renv_retrieve_repos_source_fallback)
+
+    # if this is a package from r-universe, try restoring from github
+    # (currently inferred from presence for RemoteUrl field)
+    unifields <- c("RemoteUrl", "RemoteRef", "RemoteSha")
+    if (all(unifields %in% names(record)))
+      methods$push(renv_retrieve_git)
+    else
+      methods$push(renv_retrieve_repos_archive)
+
+  }
 
   # capture errors for reporting
   errors <- stack()
@@ -680,8 +735,38 @@ renv_retrieve_repos_binary <- function(record) {
   renv_retrieve_repos_impl(record, "binary")
 }
 
+renv_retrieve_repos_binary_fallback <- function(record) {
+
+  for (repo in getOption("repos")) {
+    if (renv_nexus_enabled(repo)) {
+      repourl <- contrib.url(repo, type = "binary")
+      status <- catch(renv_retrieve_repos_impl(record, "binary", repo = repourl))
+      if (!inherits(status, "error"))
+        return(status)
+    }
+  }
+
+  FALSE
+
+}
+
 renv_retrieve_repos_source <- function(record) {
   renv_retrieve_repos_impl(record, "source")
+}
+
+renv_retrieve_repos_source_fallback <- function(record, repo) {
+
+  for (repo in getOption("repos")) {
+    if (renv_nexus_enabled(repo)) {
+      repourl <- contrib.url(repo, type = "source")
+      status <- catch(renv_retrieve_repos_impl(record, "source", repo = repourl))
+      if (!inherits(status, "error"))
+        return(status)
+    }
+  }
+
+  FALSE
+
 }
 
 renv_retrieve_repos_archive <- function(record) {
@@ -761,6 +846,9 @@ renv_retrieve_repos_archive_path <- function(repo, record) {
 
 }
 
+# NOTE: If 'repo' is provided, it should be the path to the appropriate 'arm'
+# of a repository, which is normally generated from the repository URL via
+# 'contrib.url()'.
 renv_retrieve_repos_impl <- function(record,
                                      type = NULL,
                                      name = NULL,
@@ -930,6 +1018,7 @@ renv_retrieve_handle_remotes <- function(record, subdir) {
   # TODO: what should we do if we detect incompatible remotes?
   # e.g. if pkg A requests 'r-lib/rlang@0.3' but pkg B requests
   # 'r-lib/rlang@0.2'.
+  state <- renv_restore_state()
 
   # check and see if this package declares Remotes -- if so,
   # use those to fill in any missing records
@@ -949,28 +1038,24 @@ renv_retrieve_handle_remotes <- function(record, subdir) {
       next
     }
 
-
-    # if installation of this package was not specifically requested by
-    # the user (ie: it's been requested as it's a dependency of this package)
-    # then update the record. note that we don't want to update in explicit
-    # installs as we don't want to override what was reported / requested
-    # in e.g. `renv::restore()`.
-    #
-    # allow override if a non-specific version of the package was requested
+    # if we don't have a record already, then use the declared remote
     package <- remote$Package
-    state <- renv_restore_state()
+    record <- state$records[[package]]
+    if (is.null(record)) {
+      state$records[[package]] <- remote
+      next
+    }
+
+    # if the user has explicitly requested installation of a particular package,
+    # and that package already has a defined non-repository remote, then use
+    # the pre-existing record rather than the one requested via Remotes.
     if (package %in% state$packages) {
-      record <- state$records[[package]]
       if (!identical(record, list(Package = package, Source = "Repository")))
         next
     }
 
-    # only update the record if we don't have an existing instance
-    # of the record. the intention here is that remotes specified in,
-    # say, the project DESCRIPTION file should take precedence over
-    # remotes defined by packages themselves. there is some obvious
-    # potential for breakage here though
-    state$records[[package]] <- state$records[[package]] %||% remote
+    # update the requested record
+    state$records[[package]] <- remote
 
   }
 

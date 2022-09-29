@@ -1,13 +1,13 @@
 
 renv_system_exec <- function(command,
-                             args,
-                             action,
+                             args    = NULL,
+                             action  = "executing command",
                              success = 0L,
                              stream  = FALSE,
                              quiet   = FALSE)
 {
   # be quiet when running tests by default
-  if (renv_tests_running())
+  if (!interactive() && renv_tests_running())
     quiet <- TRUE
 
   # handle 'stream' specially
@@ -18,12 +18,15 @@ renv_system_exec <- function(command,
 
     # execute command
     status <- suppressWarnings(
-      system2(command, args, stdout = stdout, stderr = stderr)
+      if (is.null(args))
+        system(command, ignore.stdout = quiet, ignore.stderr = quiet)
+      else
+        system2(command, args, stdout = stdout, stderr = stderr)
     )
 
     # check for error
     status <- status %||% 0L
-    if (!status %in% success) {
+    if (!is.null(success) && !status %in% success) {
       fmt <- "error %s [error code %i]"
       stopf(fmt, action, status)
     }
@@ -36,14 +39,17 @@ renv_system_exec <- function(command,
   # suppress warnings as some successful commands may return a non-zero exit
   # code, whereas R will always warn on such error codes
   output <- suppressWarnings(
-    system2(command, args, stdout = TRUE, stderr = TRUE)
+    if (is.null(args))
+      system(command, intern = TRUE)
+    else
+      system2(command, args, stdout = TRUE, stderr = TRUE)
   )
 
   # extract status code from result
   status <- attr(output, "status") %||% 0L
 
   # if this status matches an expected 'success' code, return output
-  if (status %in% success)
+  if (is.null(success) || status %in% success)
     return(output)
 
   # otherwise, notify the user that things went wrong

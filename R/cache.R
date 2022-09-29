@@ -171,8 +171,8 @@ renv_cache_synchronize_impl <- function(cache, record, linkable, path) {
     return(FALSE)
 
   # if we already have a cache entry, back it up
-  callback <- renv_file_backup(cache)
-  on.exit(callback(), add = TRUE)
+  restore <- renv_file_backup(cache)
+  on.exit(restore(), add = TRUE)
 
   # get ready to copy / move into cache
   fmt <- "%s %s [%s] into the cache ..."
@@ -180,11 +180,47 @@ renv_cache_synchronize_impl <- function(cache, record, linkable, path) {
 
   before <- Sys.time()
 
+  # copy package from source location into the cache
   if (linkable) {
-    renv_file_move(path, cache)
+    renv_cache_move(path, cache, overwrite = TRUE)
     renv_file_link(cache, path, overwrite = TRUE)
   } else {
-    renv_file_copy(path, cache)
+    renv_cache_copy(path, cache, overwrite = TRUE)
+  }
+
+  if (renv_platform_unix()) {
+
+    # change the cache owner if set
+    user <- Sys.getenv("RENV_CACHE_USER", unset = NA)
+    if (!is.na(user)) {
+      parent <- dirname(dirname(dirname(cache)))
+      renv_system_exec(
+        command = "chown",
+        args    = c("-Rf", renv_shell_quote(user), renv_shell_path(parent)),
+        action  = "chowning cached package",
+        quiet   = TRUE,
+        success = NULL
+      )
+    }
+
+    # change file modes after copy if set
+    mode <- Sys.getenv("RENV_CACHE_MODE", unset = NA)
+    if (!is.na(mode)) {
+      parent <- dirname(dirname(dirname(cache)))
+      renv_system_exec(
+        command = "chmod",
+        args    = c("-Rf", renv_shell_quote(mode), renv_shell_path(parent)),
+        action  = "chmoding cached package",
+        quiet   = TRUE,
+        success = NULL
+      )
+    }
+
+    # finally, allow for an arbitrary callback if set
+    callback <- getOption("renv.cache.callback")
+    if (is.function(callback))
+      callback(cache)
+
   }
 
   after <- Sys.time()
@@ -461,9 +497,37 @@ renv_cache_diagnose <- function(verbose = NULL) {
 
 }
 
+renv_cache_acls_reset <- function(target) {
+
+  enabled <- Sys.getenv("RENV_CACHE_ACLS", unset = "TRUE")
+  if (enabled)
+    renv_acls_reset(target)
+
+}
+
+# copies a package at location 'source' to cache location 'target'
+renv_cache_copy <- function(source, target, overwrite = FALSE) {
+  ensure_parent_directory(target)
+  renv_file_copy(source, target, overwrite = overwrite)
+  renv_cache_acls_reset(target)
+}
+
+# moves a package from location 'source' to cache location 'target',
+# and then links back from 'target' to 'source'
 renv_cache_move <- function(source, target, overwrite = FALSE) {
-  file.exists(source) || renv_file_move(target, source)
-  renv_file_link(source, target, overwrite = TRUE)
+
+  # move package into the cache if requested
+  if (overwrite || !file.exists(target)) {
+    ensure_parent_directory(target)
+    renv_file_move(source, target, overwrite = TRUE)
+  }
+
+  # try to reset ACLs on the cache directory
+  renv_cache_acls_reset(target)
+
+  # link from the cache back to the target location
+  renv_file_link(target, source, overwrite = TRUE)
+
 }
 
 # nocov start

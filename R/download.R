@@ -304,9 +304,11 @@ renv_download_curl <- function(url, destfile, type, request, headers) {
   args <- stack()
 
   # include anything provided explicitly in 'download.file.extra' here
-  extra <- getOption("download.file.extra")
-  if (length(extra))
-    args$push(extra)
+  if (identical(getOption("download.file.method"), "curl")) {
+    extra <- getOption("download.file.extra")
+    if (length(extra))
+      args$push(extra)
+  }
 
   # add in any user configuration files
   userconfig <- getOption(
@@ -406,9 +408,11 @@ renv_download_wget <- function(url, destfile, type, request, headers) {
 
   args <- stack()
 
-  extra <- getOption("download.file.extra")
-  if (length(extra))
-    args$push(extra)
+  if (identical(getOption("download.file.method"), "wget")) {
+    extra <- getOption("download.file.extra")
+    if (length(extra))
+      args$push(extra)
+  }
 
   args$push("--config", renv_shell_path(configfile))
 
@@ -738,26 +742,7 @@ renv_download_local_default <- function(url, destfile, headers) {
 }
 
 renv_download_custom_headers <- function(url) {
-
-  headers <- getOption("renv.download.headers")
-  if (is.null(headers))
-    return(character())
-
-  if (!is.function(headers))
-    stopf("'renv.download.headers' is not a function")
-
-  headers <- invoke(headers, url)
-  if (empty(headers))
-    return(character())
-
-  if (is.list(headers))
-    headers <- unlist(headers, recursive = FALSE, use.names = TRUE)
-
-  if (!is.character(headers) || is.null(names(headers)))
-    stop("invocation of 'renv.download.headers' did not return a named character vector")
-
-  headers
-
+  renv_bootstrap_download_custom_headers(url)
 }
 
 renv_download_available <- function(url) {
@@ -812,7 +797,12 @@ renv_download_available_range <- function(url) {
   destfile <- renv_scope_tempfile("renv-download-")
 
   # instruct curl to request only first byte
-  extra <- c(getOption("download.file.extra"), "-r 0-0")
+  extra <- c(
+    if (identical(getOption("download.file.method"), "curl"))
+      getOption("download.file.extra"),
+    "-r 0-0"
+  )
+
   renv_scope_options(download.file.extra = paste(extra, collapse = " "))
 
   # perform the download

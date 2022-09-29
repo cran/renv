@@ -100,7 +100,6 @@ restore <- function(project  = NULL,
 
   # override repositories if requested
   repos <- repos %||% config$repos.override() %||% lockfile$R$Repositories
-
   if (length(repos))
     renv_scope_options(repos = convert(repos, "character"))
 
@@ -186,7 +185,7 @@ renv_restore_run_actions <- function(project, actions, current, lockfile, rebuil
 
   # perform the install
   records <- retrieve(packages)
-  status <- renv_install_impl(records)
+  renv_install_impl(records)
 
   # detect dependency tree repair
   diff <- renv_lockfile_diff_packages(renv_records(lockfile), records)
@@ -382,6 +381,14 @@ renv_restore_rebuild_required <- function(record) {
 }
 
 renv_restore_successful <- function(records, prompt, project) {
+
+  # ensure the activate script is up-to-date
+  renv_infrastructure_write_activate(project, create = FALSE)
+
+  # perform python-related restore steps
   renv_python_restore(project, prompt)
+
+  # return restored records
   invisible(records)
+
 }

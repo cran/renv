@@ -537,7 +537,7 @@ renv_dependencies_discover_description_fields <- function() {
 
   # all else fails, use the active project
   project <- project %||% renv_project()
-  renv::settings$package.dependency.fields(project = project)
+  settings$package.dependency.fields(project = project)
 
 }
 
@@ -1210,7 +1210,7 @@ renv_dependencies_discover_r_box_impl <- function(node, stack, envir) {
 
   # if the node is just a symbol, then it's the name of a package
   # otherwise, if it's a call to `[`, the first argument is the package name
-  name <- if (is.symbol(node) && ! identical(node, quote(expr = ))) {
+  name <- if (is.symbol(node) && !identical(node, quote(expr = ))) {
     as.character(node)
   } else if (
     is.call(node) &&
@@ -1386,7 +1386,7 @@ renv_dependencies_discover_r_glue_impl <- function(string, node, envir) {
           code <- rawToChar(raw[lhs:rhs])
 
           # parse dependencies
-          deps <- renv_dependencies_discover_r(text = code, envir = envir)
+          renv_dependencies_discover_r(text = code, envir = envir)
 
         }
 
@@ -1526,14 +1526,17 @@ renv_dependencies_require <- function(package, type) {
   if (requireNamespace(package, quietly = TRUE))
     return(TRUE)
 
-  fmt <- lines(
-    "The '%1$s' package is required to parse dependencies within %2$s files.",
-    "Consider installing it with `install.packages(\"%1$s\")`."
-  )
-  msg <- sprintf(fmt, package, type)
+  if (once()) {
 
-  if (renv_once())
-    warning(msg, call. = FALSE)
+    fmt <- lines(
+      "The '%1$s' package is required to parse dependencies within %2$s files.",
+      "Consider installing it with `install.packages(\"%1$s\")`."
+    )
+
+    msg <- sprintf(fmt, package, type)
+      warning(msg, call. = FALSE)
+
+  }
 
   return(FALSE)
 

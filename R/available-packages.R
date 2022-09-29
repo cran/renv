@@ -346,8 +346,15 @@ renv_available_packages_latest_repos_impl <- function(package, type, repos) {
   version <- numeric_version(entries$Version)
   ordered <- order(version, decreasing = TRUE)
 
-  # return newest-available version
+  # extract newest entry
   entry <- as.list(entries[ordered[[1L]], ])
+
+  # remove an NA file entry if necessary
+  # https://github.com/rstudio/renv/issues/1045
+  if (length(entry$File) && is.na(entry$File))
+    entry$File <- NULL
+
+  # return newest-available version
   renv_available_packages_record(entry, type)
 
 }
@@ -538,6 +545,11 @@ renv_available_packages_latest_select <- function(src, bin) {
     # if make is not available, then we can't build from source
     make <- Sys.getenv("MAKE", unset = "make")
     if (!nzchar(Sys.which(make)))
+      ipcfs <- "never"
+
+    # if we're on macOS and command line tools are not available,
+    # then we can't build from sources
+    if (renv_platform_macos() && !renv_xcode_available())
       ipcfs <- "never"
 
     if (identical(ipcfs, "never"))

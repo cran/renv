@@ -37,6 +37,11 @@
 #' as described in <https://remotes.r-lib.org/articles/dependencies.html>. See
 #' the examples below for more details.
 #'
+#' If you wish to install packages from an external source requiring authentication
+#' (e.g. a private GitHub repository), see the **Authentication** documentation
+#' online at <https://rstudio.github.io/renv/articles/renv.html#authentication>,
+#' or view the documentation locally in the **Getting Started** vignette with
+#' `vignette("renv", package = "renv")`.
 #'
 #' @section Bioconductor:
 #'
@@ -456,15 +461,14 @@ renv_install_package_preamble <- function(record) {
   with(record, vwritef(fmt, Package, Version))
 }
 
-renv_install_package_impl_prebuild <- function(record, quiet) {
-
-  # if this package already appears to be built, nothing to do
-  path <- record$Path
-  if (renv_package_built(path))
-    return(path)
+renv_install_package_impl_prebuild <- function(record, path, quiet) {
 
   # check whether user wants us to build before install
   if (!identical(config$install.build(), TRUE))
+    return(path)
+
+  # if this package already appears to be built, nothing to do
+  if (renv_package_built(path))
     return(path)
 
   # if this is an archive, we'll need to unpack it first
@@ -498,7 +502,7 @@ renv_install_package_impl_prebuild <- function(record, quiet) {
   if (!is.null(builder) && !renv_package_installed(builder)) {
     fmt <- "Skipping package build: vignette builder '%s' is not installed"
     vwritef(fmt, builder)
-    return(record$Path)
+    return(path)
   }
 
   fmt <- "Building %s [%s] ..."
@@ -517,73 +521,36 @@ renv_install_package_impl_prebuild <- function(record, quiet) {
 
 }
 
-renv_install_package_unpack <- function(package, path, force = FALSE) {
-
-  # if this isn't an archive, nothing to do
-  info <- renv_file_info(path)
-  if (identical(info$isdir, TRUE))
-    return(path)
-
-  # list files in the archive
-  files <- renv_archive_list(path)
-
-  # if we have a top-level DESCRIPTION file, nothing to
-  descpaths <- renv_archive_find(path, "(?:^|/)DESCRIPTION$")
-  n <- nchar(descpaths)
-  descpath <- descpaths[n == min(n)]
-
-  # if we already have a top-level DESCRIPTION file, nothing to do
-  if (!force && dirname(descpath) == package)
-    return(path)
-
-  # create extraction directory
-  old <- tempfile("renv-package-old-")
-  new <- tempfile("renv-package-new-")
-  ensure_directory(c(old, new))
-
-  # decompress archive to dir
-  renv_archive_decompress(path, exdir = old)
-
-  # rename (without sub-directory)
-  oldpath <- file.path(old, dirname(descpath))
-  newpath <- file.path(new, package)
-  file.rename(oldpath, newpath)
-
-  # use newpath
-  newpath
-
-}
-
 renv_install_package_impl <- function(record, quiet = TRUE) {
 
   package <- record$Package
 
-  # get user-defined options to apply during installation
-  options <- renv_install_package_options(package)
-
-  # get archive path for package
+  # get path for package
   path <- record$Path
 
-  # check whether we should build before install
-  path <- renv_install_package_impl_prebuild(record, quiet)
-
-  # report that we're about to start installation
-  renv_install_package_preamble(record)
-
-  # for directories, we may need to use subdir to find the package path
+  # check if it's an archive (versus an unpacked directory)
   info <- renv_file_info(path)
+  isarchive <- identical(info$isdir, FALSE)
+
   subdir <- record$RemoteSubdir %||% ""
-  if (identical(info$isdir, TRUE) && nzchar(subdir)) {
+  if (isarchive) {
+    # re-pack archives if they appear to have their package
+    # sources contained as part of a sub-directory
+    path <- renv_package_unpack(package, path, subdir = subdir)
+  } else if (nzchar(subdir)) {
+    # for directories, we may need to use subdir to find the package path
     components <- c(path, subdir)
     path <- paste(components, collapse = "/")
   }
 
-  # re-pack package archives if they appear to have their package
-  # sources contained as part of a sub-directory
-  # TODO: we should probably do this earlier?
-  path <- renv_install_package_unpack(package, path)
+  # check whether we should build before install
+  path <- renv_install_package_impl_prebuild(record, path, quiet)
+
+  # report that we're about to start installation
+  renv_install_package_preamble(record)
 
   # run user-defined hooks before, after install
+  options <- renv_install_package_options(package)
   before <- options$before.install %||% identity
   after  <- options$after.install %||% identity
 

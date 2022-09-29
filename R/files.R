@@ -79,8 +79,10 @@ renv_file_copy_dir_cp <- function(source, target) {
   source <- path.expand(source)
   target <- path.expand(target)
 
-  # execute cp
+  # build 'cp' arguments
   args <- c("-pPR", renv_shell_path(source), renv_shell_path(target))
+
+  # execute command
   renv_system_exec("cp", args, action = "copying directory")
 
 }
@@ -381,10 +383,10 @@ renv_file_list <- function(path, full.names = TRUE) {
 }
 
 renv_file_list_impl <- function(path) {
-  if (renv_platform_windows())
-    renv_file_list_impl_win32(path)
-  else
+  if (renv_platform_unix())
     renv_file_list_impl_unix(path)
+  else
+    renv_file_list_impl_win32(path)
 }
 
 renv_file_list_impl_unix <- function(path) {

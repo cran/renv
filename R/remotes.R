@@ -241,6 +241,9 @@ renv_remotes_parse_finalize_github <- function(remote) {
 
 renv_remotes_parse <- function(spec) {
 
+  # https://github.com/rstudio/renv/issues/1064
+  spec <- sub("^[a-zA-Z0-9.]+=", "", spec)
+
   remote <- catch(renv_remotes_parse_repos(spec))
   if (!inherits(remote, "error")) {
     remote$type <- "repository"
@@ -378,7 +381,7 @@ renv_remotes_resolve_github_sha_ref <- function(host, user, repo, ref) {
   url <- sprintf(fmt, origin, user, repo, ref %||% "master")
 
   # prepare headers
-  headers <- c(Accept = "application/vnd.github.v2.sha")
+  headers <- c(Accept = "application/vnd.github.sha")
 
   # make request to endpoint
   shafile <- renv_scope_tempfile("renv-sha-")
@@ -403,6 +406,39 @@ renv_remotes_resolve_github_sha_ref <- function(host, user, repo, ref) {
 
 }
 
+renv_remotes_resolve_github_modules <- function(host, user, repo, subdir, sha) {
+
+  # form path to .gitmodules file
+  subdir <- subdir %||% ""
+  parts <- c(
+    if (nzchar(subdir)) URLencode(subdir),
+    ".gitmodules"
+  )
+
+  path <- paste(parts, collapse = "/")
+
+  # scope authentication
+  renv_scope_auth(repo)
+
+  # add headers
+  headers <- c(Accept = "application/vnd.github.raw")
+
+  # get the file contents
+  fmt <- "%s/repos/%s/%s/contents/%s?ref=%s"
+  origin <- renv_retrieve_origin(host)
+  url <- sprintf(fmt, origin, user, repo, path, sha)
+  jsonfile <- renv_scope_tempfile("renv-json-")
+  status <- suppressWarnings(
+    catch(
+      download(url, destfile = jsonfile, type = "github", quiet = TRUE, headers = headers)
+    )
+  )
+
+  # just return a status code whether or not submodules are included
+  !inherits(status, "error")
+
+}
+
 renv_remotes_resolve_github_description <- function(host, user, repo, subdir, sha) {
 
   # form DESCRIPTION path
@@ -417,14 +453,23 @@ renv_remotes_resolve_github_description <- function(host, user, repo, subdir, sh
   # scope authentication
   renv_scope_auth(repo)
 
+  # add headers
+  headers <- c(Accept = "application/vnd.github.raw")
+
   # get the DESCRIPTION contents
   fmt <- "%s/repos/%s/%s/contents/%s?ref=%s"
   origin <- renv_retrieve_origin(host)
   url <- sprintf(fmt, origin, user, repo, descpath, sha)
-  jsonfile <- renv_scope_tempfile("renv-json-")
-  download(url, destfile = jsonfile, type = "github", quiet = TRUE)
-  json <- renv_json_read(jsonfile)
-  contents <- renv_base64_decode(json$content)
+  destfile <- renv_scope_tempfile("renv-json-")
+  download(url, destfile = destfile, type = "github", quiet = TRUE, headers = headers)
+
+  # try to read the file; detect JSON versus raw content in case
+  # headers were not sent for some reason
+  contents <- renv_file_read(destfile)
+  if (substring(contents, 1L, 1L) == "{") {
+    json <- renv_json_read(text = contents)
+    contents <- renv_base64_decode(json$content)
+  }
 
   # normalize newlines
   contents <- gsub("\r\n", "\n", contents, fixed = TRUE)
@@ -469,11 +514,14 @@ renv_remotes_resolve_github_ref_impl <- function(host, user, repo) {
 renv_remotes_resolve_github <- function(remote) {
 
   # resolve the reference associated with this repository
-  host <- remote$host %||% config$github.host()
-  user <- remote$user
-  repo <- remote$repo
-  spec <- remote$spec
-  ref  <- remote$ref %||% renv_remotes_resolve_github_ref(host, user, repo)
+  host   <- remote$host %||% config$github.host()
+  user   <- remote$user
+  repo   <- remote$repo
+  spec   <- remote$spec
+  subdir <- remote$subdir
+
+  # resolve ref
+  ref <- remote$ref %||% renv_remotes_resolve_github_ref(host, user, repo)
 
   # handle '*release' refs
   if (identical(ref, "*release"))
@@ -490,15 +538,24 @@ renv_remotes_resolve_github <- function(remote) {
   if (nzchar(ref) && startswith(sha, ref))
     ref <- sha
 
+  # check whether the repository has a .gitmodules file; if so, then we'll have
+  # to use a plain 'git' client to retrieve the package
+  modules <- renv_remotes_resolve_github_modules(host, user, repo, subdir, sha)
+  url <- if (modules) {
+    origin <- fsub("api.github.com", "github.com", renv_retrieve_origin(host))
+    parts <- c(origin, user, repo)
+    paste(parts, collapse = "/")
+  }
+
   # read DESCRIPTION
-  subdir <- remote$subdir
   desc <- renv_remotes_resolve_github_description(host, user, repo, subdir, sha)
 
   list(
     Package        = desc$Package,
     Version        = desc$Version,
-    Source         = "GitHub",
-    RemoteType     = "github",
+    Source         = if (modules) "git" else "GitHub",
+    RemoteType     = if (modules) "git" else "github",
+    RemoteUrl      = if (modules) url,
     RemoteHost     = host,
     RemoteUsername = user,
     RemoteRepo     = repo,
@@ -520,7 +577,7 @@ renv_remotes_resolve_github_release <- function(host, user, repo, spec) {
   url <- sprintf(fmt, origin, user, repo)
 
   # prepare headers
-  headers <- c(Accept = "application/vnd.github.v3+json")
+  headers <- c(Accept = "application/vnd.github.raw+json")
 
   # make request to endpoint
   releases <- renv_scope_tempfile("renv-releases-")
@@ -605,10 +662,17 @@ renv_remotes_resolve_git_sha_ref <- function(record) {
 
 
 renv_remotes_resolve_git_description <- function(record) {
+
   path <- tempfile("renv-git-")
   ensure_directory(path)
 
-  renv_retrieve_git_impl(record, path)
+  # TODO: is there a cheaper way for us to accomplish this?
+  # it'd be nice if we could retrieve the contents of a single
+  # file, without needing to pull an entire repository branch
+  local({
+    renv_scope_options(renv.verbose = FALSE)
+    renv_retrieve_git_impl(record, path)
+  })
 
   # subdir may be NULL
   subdir <- record$RemoteSubdir
