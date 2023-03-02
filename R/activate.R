@@ -9,7 +9,7 @@
 #'
 #' 1. Load the requested project via [renv::load()],
 #'
-#' 2. Add `source("renv/init.R")` to the project `.Rprofile`, thereby
+#' 2. Add `source("renv/activate.R")` to the project `.Rprofile`, thereby
 #'    instructing newly-launched \R sessions to automatically load the
 #'    current project.
 #'
@@ -100,8 +100,8 @@ renv_activate_version <- function(project) {
       return(version)
   }
 
-  fmt <- "failed to determine renv version for project '%s'"
-  stopf(fmt, aliased_path(project))
+  fmt <- "failed to determine renv version for project %s"
+  stopf(fmt, renv_path_pretty(project))
 
 }
 
@@ -130,7 +130,7 @@ renv_activate_version_lockfile <- function(project) {
 }
 
 renv_activate_version_default <- function(project) {
-  renv_namespace_version("renv")
+  renv_metadata_version()
 }
 
 renv_activate_prompt <- function(action, library, prompt, project) {
@@ -149,7 +149,7 @@ renv_activate_prompt <- function(action, library, prompt, project) {
   fmt <- lines(
     "",
     "This project has not yet been activated.",
-    "Activating this project will ensure the project library is used during %s.",
+    "Activating this project will ensure the project library is used when %s() is called.",
     "Please see `?renv::activate` for more details.",
     ""
   )
@@ -157,7 +157,7 @@ renv_activate_prompt <- function(action, library, prompt, project) {
   notice <- sprintf(fmt, action)
   vwritef(notice)
 
-  fmt <- "Would you like to activate this project before %s?"
+  fmt <- "Would you like to activate this project before %s() is called?"
   question <- sprintf(fmt, action)
   response <- ask(question, default = TRUE)
   if (!response)

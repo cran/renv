@@ -106,12 +106,31 @@ renv_paths_sandbox_unix <- function(project = NULL) {
 
   # otherwise, build path in renv folder
   project <- renv_project_resolve(project)
-  renv_paths_renv("sandbox", prefix, profile = FALSE, project = project)
+  renv_paths_renv("sandbox", prefix, profile = TRUE, project = project)
 
 }
 
 renv_paths_sandbox_win32 <- function(project = NULL) {
-  file.path(tempdir(), "renv-system-library")
+
+  # NOTE: We previously used the R temporary directory here, but
+  # a number of users reported issues with the base R packages being
+  # deleted by over-aggressive temporary directory cleaners.
+  #
+  # https://github.com/rstudio/renv/issues/835
+
+  # construct a platform prefix
+  hash <- substring(renv_hash_text(R()), 1L, 8L)
+  prefix <- paste(renv_platform_prefix(), hash, sep = "/")
+
+  # check for override
+  root <- Sys.getenv("RENV_PATHS_SANDBOX", unset = NA)
+  if (!is.na(root))
+    return(paste(root, prefix, sep = "/"))
+
+  # otherwise, build path in user data directory
+  userdir <- renv_bootstrap_user_dir()
+  paste(userdir, "sandbox", prefix, sep = "/")
+
 }
 
 renv_paths_renv <- function(..., profile = TRUE, project = NULL) {
@@ -160,6 +179,9 @@ renv_paths_mran <- function(...) {
   renv_paths_common("mran", c(), ...)
 }
 
+renv_paths_index <- function(...) {
+  renv_paths_common("index", c(renv_platform_prefix()), ...)
+}
 
 
 renv_paths_root <- function(...) {
@@ -273,23 +295,24 @@ renv_paths_root_default_tempdir <- function() {
 #'
 #' \tabular{ll}{
 #' **Platform** \tab **Location** \cr
+#' Linux        \tab `~/.cache/R/renv` \cr
+#' macOS        \tab `~/Library/Caches/org.R-project.R/R/renv` \cr
+#' Windows      \tab `%LOCALAPPDATA%/R/cache/R/renv` \cr
+#' }
+#'
+#' Note that older version of `renv` used a different default cache location.
+#' Those cache locations are:
+#'
+#' \tabular{ll}{
+#' **Platform** \tab **Location** \cr
 #' Linux        \tab `~/.local/share/renv` \cr
 #' macOS        \tab `~/Library/Application Support/renv` \cr
 #' Windows      \tab `%LOCALAPPDATA%/renv` \cr
 #' }
 #'
-#' For new installations of `renv` using R (>= 4.0.0), `renv` will use
-#' [tools::R_user_dir()] to resolve the root directory. If an `renv` root
-#' directory has already been created in one of the old locations, that will
-#' still be used. This change was made to comply with the CRAN policy
-#' requirements of \R packages. By default, these paths resolve as:
-#'
-#' \tabular{ll}{
-#' **Platform** \tab **Location** \cr
-#' Linux        \tab `~/.cache/R/renv` \cr
-#' macOS        \tab `~/Library/Caches/org.R-project.R/R/renv` \cr
-#' Windows      \tab `%LOCALAPPDATA%/R/cache/R/renv` \cr
-#' }
+#' If an `renv` root directory has already been created in one of the old
+#' locations, that will still be used. This change was made to comply with the
+#' CRAN policy requirements of \R packages.
 #'
 #' If desired, this path can be customized by setting the `RENV_PATHS_ROOT`
 #' environment variable. This can be useful if you'd like, for example, multiple
@@ -425,5 +448,6 @@ paths <- list(
   library  = renv_paths_library,
   lockfile = renv_paths_lockfile,
   settings = renv_paths_settings,
-  cache    = renv_paths_cache
+  cache    = renv_paths_cache,
+  sandbox  = renv_paths_sandbox
 )

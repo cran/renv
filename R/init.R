@@ -104,13 +104,27 @@ init <- function(project = NULL,
   repos <- renv_repos_normalize(repos %||% getOption("repos"))
   options(repos = repos)
 
+  # form path to lockfile, library
+  library  <- renv_paths_library(project = project)
+  lockfile <- renv_lockfile_path(project)
+
   # initialize bioconductor pieces
   biocver <- renv_init_bioconductor(bioconductor, project)
   if (!is.null(biocver)) {
+
+    # make sure a Bioconductor package manager is installed
+    renv_bioconductor_init(library = library)
+
+    # retrieve bioconductor repositories appropriate for this project
+    biocrepos <- renv_bioconductor_repos(project = project, version = biocver)
+    options(repos = biocrepos)
+
+    # notify user
     vwritef("* Using Bioconductor version '%s'.", biocver)
-    renv_scope_bioconductor(version = biocver)
     settings[["bioconductor.version"]] <- biocver
+
   }
+
 
   # prepare and move into project directory
   renv_init_validate_project(project, force)
@@ -127,15 +141,11 @@ init <- function(project = NULL,
   # collect dependencies
   renv_dependencies_scope(project, action = "init")
 
-  # form path to lockfile, library
-  library  <- renv_paths_library(project = project)
-  lockfile <- renv_lockfile_path(project)
-
   # determine appropriate action
   action <- renv_init_action(project, library, lockfile, bioconductor)
   if (empty(action) || identical(action, "cancel")) {
     renv_report_user_cancel()
-    return(invisible(FALSE))
+    invokeRestart("abort")
   }
 
   # activate library paths for this project
@@ -143,12 +153,10 @@ init <- function(project = NULL,
 
   # perform the action
   if (action == "init") {
-    vwritef("* Initializing project ...")
     renv_imbue_impl(project)
-    hydrate(project = project, library = library)
+    hydrate(project = project, library = library, prompt = FALSE, report = FALSE)
     snapshot(project = project, library = libpaths, repos = repos, prompt = FALSE)
   } else if (action == "restore") {
-    vwritef("* Restoring project ... ")
     ensure_directory(library)
     restore(project = project, library = libpaths, prompt = FALSE)
   }
@@ -160,7 +168,7 @@ init <- function(project = NULL,
 
 renv_init_fini <- function(project, profile, version, restart, quiet) {
 
-  version <- renv_package_version("renv")
+  version <- renv_metadata_version()
 
   renv_activate_impl(
     project = project,

@@ -14,6 +14,11 @@
 #' - `requireNamespace("package")`
 #' - `package::method()`
 #'
+#' A subset of popular \R packages used for package management are also supported:
+#'
+#' - [`box`](https://cran.r-project.org/package=box): `box::use(...)`
+#' - [`pacman`](https://cran.r-project.org/package=pacman): `pacman::p_load(...)`
+#'
 #' For \R package projects, dependencies expressed in the `DESCRIPTION` file
 #' will also be discovered. Note that the `rmarkdown` package is required in
 #' order to crawl dependencies in R Markdown files.
@@ -33,7 +38,7 @@
 #' (e.g. because it has `eval=FALSE` as a chunk header), you can set:
 #'
 #'     ```{r chunk-label, eval=FALSE, renv.ignore=FALSE}
-#'     # code in this chunk will _not be ignored
+#'     # code in this chunk will _not_ be ignored
 #'     ```
 #'
 #' @section Ignoring Files:
@@ -88,8 +93,9 @@
 #' @section Errors:
 #'
 #' `renv`'s attempts to enumerate package dependencies in your project can fail
-#' -- most commonly, because of parse errors in your \R code. The `errors`
-#' parameter can be used to control how `renv` responds to errors that occur.
+#' -- most commonly, because of failures when attempting to parse your \R code.
+#' The `errors` parameter can be used to control how `renv` responds to errors
+#' that occur.
 #'
 #' \tabular{ll}{
 #' **Name** \tab **Action** \cr
@@ -174,7 +180,7 @@ renv_dependencies_impl <- function(
 
   # check and see if we've pre-computed dependencies for this path, and
   # retrieve those pre-computed dependencies if so
-  if (length(path) == 1)
+  if (length(path) == 1L)
     if (exists(path, envir = `_renv_dependencies`))
       return(get(path, envir = `_renv_dependencies`))
 
@@ -369,7 +375,7 @@ renv_dependencies_find_dir_children <- function(path, root, depth) {
 renv_dependencies_discover <- function(paths, progress, errors) {
 
   if (!renv_dependencies_discover_preflight(paths, errors))
-    return(invisible(NULL))
+    return(invisible(list()))
 
   # short path if we're not showing progress
   if (identical(progress, FALSE))
@@ -429,7 +435,7 @@ renv_dependencies_discover_preflight <- function(paths, errors) {
 
   if (interactive() && !proceed()) {
     renv_report_user_cancel()
-    return(FALSE)
+    invokeRestart("abort")
   }
 
   TRUE
@@ -1468,7 +1474,7 @@ renv_dependencies_discover_r_database <- function(node, stack, envir) {
 
 renv_dependencies_database <- function() {
   # TODO: make this user-accessible?
-  renv_global(
+  global(
     "dependencies.database",
     renv_dependencies_database_impl()
   )
@@ -1592,7 +1598,7 @@ renv_dependencies_report <- function(errors) {
 
   # bind into list
   bound <- bapply(problems, function(problem) {
-    fields <- c(aliased_path(problem$file), problem$line, problem$column)
+    fields <- c(renv_path_aliased(problem$file), problem$line, problem$column)
     header <- paste(fields, collapse = ":")
     message <- conditionMessage(problem$error)
     c(file = problem$file, header = header, message = message)

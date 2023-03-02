@@ -225,20 +225,27 @@ update <- function(packages = NULL,
   project <- renv_project_resolve(project)
   renv_scope_lock(project = project)
 
-  # get package records
+  # resolve library path
   libpaths <- renv_libpaths_resolve(library)
   library <- nth(libpaths, 1L)
-  records <- renv_snapshot_r_packages(libpaths = libpaths, project = project)
-  packages <- packages %||% setdiff(names(records), settings$ignored.packages(project = project))
+  renv_scope_libpaths(libpaths)
 
-  # apply exclusions
-  packages <- setdiff(packages, exclude)
+  # resolve exclusions
+  exclude <- c(exclude, settings$ignored.packages(project = project))
 
   # if users have requested the use of pak, delegate there
   if (config$pak.enabled() && !recursing()) {
+    packages <- setdiff(packages, exclude)
     renv_pak_init()
-    return(renv_pak_install(packages, libpaths))
+    return(renv_pak_install(packages, libpaths, project))
   }
+
+  # get package records
+  records <- renv_snapshot_r_packages(libpaths = libpaths, project = project)
+  packages <- packages %||% names(records)
+
+  # apply exclusions
+  packages <- setdiff(packages, exclude)
 
   # check if the user has requested update for packages not installed
   missing <- renv_vector_diff(packages, names(records))
@@ -255,7 +262,7 @@ update <- function(packages = NULL,
 
     if (prompt && !proceed()) {
       renv_report_user_cancel()
-      return(invisible(FALSE))
+      invokeRestart("abort")
     }
 
   }
@@ -291,9 +298,11 @@ update <- function(packages = NULL,
     renv_scope_bioconductor(project = project)
 
   # ensure database of available packages is current
-  if (repo)
-    for (type in renv_package_pkgtypes())
-      renv_available_packages(type = type)
+  if (repo) {
+    for (type in renv_package_pkgtypes()) {
+      available_packages(type = type)
+    }
+  }
 
   vprintf("* Checking for updated packages ... ")
 
@@ -346,7 +355,7 @@ update <- function(packages = NULL,
 
   if (prompt && !proceed()) {
     renv_report_user_cancel()
-    return(invisible(FALSE))
+    invokeRestart("abort")
   }
 
   # perform the install

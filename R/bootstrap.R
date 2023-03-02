@@ -34,8 +34,11 @@ renv_bootstrap_repos <- function() {
     return(repos)
 
   # if we're testing, re-use the test repositories
-  if (renv_bootstrap_tests_running())
-    return(getOption("renv.tests.repos"))
+  if (renv_bootstrap_tests_running()) {
+    repos <- getOption("renv.tests.repos")
+    if (!is.null(repos))
+      return(repos)
+  }
 
   # retrieve current repos
   repos <- getOption("repos")
@@ -284,8 +287,7 @@ renv_bootstrap_download_tarball <- function(version) {
     return()
 
   # allow directories
-  info <- file.info(tarball, extra_cols = FALSE)
-  if (identical(info$isdir, TRUE)) {
+  if (dir.exists(tarball)) {
     name <- sprintf("renv_%s.tar.gz", version)
     tarball <- file.path(tarball, name)
   }
@@ -599,8 +601,8 @@ renv_bootstrap_validate_version <- function(version) {
   if (version == loadedversion)
     return(TRUE)
 
-  # assume four-component versions are from GitHub; three-component
-  # versions are from CRAN
+  # assume four-component versions are from GitHub;
+  # three-component versions are from CRAN
   components <- strsplit(loadedversion, "[.-]")[[1]]
   remote <- if (length(components) == 4L)
     paste("rstudio/renv", loadedversion, sep = "@")
@@ -639,6 +641,12 @@ renv_bootstrap_load <- function(project, libpath, version) {
 
   # warn if the version of renv loaded does not match
   renv_bootstrap_validate_version(version)
+
+  # execute renv load hooks, if any
+  hooks <- getHook("renv::autoload")
+  for (hook in hooks)
+    if (is.function(hook))
+      tryCatch(hook(), error = warning)
 
   # load the project
   renv::load(project)

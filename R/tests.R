@@ -1,4 +1,11 @@
 
+renv_tests_program <- function(name) {
+  program <- Sys.which(name)
+  if (!nzchar(program))
+    testthat::skip(paste("required program", name, "is not available"))
+  program
+}
+
 renv_tests_scope <- function(packages = character(), project = NULL) {
 
   renv_tests_init()
@@ -42,7 +49,7 @@ renv_tests_scope <- function(packages = character(), project = NULL) {
 }
 
 renv_tests_root <- function(path = getwd()) {
-  renv_global("tests.root", renv_tests_root_impl(path))
+  global("tests.root", renv_tests_root_impl(path))
 }
 
 renv_tests_root_impl <- function(path = getwd()) {
@@ -118,12 +125,23 @@ renv_tests_init_working_dir <- function() {
 }
 
 renv_tests_init_options <- function() {
+
+  # find path to renv sources
+  sources <- renv_file_find(getwd(), function(parent) {
+    descpath <- file.path(parent, "DESCRIPTION")
+    if (file.exists(descpath))
+      return(parent)
+  })
+
+  # set it so we can find the sources
   options(
+    renv.test.sources = sources,
     renv.config.user.library = FALSE,
     renv.config.sandbox.enabled = TRUE,
     restart = NULL,
     warn = 2
   )
+
 }
 
 renv_tests_init_repos <- function(repopath = NULL) {
@@ -328,6 +346,13 @@ renv_tests_init_finish <- function() {
   # mark tests as running
   options(renv.tests.running = TRUE)
 
+  # make sure the sandbox is writable on shutdown so R can clean it up
+  reg.finalizer(renv_envir_self(), function(object) {
+    sandbox <- renv_sandbox_path()
+    if (file.exists(sandbox))
+      Sys.chmod(sandbox, "0755")
+  }, onexit = TRUE)
+
 }
 
 renv_tests_init <- function() {
@@ -447,7 +472,7 @@ renv_tests_diagnostics <- function() {
   writeLines("The following packages are available in the test repositories:")
 
   dbs <-
-    renv_available_packages(type = "source", quiet = TRUE) %>%
+    available_packages(type = "source", quiet = TRUE) %>%
     map(function(db) {
       rownames(db) <- NULL
       db[c("Package", "Version", "Path")]

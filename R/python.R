@@ -380,7 +380,7 @@ renv_python_select_error <- function() {
 
 renv_python_select <- function(candidates = NULL) {
 
-  candidates <- aliased_path(candidates %||% renv_python_discover())
+  candidates <- renv_path_aliased(candidates %||% renv_python_discover())
   if (empty(candidates))
     return(renv_python_select_error())
 
@@ -418,7 +418,7 @@ renv_python_active <- function() {
 renv_python_validate <- function(python) {
 
   if (!file.exists(python)) {
-    fmt <- "%s does not exist"
+    fmt <- "python %s does not exist"
     stopf(fmt, renv_path_pretty(python))
   }
 

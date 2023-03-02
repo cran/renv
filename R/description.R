@@ -1,32 +1,36 @@
 
-renv_description_read <- function(path = NULL, package = NULL, subdir = NULL, ...) {
-
+renv_description_read <- function(path = NULL,
+                                  package = NULL,
+                                  subdir = NULL,
+                                  field = NULL,
+                                  ...)
+{
   # if given a package name, construct path to that package
   path <- path %||% find.package(package)
-  if (!file.exists(path)) {
-    fmt <- "%s does not exist"
-    stopf(fmt, renv_path_pretty(path))
-  }
 
   # normalize non-absolute paths
   if (!renv_path_absolute(path))
     path <- renv_path_normalize(path)
 
   # if 'path' refers to a directory, try to resolve the DESCRIPTION file
-  info <- renv_file_info(path)
-  if (identical(info$isdir, TRUE)) {
+  if (dir.exists(path)) {
     components <- c(path, if (nzchar(subdir %||% "")) subdir, "DESCRIPTION")
     path <- paste(components, collapse = "/")
   }
 
   # read value with filebacked cache
-  filebacked(
+  description <- filebacked(
     scope    = "DESCRIPTION",
     path     = path,
     callback = renv_description_read_impl,
     subdir   = subdir,
     ...
   )
+
+  if (!is.null(field))
+    return(description[[field]])
+
+  description
 
 }
 
@@ -49,7 +53,7 @@ renv_description_read_impl <- function(path = NULL, subdir = NULL, ...) {
     descs <- grep(pattern, files, value = TRUE)
     if (empty(descs)) {
       fmt <- "archive '%s' does not appear to contain a DESCRIPTION file"
-      stopf(fmt, aliased_path(path))
+      stopf(fmt, renv_path_aliased(path))
     }
 
     # choose the shortest DESCRPITION file matching
@@ -113,8 +117,8 @@ renv_description_type <- function(path = NULL, desc = NULL) {
 renv_description_parse_field <- function(field) {
 
   # check for invalid / unexpected inputs
-  if (is.na(field) || !nzchar(field))
-    return(data.frame())
+  if (is.null(field) || is.na(field) || !nzchar(field))
+    return(NULL)
 
   pattern <- paste0(
     "([a-zA-Z0-9._]+)",                      # package name
@@ -131,7 +135,7 @@ renv_description_parse_field <- function(field) {
   m <- regexec(pattern, x)
   matches <- regmatches(x, m)
   if (empty(matches))
-    return(data.frame())
+    return(NULL)
 
   data.frame(
     Package = extract_chr(matches, 2L),
@@ -194,4 +198,34 @@ renv_description_built_version <- function(desc = NULL) {
     return(NA)
 
   substring(built, 3L, regexpr(";", built, fixed = TRUE) - 1L)
+}
+
+renv_description_dependency_fields <- function(fields, project) {
+
+  fields <- fields %||% settings$package.dependency.fields(project = project)
+
+  expanded <- map(fields, function(field) {
+
+    case(
+
+      identical(field, FALSE)
+        ~ NULL,
+
+      identical(field, "strong") || is.na(field)
+        ~ c("Depends", "Imports", "LinkingTo"),
+
+      identical(field, "most") || identical(field, TRUE)
+        ~ c("Depends", "Imports", "LinkingTo", "Suggests"),
+
+      identical(field, "all") ~
+        c("Depends", "Imports", "LinkingTo", "Suggests", "Enhances"),
+
+      field
+
+    )
+
+  })
+
+  unique(unlist(expanded, recursive = FALSE, use.names = FALSE))
+
 }

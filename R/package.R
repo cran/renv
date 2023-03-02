@@ -62,7 +62,7 @@ renv_package_type <- function(path, quiet = FALSE, default = "source") {
 
   info <- renv_file_info(path)
   if (is.na(info$isdir))
-    stopf("no package at path '%s'", aliased_path(path))
+    stopf("no package at path '%s'", renv_path_aliased(path))
 
   # for directories, check for Meta
   if (info$isdir) {
@@ -99,7 +99,7 @@ renv_package_type <- function(path, quiet = FALSE, default = "source") {
 
   if (!quiet) {
     fmt <- "failed to determine type of package '%s'; assuming source"
-    warningf(fmt, aliased_path(path))
+    warningf(fmt, renv_path_aliased(path))
   }
 
   default
@@ -192,7 +192,8 @@ renv_package_augment <- function(installpath, record) {
 renv_package_augment_impl <- function(data, remotes) {
   remotes <- remotes[map_lgl(remotes, Negate(is.null))]
   nonremotes <- grep("^(?:Remote|Github)", names(data), invert = TRUE)
-  c(data[nonremotes], remotes, Remotes = data[["Remotes"]])
+  remotes[["Remotes"]] <- data[["Remotes"]] %||% remotes[["Remotes"]]
+  c(data[nonremotes], remotes)
 }
 
 renv_package_augment_description <- function(path, remotes) {
@@ -260,6 +261,10 @@ renv_package_dependencies_impl <- function(package,
 
   # default to unknown path for visited packages
   assign(package, NA, envir = visited, inherits = FALSE)
+
+  # short-circuit for NA case
+  if (length(libpaths) == 1L && is.na(libpaths))
+    return()
 
   # find the package
   libpaths <- libpaths %||% renv_libpaths_all()

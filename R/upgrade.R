@@ -76,7 +76,7 @@ renv_upgrade_impl <- function(project, version, reload, prompt) {
 
   if (prompt && !proceed()) {
     renv_report_user_cancel()
-    return(FALSE)
+    invokeRestart("abort")
   }
 
   renv_scope_restore(
@@ -130,7 +130,7 @@ renv_upgrade_find_record_default <- function() {
   # check the version reported by R repositories.
   # if it's older than current renv, then prefer GitHub
   version <- record$Version
-  if (package_version(version) < renv_namespace_version("renv"))
+  if (package_version(version) < renv_package_version("renv"))
     return(renv_upgrade_find_record_dev())
 
   # ok -- install from repository

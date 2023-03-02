@@ -92,6 +92,10 @@
 #' # may require the `--no-lock` flag to be set during install
 #' options(install.opts = "--no-lock")
 #' renv::install("xml2")
+#'
+#' # alternatively, you can set such options for specific packages with e.g.
+#' options(install.opts = list(xml2 = "--no-lock"))
+#' renv::install("xml2")
 #' ```
 #'
 #' @inherit renv-params
@@ -129,12 +133,13 @@
 #' }
 install <- function(packages = NULL,
                     ...,
-                    library = NULL,
-                    type    = NULL,
-                    rebuild = FALSE,
-                    repos   = NULL,
-                    prompt  = interactive(),
-                    project = NULL)
+                    library      = NULL,
+                    type         = NULL,
+                    rebuild      = FALSE,
+                    repos        = NULL,
+                    prompt       = interactive(),
+                    dependencies = NULL,
+                    project      = NULL)
 {
   renv_consent_check()
   renv_scope_error_handler()
@@ -147,6 +152,11 @@ install <- function(packages = NULL,
   project <- renv_project_resolve(project)
   renv_scope_lock(project = project)
 
+  if (!is.null(dependencies)) {
+    fields <- renv_description_dependency_fields(dependencies, project = project)
+    renv_scope_options(renv.settings.package.dependency.fields = fields)
+  }
+
   libpaths <- renv_libpaths_resolve(library)
   renv_scope_libpaths(libpaths)
 
@@ -158,26 +168,17 @@ install <- function(packages = NULL,
   if (length(repos))
     renv_scope_options(repos = repos)
 
+  # if users have requested the use of pak, delegate there
+  if (config$pak.enabled() && !recursing()) {
+    renv_pak_init()
+    return(renv_pak_install(packages, libpaths, project))
+  }
+
   # get and resolve the packages / remotes to be installed
-  remotes <- packages %||% renv_project_remotes(project)
+  remotes <- packages %||% renv_project_remotes(project, dependencies)
   if (empty(remotes)) {
     vwritef("* There are no packages to install.")
     return(invisible(list()))
-  }
-
-  # if users have requested the use of pak, delegate there
-  if (config$pak.enabled() && !recursing()) {
-
-    renv_pak_init(
-      library = library,
-      type    = type,
-      rebuild = rebuild,
-      project = project
-    )
-
-    packages <- if (is.list(remotes)) names(remotes) else remotes
-    return(renv_pak_install(packages, libpaths))
-
   }
 
   # resolve remotes
@@ -194,7 +195,7 @@ install <- function(packages = NULL,
 
   if (!renv_install_preflight(project, libpaths, remotes, prompt)) {
     renv_report_user_cancel()
-    return(invisible(list()))
+    invokeRestart("abort")
   }
 
   # ensure package names are resolved if provided
@@ -216,15 +217,22 @@ install <- function(packages = NULL,
   }
 
   # install retrieved records
+  before <- Sys.time()
   renv_install_impl(records)
+  after <- Sys.time()
+
+  if (!renv_tests_running()) {
+    time <- renv_difftime_format(difftime(after, before))
+    n <- length(records)
+    vwritef("* Installed %s in %s.", nplural("package", n), time)
+  }
 
   # a bit of extra test reporting
   if (renv_tests_running()) {
-    fmt <- "Installed %i %s into library at path %s."
+    fmt <- "Installed %s into library at path %s."
     vwritef(
       fmt,
-      length(records),
-      plural("package", length(records)),
+      nplural("package", length(records)),
       renv_path_pretty(renv_libpaths_default())
     )
   }
@@ -385,6 +393,7 @@ renv_install_package <- function(record) {
   }
 
   # install the package
+  before <- Sys.time()
   withCallingHandlers(
     renv_install_package_impl(record),
     error = function(e) {
@@ -392,25 +401,30 @@ renv_install_package <- function(record) {
       writef(e$output)
     }
   )
+  after <- Sys.time()
 
   path <- record$Path
   type <- renv_package_type(path, quiet = TRUE)
+  feedback <- renv_install_package_feedback(path, type)
 
-  feedback <- if (type == "binary") {
-    if (renv_file_type(path, symlinks = FALSE) == "directory") {
-      "copied local binary"
-    } else {
-      "installed binary"
-    }
-  } else {
-    "built from source"
-  }
-
-  vwritef("\tOK [%s]", feedback)
+  elapsed <- difftime(after, before, units = "auto")
+  vwritef("\tOK [%s in %s]", feedback, renv_difftime_format(elapsed))
 
   # link into cache
   if (renv_cache_config_enabled(project = project))
     renv_cache_synchronize(record, linkable = linkable)
+
+}
+
+renv_install_package_feedback <- function(path, type) {
+
+  if (identical(type, "source"))
+    return("built from source")
+
+  if (renv_file_type(path, symlinks = FALSE) == "directory")
+    return("copied local binary")
+
+  "installed binary"
 
 }
 
@@ -429,14 +443,18 @@ renv_install_package_cache <- function(record, cache, linker) {
   # report successful link to user
   fmt <- "Installing %s [%s] ..."
   with(record, vwritef(fmt, Package, Version))
+
+  before <- Sys.time()
   linker(cache, target)
+  after <- Sys.time()
 
   type <- case(
     identical(linker, renv_file_copy) ~ "copied",
     identical(linker, renv_file_link) ~ "linked"
   )
 
-  vwritef("\tOK [%s cache]", type)
+  elapsed <- difftime(after, before, units = "auto")
+  vwritef("\tOK [%s cache in %s]", type, renv_difftime_format(elapsed))
 
   return(TRUE)
 
@@ -512,10 +530,10 @@ renv_install_package_impl_prebuild <- function(record, path, quiet) {
   package <- record$Package
   newpath <- r_cmd_build(package, path)
   after <- Sys.time()
-  time <- difftime(after, before, units = "auto")
+  elapsed <- difftime(after, before, units = "auto")
 
   fmt <- "\tOK [built package in %s]"
-  vwritef(fmt, renv_difftime_format(time))
+  vwritef(fmt, renv_difftime_format(elapsed))
 
   newpath
 

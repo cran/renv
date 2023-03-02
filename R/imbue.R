@@ -25,7 +25,7 @@ imbue <- function(project = NULL,
 
   renv_scope_options(renv.verbose = !quiet)
 
-  vtext <- version %||% renv_package_version("renv")
+  vtext <- version %||% renv_metadata_version()
   vwritef("Installing renv [%s] ...", vtext)
   status <- renv_imbue_impl(project, version)
   vwritef("* Done! renv has been successfully installed.")
@@ -68,8 +68,11 @@ renv_imbue_impl <- function(project, version = NULL, force = FALSE) {
   renv_scope_libpaths(library)
 
   vwritef("Installing renv [%s] ...", version)
+  before <- Sys.time()
   with(record, r_cmd_install(Package, Path, library))
-  vwritef("\tOK [built source]")
+  after <- Sys.time()
+  elapsed <- difftime(after, before, units = "auto")
+  vwritef("\tOK [built source in %s]", renv_difftime_format(elapsed))
 
   invisible(record)
 
@@ -78,9 +81,12 @@ renv_imbue_impl <- function(project, version = NULL, force = FALSE) {
 renv_imbue_self <- function(project) {
 
   # construct source, target paths
-  source <- renv_namespace_path("renv")
-  if (!file.exists(source))
-    source <- renv_package_find("renv")
+  # (check if 'renv' is loaded to handle embedded case)
+  source <- if ("renv" %in% loadedNamespaces()) {
+    renv_namespace_path("renv")
+  } else {
+    renv_package_find("renv")
+  }
 
   if (!file.exists(source))
     stop("internal error: could not find where 'renv' is installed")
@@ -90,11 +96,10 @@ renv_imbue_self <- function(project) {
     return(TRUE)
 
   type <- renv_package_type(source, quiet = TRUE)
-  switch(type,
-         source = renv_imbue_self_source(source, target),
-         binary = renv_imbue_self_binary(source, target))
-
-  renv_snapshot_description(target)
+  case(
+    type == "source" ~ renv_imbue_self_source(source, target),
+    type == "binary" ~ renv_imbue_self_binary(source, target)
+  )
 
 }
 

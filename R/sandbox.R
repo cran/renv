@@ -38,7 +38,7 @@ renv_sandbox_activate <- function(project = NULL) {
 
 }
 
-renv_sandbox_activate_impl <- function(project) {
+renv_sandbox_activate_impl <- function(project = NULL, path = NULL) {
 
   # get current library paths
   oldlibs <- .libPaths()
@@ -52,12 +52,12 @@ renv_sandbox_activate_impl <- function(project) {
   if (config$sandbox.enabled()) {
 
     # generate the sandbox
-    sandbox <- renv_sandbox_path(project = project)
-    ensure_directory(sandbox)
-    renv_sandbox_generate(sandbox)
+    path <- path %||% renv_sandbox_path(project = project)
+    ensure_directory(path)
+    renv_sandbox_generate(path)
 
     # override .Library
-    renv_binding_replace(".Library", sandbox, envir = base)
+    renv_binding_replace(".Library", path, envir = base)
 
   }
 
@@ -80,6 +80,10 @@ renv_sandbox_activate_impl <- function(project) {
   # return new library paths
   renv_libpaths_all()
 
+}
+
+renv_sandbox_activated <- function() {
+  !identical(.Library, renv_libpaths_system())
 }
 
 renv_sandbox_activate_check <- function(libs) {
@@ -119,19 +123,25 @@ renv_sandbox_activate_check <- function(libs) {
 
 renv_sandbox_generate <- function(sandbox) {
 
+  # make the library temporarily writable
+  if (!renv_package_checking())
+    Sys.chmod(sandbox, "0755")
+
   # find system packages in the system library
   syspkgs <- renv_installed_packages(
     lib.loc = renv_libpaths_system(),
     priority = c("base", "recommended")
   )
 
-  # link into temporary library
+  # link into sandbox
   sources <- with(syspkgs, file.path(LibPath, Package))
   targets <- with(syspkgs, file.path(sandbox, Package))
   names(targets) <- sources
-  enumerate(targets, function(source, target) {
-    renv_file_link(source, target)
-  })
+  enumerate(targets, renv_file_link, overwrite = TRUE)
+
+  # make the library unwritable again
+  if (!renv_package_checking())
+    Sys.chmod(sandbox, "0555")
 
   # return sandbox path
   sandbox
@@ -173,6 +183,6 @@ renv_sandbox_task <- function(...) {
 
 }
 
-renv_sandbox_path <- function(project) {
+renv_sandbox_path <- function(project = NULL) {
   renv_paths_sandbox(project = project)
 }

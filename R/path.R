@@ -10,6 +10,25 @@ renv_path_absolute <- function(path) {
 
 }
 
+renv_path_aliased <- function(path) {
+
+  home <-
+    Sys.getenv("HOME") %""%
+    Sys.getenv("R_USER")
+
+  if (!nzchar(home))
+    return(path)
+
+  home <- gsub("\\", "/", home, fixed = TRUE)
+  path <- gsub("\\", "/", path, fixed = TRUE)
+
+  match <- regexpr(home, path, fixed = TRUE, useBytes = TRUE)
+  path[match == 1L] <- file.path("~", substring(path[match == 1L], nchar(home) + 2L))
+
+  path
+
+}
+
 renv_path_within <- function(path, parent) {
   path <- renv_path_canonicalize(path)
   prefix <- paste(renv_path_canonicalize(parent), "/", sep = "")
@@ -112,5 +131,5 @@ renv_path_component <- function(path, index = 1) {
 }
 
 renv_path_pretty <- function(path) {
-  renv_json_quote(aliased_path(path))
+  renv_json_quote(renv_path_aliased(path))
 }

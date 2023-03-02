@@ -66,12 +66,12 @@ renv_project_type <- function(path) {
   renv_bootstrap_project_type(path)
 }
 
-renv_project_remotes <- function(project) {
+renv_project_remotes <- function(project, fields = NULL) {
 
   # if this project has a DESCRIPTION file, use it to provide records
   descpath <- file.path(project, "DESCRIPTION")
   if (file.exists(descpath))
-    return(renv_project_remotes_description(project, descpath))
+    return(renv_project_remotes_description(project, descpath, fields))
 
   # otherwise, use the set of (non-base) packages used in the project
   deps <- dependencies(
@@ -82,17 +82,18 @@ renv_project_remotes <- function(project) {
   )
 
   packages <- sort(unique(deps$Package))
-  setdiff(packages, renv_packages_base())
+  ignored <- c("renv", renv_project_ignored_packages(project))
+  setdiff(packages, ignored)
 
 }
 
-renv_project_remotes_description <- function(project, descpath) {
+renv_project_remotes_description <- function(project, descpath, fields = NULL) {
 
   # first, parse remotes (if any)
   remotes <- renv_project_remotes_description_remotes(project, descpath)
 
   # next, find packages mentioned in the DESCRIPTION file
-  fields <- c("Depends", "Imports", "Suggests", "LinkingTo")
+  fields <- fields %||% c("Depends", "Imports", "LinkingTo", "Suggests")
   deps <- renv_dependencies_discover_description(
     path    = descpath,
     fields  = fields,
@@ -114,9 +115,11 @@ renv_project_remotes_description <- function(project, descpath) {
   desc <- renv_description_read(descpath)
   if (any(grepl("^Roxygen", names(desc)))) {
     for (package in c("devtools", "roxygen2")) {
-      specs[[package]] <-
-        specs[[package]] %||%
-        renv_dependencies_list(descpath, package, dev = TRUE)
+      if (!package %in% ignored) {
+        specs[[package]] <-
+          specs[[package]] %||%
+          renv_dependencies_list(descpath, package, dev = TRUE)
+      }
     }
   }
 
@@ -232,59 +235,54 @@ renv_project_synchronized_check <- function(project = NULL, lockfile = NULL) {
   project  <- renv_project_resolve(project)
   lockfile <- lockfile %||% renv_lockfile_load(project)
 
-  # if there are no packages (other than renv) available in the project library,
-  # but there are multiple packages referenced in the lockfile,
-  # then instruct the user that they may need to run restore
-  libpath <- renv_paths_library(project = project)
-  packages <- list.files(libpath)
+  # check for packages referenced in the lockfile which are not installed
+  lockpkgs <- names(lockfile$Packages)
+  libpkgs <- renv_snapshot_r_packages_impl(
+    library  = renv_libpaths_all(),
+    project  = project,
+    snapshot = FALSE
+  )
 
-  needsrestore <-
-    empty(setdiff(packages, "renv")) &&
-    length(lockfile$Packages) > 1
+  # check for case where no packages are installed (except renv)
+  if (length(lockpkgs) > 1L) {
+    ok <- intersect(lockpkgs, basename(libpkgs))
+    if (length(ok) == 0L || identical(ok, "renv")) {
+      msg <- lines(
+        "* This project contains a lockfile, but none of the recorded packages are installed.",
+        "* Use `renv::restore()` to restore the project library."
+      )
+      ewritef(msg)
+      return(FALSE)
+    }
+  }
 
-  if (needsrestore) {
-
+  # check for case where one or more packages are missing
+  missing <- setdiff(lockpkgs, basename(libpkgs))
+  if (length(missing)) {
     msg <- lines(
-      "* The project library is out of sync with the lockfile.",
-      "* Use `renv::restore()` to install packages recorded in the lockfile."
+      "* One or more packages recorded in the lockfile are not installed.",
+      "* Use `renv::status()` for more details."
     )
-
     ewritef(msg)
     return(FALSE)
   }
 
-  # perform a lightweight comparison between the project
-  # library and lockfile, and report if there may be
-  # any conflicts
-  library <- renv_libpaths_all()
+  # otherwise, use status to detect if we're synchronized
+  info <- quietly({
+    renv_scope_options(renv.verbose = FALSE)
+    status(project = project, sources = FALSE)
+  })
 
-  # don't validate lockfile state in this scope; just try
-  # to read and use it as-is
-  renv_scope_options(renv.config.snapshot.validate = FALSE)
+  if (!identical(info$synchronized, TRUE)) {
 
-  # indicate that we're doing an automatic snapshot
-  renv_scope_var("running", TRUE, envir = `_renv_snapshot_auto`)
+    msg <- lines(
+      "* The project is currently out-of-sync.",
+      "* Use `renv::status()` for more details."
+    )
 
-  # read current state of project library
-  libstate <- snapshot(
-    project  = project,
-    library  = library,
-    lockfile = NULL,
-    type     = "all",
-    force    = TRUE
-  )
-
-  # compare with the current lockfile
-  diff <- renv_lockfile_diff_packages(libstate, lockfile)
-
-  # we only want to report cases where a package version
-  # has changed, or the lockfile references a package that
-  # is not currently installed in the project library
-  diff <- diff[diff != "remove"]
-  if (!empty(diff)) {
-    msg <- "* The project may be out of sync -- use `renv::status()` for more details."
     ewritef(msg)
     return(FALSE)
+
   }
 
   TRUE

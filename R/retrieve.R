@@ -23,7 +23,7 @@ retrieve <- function(packages) {
   # ensure HTTPUserAgent is set (required for RSPM binaries)
   agent <- renv_http_useragent()
   if (!grepl("renv", agent)) {
-    renv <- sprintf("renv (%s)", renv_package_version("renv"))
+    renv <- sprintf("renv (%s)", renv_metadata_version())
     agent <- paste(renv, agent, sep = "; ")
   }
   renv_scope_options(HTTPUserAgent = agent)
@@ -421,7 +421,8 @@ renv_retrieve_git_impl <- function(record, path) {
   }
 
   fmt <- "\tOK [cloned repository in %s]"
-  vwritef(fmt, renv_difftime_format(after - before))
+  elapsed <- difftime(after, before, units = "auto")
+  vwritef(fmt, renv_difftime_format(elapsed))
 
   TRUE
 
@@ -611,7 +612,7 @@ renv_retrieve_repos <- function(record) {
     )
 
     if (inherits(status, "error")) {
-      warning(status)
+      errors$push(status)
       next
     }
 
@@ -620,7 +621,7 @@ renv_retrieve_repos <- function(record) {
 
     if (!is.logical(status)) {
       fmt <- "internal error: unexpected status code '%s'"
-      warningf(fmt, renv_deparse(status))
+      warningf(fmt, stringify(status))
     }
 
   }
@@ -949,6 +950,22 @@ renv_retrieve_successful_subdir <- function(record, path) {
 }
 
 renv_retrieve_successful <- function(record, path, install = TRUE) {
+
+  # if we downloaded an archive, adjust its permissions here
+  mode <- Sys.getenv("RENV_CACHE_MODE", unset = NA)
+  if (!is.na(mode)) {
+    info <- file.info(path, extra_cols = FALSE)
+    if (identical(info$isdir, FALSE)) {
+      parent <- dirname(path)
+      renv_system_exec(
+        command = "chmod",
+        args    = c("-Rf", renv_shell_quote(mode), renv_shell_path(parent)),
+        action  = "chmoding cached package",
+        quiet   = TRUE,
+        success = NULL
+      )
+    }
+  }
 
   # the handling of 'subdir' here is a little awkward, as this function
   # can receive:

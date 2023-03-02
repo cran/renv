@@ -55,6 +55,12 @@ parsing the code and looking for calls of the form:
 \item \code{package::method()}
 }
 
+A subset of popular \R packages used for package management are also supported:
+\itemize{
+\item \href{https://cran.r-project.org/package=box}{\code{box}}: \code{box::use(...)}
+\item \href{https://cran.r-project.org/package=pacman}{\code{pacman}}: \code{pacman::p_load(...)}
+}
+
 For \R package projects, dependencies expressed in the \code{DESCRIPTION} file
 will also be discovered. Note that the \code{rmarkdown} package is required in
 order to crawl dependencies in R Markdown files.
@@ -76,7 +82,7 @@ Similarly, if you'd like \code{renv} to parse a chunk that is otherwise ignored
 (e.g. because it has \code{eval=FALSE} as a chunk header), you can set:
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{```\{r chunk-label, eval=FALSE, renv.ignore=FALSE\}
-# code in this chunk will _not be ignored
+# code in this chunk will _not_ be ignored
 ```
 }\if{html}{\out{</div>}}
 }
@@ -110,8 +116,9 @@ data/
 
 
 \code{renv}'s attempts to enumerate package dependencies in your project can fail
--- most commonly, because of parse errors in your \R code. The \code{errors}
-parameter can be used to control how \code{renv} responds to errors that occur.
+-- most commonly, because of failures when attempting to parse your \R code.
+The \code{errors} parameter can be used to control how \code{renv} responds to errors
+that occur.
 
 \tabular{ll}{
 \strong{Name} \tab \strong{Action} \cr

@@ -1,6 +1,4 @@
 
-`_renv_rspm_status` <- new.env(parent = emptyenv())
-
 renv_rspm_transform <- function(repos) {
   map_chr(repos, function(url) {
     tryCatch(
@@ -93,8 +91,7 @@ renv_rspm_transform_impl <- function(url) {
 renv_rspm_status <- function(base) {
   memoize(
     key   = base,
-    expr  = catch(renv_rspm_status_impl(base)),
-    envir = `_renv_rspm_status`
+    value = catch(renv_rspm_status_impl(base))
   )
 }
 
@@ -214,5 +211,21 @@ renv_rspm_os <- function() {
 
 
 renv_rspm_enabled <- function() {
+
+  # allow environment variable override
+  enabled <- Sys.getenv("RENV_RSPM_ENABLED", unset = NA)
+  if (!is.na(enabled))
+    return(truthy(enabled, default = TRUE))
+
+  # binaries not available for Linux on arm64
+  disabled <-
+    renv_platform_linux() &&
+    identical(renv_platform_machine(), "aarch64")
+
+  if (disabled)
+    return(FALSE)
+
+  # otherwise, use configuration option
   config$rspm.enabled()
+
 }

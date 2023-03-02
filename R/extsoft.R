@@ -34,13 +34,13 @@ renv_extsoft_install <- function(quiet = FALSE) {
     renv_pretty_print(
       files,
       "The following external software tools will be installed:",
-      sprintf("Tools will be installed into '%s'.", aliased_path(extsoft)),
+      sprintf("Tools will be installed into %s.", renv_path_pretty(extsoft)),
       wrap = FALSE
     )
 
     if (!proceed()) {
       renv_report_user_cancel()
-      return(FALSE)
+      invokeRestart("abort")
     }
 
   }
@@ -148,7 +148,7 @@ renv_extsoft_use <- function(quiet = FALSE) {
 
     if (!proceed()) {
       renv_report_user_cancel()
-      return(FALSE)
+      invokeRestart("abort")
     }
 
   }

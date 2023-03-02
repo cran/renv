@@ -4,6 +4,10 @@ renv_infrastructure_write <- function(project = NULL,
                                       profile = NULL,
                                       version = NULL)
 {
+  # don't do anything in embedded mode
+  if (renv_metadata_embedded())
+    return()
+
   project <- renv_project_resolve(project)
 
   renv_infrastructure_write_profile(project, profile = profile)
@@ -46,8 +50,10 @@ renv_infrastructure_write_rprofile <- function(project) {
 renv_infrastructure_write_rbuildignore <- function(project) {
 
   lines <- c("^renv$", "^renv\\.lock$")
+
   if (file.exists(file.path(project, "requirements.txt")))
     lines <- c(lines, "^requirements\\.txt$")
+
   if (file.exists(file.path(project, "environment.yml")))
     lines <- c(lines, "^environment\\.yml$")
 

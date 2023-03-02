@@ -83,7 +83,7 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
   after <- Sys.time()
 
   # check for failure
-  if (inherits(status, "error"))
+  if (inherits(status, "condition"))
     renv_download_error(url, "%s", conditionMessage(status))
 
   if (status != 0L)
@@ -98,7 +98,8 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
     renv_download_error(url, "%s", "archive cannot be read")
 
   # everything looks ok: report success
-  renv_download_report(after - before, tempfile)
+  elapsed <- difftime(after, before, units = "auto")
+  renv_download_report(elapsed, tempfile)
 
   # move the file to the requested location
   renv_file_move(tempfile, destfile)
@@ -139,8 +140,8 @@ renv_download_impl <- function(url, destfile, type = NULL, request = "GET", head
     renv_download_default
   )
 
-  # run downloader, catching errors
-  catch(downloader(url, destfile, type, request, headers))
+  # run downloader, catching errors and warnings
+  catchall(downloader(url, destfile, type, request, headers))
 
 }
 
@@ -578,6 +579,15 @@ renv_download_headers <- function(url, type, headers) {
 
 renv_download_size <- function(url, type = NULL, headers = NULL) {
 
+  memoize(
+    key   = url,
+    value = renv_download_size_impl(url, type, headers)
+  )
+
+}
+
+renv_download_size_impl <- function(url, type = NULL, headers = NULL) {
+
   headers <- catch(renv_download_headers(url, type, headers))
   if (inherits(headers, "error"))
     return(-1L)
@@ -639,13 +649,11 @@ renv_download_report <- function(elapsed, file) {
   if (!renv_verbose())
     return()
 
-  time <- round(elapsed, 1)
-
   info <- renv_file_info(file)
   size <- structure(info$size, class = "object_size")
 
   fmt <- "\tOK [downloaded %s in %s]"
-  vwritef(fmt, format(size, units = "auto"), format(time, units = "auto"))
+  vwritef(fmt, format(size, units = "auto"), renv_difftime_format(elapsed))
 
 }
 
@@ -692,7 +700,8 @@ renv_download_local <- function(url, destfile, headers) {
       next
 
     # report download summary
-    renv_download_report(after - before, destfile)
+    elapsed <- difftime(after, before, units = "auto")
+    renv_download_report(elapsed, destfile)
 
     return(TRUE)
 
@@ -848,7 +857,8 @@ renv_download_available_fallback <- function(url) {
 
 renv_download_error <- function(url, fmt, ...) {
   msg <- sprintf(fmt, ...)
-  stopf("failed to retrieve '%s' [%s]", url, msg, call. = FALSE)
+  vwritef("\tERROR [%s]", msg)
+  stopf("error downloading '%s' [%s]", url, msg, call. = FALSE)
 }
 
 renv_download_trace <- function() {

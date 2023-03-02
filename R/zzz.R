@@ -1,16 +1,42 @@
 
-.onLoad <- function(libname, pkgname) {
+.docker <- FALSE
 
+.onLoad <- function(libname, pkgname) {
+  renv_zzz_load()
+}
+
+.onAttach <- function(libname, pkgname) {
+  renv_zzz_attach()
+}
+
+renv_zzz_load <- function() {
+
+  renv_metadata_init()
   renv_platform_init()
   renv_envvars_init()
   renv_log_init()
   renv_methods_init()
-  renv_filebacked_init()
   renv_libpaths_init()
   renv_patch_init()
 
-  addTaskCallback(renv_repos_init_callback)
-  addTaskCallback(renv_snapshot_auto_callback)
+  # TODO: It's not clear if these callbacks are safe to use when renv is
+  # embedded, but it's unlikely that clients would want them anyhow.
+  if (!renv_metadata_embedded()) {
+
+    addTaskCallback(
+      renv_repos_init_callback,
+      name = "renv:::renv_repos_init_callback"
+    )
+
+    addTaskCallback(
+      renv_snapshot_auto_callback,
+      name = "renv:::renv_snapshot_auto_callback"
+    )
+
+  }
+
+  # record whether we're in a docker environment
+  assign(".docker", file.exists("/.dockerenv"), envir = renv_envir_self())
 
   # if an renv project already appears to be loaded, then re-activate
   # the sandbox now -- this is primarily done to support suspend and
@@ -23,7 +49,7 @@
 
 }
 
-.onAttach <- function(libname, pkgname) {
+renv_zzz_attach <- function() {
   renv_rstudio_fixup()
   renv_exports_attach()
 }
@@ -146,5 +172,13 @@ renv_zzz_repos <- function() {
 
 }
 
-if (identical(.packageName, "renv"))
+if (identical(.packageName, "renv")) {
   renv_zzz_run()
+}
+
+# if renv is being embedded in another package, make sure we
+# run our load / attach hooks so internal state is initialized
+if (!identical(.packageName, "renv")) {
+  renv_zzz_load()
+  renv_zzz_attach()
+}

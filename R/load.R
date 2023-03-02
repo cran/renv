@@ -55,6 +55,7 @@ load <- function(project = NULL, quiet = FALSE) {
   # if we're loading a project different from the one currently loaded,
   # then unload the current project and reload the requested one
   switch <-
+    !renv_metadata_embedded() &&
     !is.na(Sys.getenv("RENV_PROJECT", unset = NA)) &&
     !identical(project, renv_project())
 
@@ -486,24 +487,52 @@ renv_load_python_condaenv <- function(project, fields) {
 
 renv_load_bioconductor <- function(project, bioconductor) {
 
-  if (is.null(bioconductor) || getRversion() < "3.4")
+  # we don't try to support older R anymore
+  if (getRversion() < "3.4")
     return()
 
+  # if we don't have a valid Bioconductor version, bail
+  version <- bioconductor$Version
+  if (is.null(version))
+    return()
+
+  # initialize bioconductor
   renv_bioconductor_init()
+
+  # validate version if necessary
+  validate <- getOption("renv.bioconductor.validate")
+  if (truthy(validate, default = TRUE))
+    renv_load_bioconductor_validate(project, version)
+
+  # update the R repositories
+  repos <- renv_bioconductor_repos(project, version)
+  options(repos = repos)
+
+  # notify the user
+  sprintf("* Using Bioconductor '%s'.", version)
+
+}
+
+renv_load_bioconductor_validate <- function(project, version) {
+
   BiocManager <- renv_namespace_load("BiocManager")
-  if (is.null(BiocManager$.version_validate))
+  if (!is.function(BiocManager$.version_validity))
     return()
 
-  status <- catch(BiocManager$.version_validate(bioconductor))
-  if (!inherits(status, "error"))
+  # check for valid version of Bioconductor
+  # https://github.com/rstudio/renv/issues/1148
+  status <- catch(BiocManager$.version_validity(version))
+  if (!is.character(status))
     return()
 
   fmt <- lines(
-    "This project is configured to use Bioconductor '%s', which is not compatible with R '%s'.",
-    "Use 'renv::init(bioconductor = TRUE)' to re-initialize this project with the latest Bioconductor release."
+    "This project is configured to use Bioconductor %1$s, which is not compatible with R %2$s.",
+    "Use 'renv::init(bioconductor = \"%1$s\")' to re-initialize this project with the appropriate Bioconductor release.",
+    if (renv_package_installed("BiocVersion"))
+      "Please uninstall the 'BiocVersion' package first, with `remove.packages(\"BiocVersion\")`."
   )
 
-  warningf(fmt, bioconductor, getRversion())
+  warningf(fmt, version, getRversion())
 
 }
 
@@ -582,6 +611,40 @@ renv_load_cache <- function(project) {
 
 }
 
+renv_load_check <- function(project) {
+  renv_load_check_description(project)
+}
+
+renv_load_check_description <- function(project) {
+
+  descpath <- file.path(project, "DESCRIPTION")
+  if (!file.exists(descpath))
+    return(TRUE)
+
+  contents <- readLines(descpath, warn = FALSE)
+  bad <- which(grepl("^\\s*$", contents, perl = TRUE))
+  if (empty(bad))
+    return(TRUE)
+
+  values <- sprintf("[line %i is blank]", bad)
+
+  renv_pretty_print(
+    values    = values,
+    preamble  = sprintf(
+      "%s contains blank lines:",
+      renv_path_pretty(descpath)
+    ),
+    postamble = c(
+      "DESCRIPTION files cannot contain blank lines between fields.",
+      "Please remove these blank lines from the file."
+    ),
+    wrap = FALSE
+  )
+
+  return(FALSE)
+
+}
+
 renv_load_quiet <- function() {
   default <- identical(renv_verbose(), FALSE) || renv_session_quiet()
   config$startup.quiet(default = default)
@@ -590,6 +653,8 @@ renv_load_quiet <- function() {
 renv_load_finish <- function(project, lockfile) {
 
   options(renv.project.path = project)
+
+  renv_load_check(project)
 
   if (!renv_load_quiet()) {
     renv_load_report_project(project)
@@ -606,14 +671,14 @@ renv_load_finish <- function(project, lockfile) {
 renv_load_report_project <- function(project) {
 
   profile <- renv_profile_get()
-  version <- renv_package_version("renv")
+  version <- renv_metadata_version()
 
   if (length(profile)) {
     fmt <- "* (%s) Project '%s' loaded. [renv %s]"
-    vwritef(fmt, profile, aliased_path(project), version)
+    vwritef(fmt, profile, renv_path_aliased(project), version)
   } else {
     fmt <- "* Project '%s' loaded. [renv %s]"
-    vwritef(fmt, aliased_path(project), renv_package_version("renv"))
+    vwritef(fmt, renv_path_aliased(project), version)
   }
 
 }
@@ -670,6 +735,12 @@ renv_load_report_synchronized <- function(project, lockfile) {
   if (!enabled)
     return(FALSE)
 
+  # TODO: This can be slow. I wonder if there's a sensible way to farm this
+  # out to a separate R process, and then collect the results later on?
+  #
+  # Just using 'system(..., wait = FALSE)' feels a bit awkward, as we might
+  # end up emitting output while the user is typing in the terminal, which
+  # feels disruptive.
   callback <- function(...) renv_project_synchronized_check(project, lockfile)
   renv_load_invoke(callback)
   # nocov end

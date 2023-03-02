@@ -1,6 +1,4 @@
 
-`_renv_repos` <- new.env(parent = emptyenv())
-
 renv_repos_encode <- function(x) {
   if (length(x) == 1)
     paste(names(x), as.character(x), sep = "=")
@@ -17,6 +15,22 @@ renv_repos_decode <- function(x) {
 }
 
 renv_repos_init_callback <- function(...) {
+
+  status <- tryCatch(
+    renv_repos_init_callback_impl(...),
+    error = identity
+  )
+
+  if (inherits(status, "error")) {
+    warning(status)
+    return(FALSE)
+  }
+
+  identical(status, TRUE)
+
+}
+
+renv_repos_init_callback_impl <- function(...) {
 
   # bail unless opted in
   config <- renv_config_get("eager.repos", default = FALSE)
@@ -102,8 +116,7 @@ renv_repos_info <- function(url) {
 
   memoize(
     key   = url,
-    expr  = renv_repos_info_impl(url),
-    envir = `_renv_repos`
+    value = renv_repos_info_impl(url)
   )
 
 }

@@ -20,8 +20,8 @@
 #' - `options(renv.config.auto.snapshot = <...>)`
 #' - `Sys.setenv(RENV_CONFIG_AUTO_SNAPSHOT = <...>)`
 #'
-#' Note that if both the R option and the environment variable are defined, the
-#' R option will be used instead. Environment variables can be more useful when
+#' Note that if both the \R option and the environment variable are defined, the
+#' \R option will be used instead. Environment variables can be more useful when
 #' you want a particular configuration to be automatically inherited by child
 #' processes; if that behavior is not desired, then the R option may be
 #' preferred.
@@ -30,6 +30,10 @@
 #' recommended that you set them in a a startup `.Renviron` file; e.g. in your
 #' own `~/.Renviron`, or in the R installation's `etc/Rprofile.site` file. See
 #' [Startup] for more details.
+#'
+#' Configuration options can also be set within the project `.Rprofile`, but
+#' be aware the options should be set before `source("renv/activate.R")` is
+#' called.
 #'
 #' @eval renv_roxygen_config_section()
 #'
@@ -191,7 +195,7 @@ renv_config_validate <- function(name, value, type, default, args) {
   converted <- catchall(convert(value, mode))
   if (any(is.na(converted)) || inherits(converted, "condition")) {
     fmt <- "'%s' does not satisfy constraint '%s' for config '%s'; using default '%s' instead"
-    warningf(fmt, renv_deparse(value), type, name, renv_deparse(default))
+    warningf(fmt, stringify(value), type, name, stringify(default))
     return(default)
   }
 

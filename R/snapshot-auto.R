@@ -15,7 +15,7 @@ renv_snapshot_auto <- function(project) {
     return(FALSE)
 
   lockfile <- renv_lockfile_path(project = project)
-  vwritef("* Automatic snapshot has updated '%s'.", aliased_path(lockfile))
+  vwritef("* Automatic snapshot has updated '%s'.", renv_path_aliased(lockfile))
   TRUE
 
 }
@@ -96,8 +96,19 @@ renv_snapshot_auto_update <- function(project) {
 }
 
 renv_snapshot_auto_callback <- function(...) {
-  renv_snapshot_auto_callback_impl()
-  TRUE
+
+  status <- tryCatch(
+    renv_snapshot_auto_callback_impl(),
+    error = identity
+  )
+
+  if (inherits(status, "error")) {
+    warning(status)
+    return(FALSE)
+  }
+
+  identical(status, TRUE)
+
 }
 
 renv_snapshot_auto_callback_impl <- function() {

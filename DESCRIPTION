@@ -1,10 +1,10 @@
 Package: renv
 Type: Package
 Title: Project Environments
-Version: 0.16.0
+Version: 0.17.0
 Authors@R: c(
     person("Kevin", "Ushey", role = c("aut", "cre"), email = "kevin@rstudio.com"),
-    person("RStudio, PBC", role = c("cph"))
+    person("Posit Software, PBC", role = c("cph", "fnd"))
     )
 Description: A dependency management toolkit for R. Using 'renv', you can create
     and manage project-local R libraries, save the state of these libraries to
@@ -18,12 +18,12 @@ Suggests: BiocManager, cli, covr, devtools, jsonlite, knitr, miniUI,
         packrat, pak, R6, remotes, reticulate, rmarkdown, rstudioapi,
         shiny, testthat, uuid, yaml
 Encoding: UTF-8
-RoxygenNote: 7.2.1
+RoxygenNote: 7.2.3
 VignetteBuilder: knitr
 NeedsCompilation: no
-Packaged: 2022-09-27 20:33:56 UTC; kevin
+Packaged: 2023-03-02 00:26:55 UTC; kevin
 Author: Kevin Ushey [aut, cre],
-  RStudio, PBC [cph]
+  Posit Software, PBC [cph, fnd]
 Maintainer: Kevin Ushey <kevin@rstudio.com>
 Repository: CRAN
-Date/Publication: 2022-09-29 08:10:02 UTC
+Date/Publication: 2023-03-02 01:10:02 UTC

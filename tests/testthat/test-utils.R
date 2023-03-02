@@ -31,24 +31,10 @@ test_that("inject inserts text at expected anchor point", {
 
 })
 
-test_that("aliased_path() correctly forms aliased path", {
+test_that("renv_path_aliased() correctly forms aliased path", {
   path <- "~/some/path"
   expanded <- path.expand(path)
-  expect_equal(path, aliased_path(expanded))
-})
-
-test_that("memoize avoids evaluating expression multiple times", {
-
-  envir <- new.env(parent = emptyenv())
-  key <- "test"
-
-  value <- 0
-  memoize(key, { value <- value + 1 }, envir)
-  memoize(key, { value <- value + 1 }, envir)
-
-  expect_equal(envir$test, 1)
-  expect_equal(value, 1)
-
+  expect_equal(path, renv_path_aliased(expanded))
 })
 
 test_that("sink captures both stdout and stderr", {
@@ -116,3 +102,10 @@ test_that("recursing() reports if we're recursing", {
 
 })
 
+test_that("sys.call(sys.parent()) does what we think it does", {
+
+  inner <- function() { as.character(sys.call(sys.parent())[[1L]]) }
+  outer <- function() { inner() }
+  expect_equal(outer(), "outer")
+
+})

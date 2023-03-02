@@ -375,6 +375,9 @@ formed as a directory of symlinks (or, on Windows, junction points) into the
 other projects on your system, they can still re-use the same installed packages
 as required.
 
+Note that junction points are (unfortunately) not supported on Windows network
+shares. See [Hard links and junctions][hlaj] for more details.
+
 The process by which packages enter the cache is roughly as follows:
 
 1. Package installation is requested via e.g. `install.packages()`, or
@@ -429,10 +432,11 @@ system.
 It is also possible to configure `renv` to use multiple cache locations -- for
 example, you might want to make both a user-local package cache, as well as a
 global administrator-managed cache, visible within an `renv` project. To do so,
-you can specify the paths to the cache separated with a `:` -- for example,
+you can specify the paths to the cache separated with a `;` (or `:` on Unix
+if preferred). For example:
 
 ```
-RENV_PATHS_CACHE = /path/to/local/cache:/path/to/global/cache
+RENV_PATHS_CACHE = /path/to/local/cache;/path/to/global/cache
 ```
 
 In such a case, `renv` will iterate over the cache locations in order when
@@ -648,6 +652,16 @@ For packages installed from Git remotes, `renv` will attempt to use `git` from
 the command line to download and restore the associated package. Hence, it is
 recommended that authentication is done through SSH keys when possible.
 
+Authentication may be required when resolving a package from a remote
+specification. If the package name cannot be inferred directly from the remote,
+it can be supplied with a prefix of the form `<package>=`. For example, the
+`igraph` package on GitHub at https://github.com/igraph/rigraph could be
+installed with:
+
+```
+renv::install("igraph=igraph/rigraph")
+```
+
 
 ### Authentication with Custom Headers
 
@@ -803,5 +817,6 @@ but we hope that they will further improve the speed and reliability of `renv`.
 
 
 [acls]: https://en.wikipedia.org/wiki/Access-control_list
-[r-pkgs:description]: https://r-pkgs.org/Metadata.html#sec-description
+[hlaj]: https://learn.microsoft.com/en-us/windows/win32/fileio/hard-links-and-junctions
+[r-pkgs:description]: https://r-pkgs.org/description.html
 

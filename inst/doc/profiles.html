@@ -409,7 +409,7 @@ tries to avoid in “regular” dependency discovery.</p>
 used, you can opt-in to using <code>&quot;explicit&quot;</code> snapshots, and
 leave the <code>Imports</code>, <code>Depends</code> and
 <code>Suggests</code> fields blank:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>renv<span class="sc">::</span>settings<span class="sc">$</span><span class="fu">snapshot.type</span>(<span class="st">&quot;explicit&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>renv<span class="sc">::</span>settings<span class="sc">$</span><span class="fu">snapshot.type</span>(<span class="st">&quot;explicit&quot;</span>)</span></code></pre></div>
 <p>When set, only the dependencies listed in the project
 <code>DESCRIPTION</code> file will be used when the lockfile is
 generated. See <code>?renv::snapshot</code> for more details.</p>

@@ -49,11 +49,12 @@ renv_file_copy_file <- function(source, target) {
     stop(status)
 
   # validate that the target file exists
-  if (renv_file_exists(target))
-    return(TRUE)
+  if (!renv_file_exists(target)) {
+    fmt <- "attempt to copy file %s to %s failed (unknown reason)"
+    stopf(fmt, renv_path_pretty(source), renv_path_pretty(target))
+  }
 
-  fmt <- "attempt to copy file %s to %s failed (unknown reason)"
-  stopf(fmt, renv_path_pretty(source), renv_path_pretty(target))
+  invisible(TRUE)
 
 }
 
@@ -163,11 +164,12 @@ renv_file_copy_dir <- function(source, target) {
     stop(status)
 
   # validate that the target file exists
-  if (renv_file_exists(target))
-    return(TRUE)
+  if (!renv_file_exists(target)) {
+    fmt <- "attempt to copy directory %s to %s failed (unknown reason)"
+    stopf(fmt, renv_path_pretty(source), renv_path_pretty(target))
+  }
 
-  fmt <- "attempt to copy directory %s to %s failed (unknown reason)"
-  stopf(fmt, renv_path_pretty(source), renv_path_pretty(target))
+  invisible(TRUE)
 
 }
 
@@ -317,8 +319,6 @@ renv_file_same <- function(source, target) {
 # to restore the file if the attempt to update the file failed
 renv_file_backup <- function(path) {
 
-  force(path)
-
   # if no file exists then nothing to backup
   if (!renv_file_exists(path))
     return(function() {})
@@ -346,11 +346,6 @@ renv_file_backup <- function(path) {
 
   }
 
-}
-
-renv_file_normalize <- function(path, winslash = "\\", mustWork = NA) {
-  parent <- renv_path_normalize(dirname(path), winslash = winslash, mustWork = mustWork)
-  file.path(parent, basename(path))
 }
 
 renv_file_info <- function(paths, extra_cols = FALSE) {
@@ -486,7 +481,7 @@ renv_file_find <- function(path, predicate) {
 
   # compute number of slashes (avoid searching beyond home directory)
   slashes <- gregexpr("/", path, fixed = TRUE)[[1L]]
-  n <- length(slashes) - 2L
+  n <- length(slashes) - if (.docker) 0L else 2L
 
   for (i in 1:n) {
 

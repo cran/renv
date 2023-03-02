@@ -354,19 +354,19 @@ should enter the lockfile; development dependencies
 (e.g. <code>devtools</code>) normally should not.</p>
 <p>If you find a package is not entering the lockfile, you can check the
 output of:</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">dependencies</span>()</span></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">dependencies</span>()</span></code></pre></div>
 <p>and see whether usages of your package are reported in the
 output.</p>
 <p>Note that <code>renv</code>’s dependency discovery machinery relies
 on static analysis of your R code, and does not understand all of the
 different ways in which a package might be used in a project. For
 example, <code>renv</code> will detect the following usages:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span></code></pre></div>
 <p>But it will be unable to detect these kinds of usages:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (package <span class="cf">in</span> <span class="fu">c</span>(<span class="st">&quot;dplyr&quot;</span>, <span class="st">&quot;ggplot2&quot;</span>)) {</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">library</span>(package, <span class="at">character.only =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="cf">for</span> (package <span class="cf">in</span> <span class="fu">c</span>(<span class="st">&quot;dplyr&quot;</span>, <span class="st">&quot;ggplot2&quot;</span>)) {</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="fu">library</span>(package, <span class="at">character.only =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>}</span></code></pre></div>
 <p>If you use a custom package loader in your project that
 <code>renv</code> could feasibly support, please feel free to <a href="https://github.com/rstudio/renv/issues">file a feature
 request</a>.</p>
@@ -375,10 +375,10 @@ request</a>.</p>
 <p>If you’d instead prefer to capture <em>all</em> packages installed
 into your project library (and eschew dependency discovery altogether),
 you can do so with:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>renv<span class="sc">::</span>settings<span class="sc">$</span><span class="fu">snapshot.type</span>(<span class="st">&quot;all&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>renv<span class="sc">::</span>settings<span class="sc">$</span><span class="fu">snapshot.type</span>(<span class="st">&quot;all&quot;</span>)</span></code></pre></div>
 <p>Packages can also be explicitly ignored through a project setting,
 e.g. with:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>renv<span class="sc">::</span>settings<span class="sc">$</span><span class="fu">ignored.packages</span>(<span class="st">&quot;&lt;package&gt;&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>renv<span class="sc">::</span>settings<span class="sc">$</span><span class="fu">ignored.packages</span>(<span class="st">&quot;&lt;package&gt;&quot;</span>)</span></code></pre></div>
 <p>You might also want to double-check the set of ignored packages
 (<code>renv::settings$ignored.packages()</code>) and confirm that you
 aren’t unintentionally ignoring a package you actually require.</p>
@@ -389,7 +389,7 @@ aren’t unintentionally ignoring a package you actually require.</p>
 <p>If you’d like to explicitly declare which packages your project
 depends on, you can do so by telling <code>renv</code> to form
 “explicit” snapshots:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>renv<span class="sc">::</span>settings<span class="sc">$</span><span class="fu">snapshot.type</span>(<span class="st">&quot;explicit&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>renv<span class="sc">::</span>settings<span class="sc">$</span><span class="fu">snapshot.type</span>(<span class="st">&quot;explicit&quot;</span>)</span></code></pre></div>
 <p>In this mode, <code>renv</code> will only include packages which are
 explicitly listed in the project’s <code>DESCRIPTION</code> file as
 dependencies.</p>
@@ -406,7 +406,7 @@ trying to restore a project library.</p>
 <p>For cases like these, we recommend tracking these packages in a
 project DESCRIPTION file; typically, within the <code>Suggests:</code>
 field. Then, you can execute:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>()</span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>()</span></code></pre></div>
 <p>to request that <code>renv</code> install the packages as described
 in the DESCRIPTION file. In addition, the <code>Remotes:</code> fields
 will be parsed and used, to ensure packages are installed from their
@@ -478,13 +478,13 @@ projects, but not within <code>renv</code> projects, you may need to
 tell <code>renv</code> to use the same download file method that R has
 been configured to use. You can check which download method R is
 currently configured to use with:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">getOption</span>(<span class="st">&quot;download.file.method&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">getOption</span>(<span class="st">&quot;download.file.method&quot;</span>)</span></code></pre></div>
 <p>And the downloader currently used by <code>renv</code> can be queried
 with:</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>renv<span class="sc">:::</span><span class="fu">renv_download_method</span>()</span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>renv<span class="sc">:::</span><span class="fu">renv_download_method</span>()</span></code></pre></div>
 <p>You can force <code>renv</code> to use the same download method as R
 by setting:</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">Sys.setenv</span>(<span class="at">RENV_DOWNLOAD_METHOD =</span> <span class="fu">getOption</span>(<span class="st">&quot;download.file.method&quot;</span>))</span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">Sys.setenv</span>(<span class="at">RENV_DOWNLOAD_METHOD =</span> <span class="fu">getOption</span>(<span class="st">&quot;download.file.method&quot;</span>))</span></code></pre></div>
 <p>and, if necessary, you could also set this environment variable
 within e.g. your <code>~/.Renviron</code>, so that it is visible to all
 R sessions. See <code>?Startup</code> for more details.</p>

@@ -55,25 +55,6 @@ empty <- function(x) {
   length(x) == 0
 }
 
-aliased_path <- function(path) {
-
-  home <-
-    Sys.getenv("HOME") %""%
-    Sys.getenv("R_USER")
-
-  if (!nzchar(home))
-    return(path)
-
-  home <- gsub("\\", "/", home, fixed = TRUE)
-  path <- gsub("\\", "/", path, fixed = TRUE)
-
-  match <- regexpr(home, path, fixed = TRUE, useBytes = TRUE)
-  path[match == 1] <- file.path("~", substring(path[match == 1], nchar(home) + 2L))
-
-  path
-
-}
-
 trimws <- function(x) {
   gsub("^\\s+|\\s+$", "", x)
 }
@@ -139,13 +120,38 @@ ask <- function(question, default = FALSE) {
   if (identical(initializing, TRUE))
     return(default)
 
-  selection <- if (default) "[Y/n]" else "[y/N]"
-  prompt <- sprintf("%s %s: ", question, selection)
-  response <- tolower(trimws(readline(prompt)))
-  if (!nzchar(response))
-    return(default)
+  repeat {
 
-  substring(response, 1L, 1L) == "y"
+    # solicit user's answer
+    selection <- if (default) "[Y/n]" else "[y/N]"
+    prompt <- sprintf("%s %s: ", question, selection)
+    response <- tryCatch(
+      tolower(trimws(readline(prompt))),
+      interrupt = identity
+    )
+
+    # check for interrupts; treat as abort request
+    if (inherits(response, "interrupt")) {
+      renv_report_user_cancel()
+      invokeRestart("abort")
+    }
+
+    # use default when no response
+    if (!nzchar(response))
+      return(default)
+
+    # check for 'yes' responses
+    if (response %in% c("y", "yes"))
+      return(TRUE)
+
+    # check for 'no' responses
+    if (response %in% c("n", "no"))
+      return(FALSE)
+
+    # ask the user again
+    writef("* Unrecognized response: please enter 'y' or 'n', or type Ctrl + C to cancel.")
+
+  }
 
 }
 
@@ -197,6 +203,10 @@ read <- function(file) {
 
 plural <- function(word, n) {
   if (n == 1) word else paste(word, "s", sep = "")
+}
+
+nplural <- function(word, n) {
+  paste(n, plural(word, n))
 }
 
 trunc <- function(text, n = 78) {
@@ -334,12 +344,6 @@ dequote <- function(strings) {
 
 }
 
-memoize <- function(key, expr, envir) {
-  value <- envir[[key]] %||% expr
-  envir[[key]] <- value
-  value
-}
-
 nth <- function(x, i) {
   x[[i]]
 }
@@ -396,4 +400,44 @@ csort <- function(x, decreasing = FALSE, ...) {
 
 fsub <- function(pattern, replacement, x, ignore.case = FALSE, useBytes = FALSE) {
   sub(pattern, replacement, x, ignore.case = ignore.case, useBytes = useBytes, fixed = TRUE)
+}
+
+# catch erroneous usages of unique
+unique <- function(x) {
+  base::unique(x)
+}
+
+rows <- function(data, columns) {
+
+  # evaluate columns in data
+  columns <- eval(
+    expr   = substitute(columns),
+    envir  = data,
+    enclos = parent.frame()
+  )
+
+  # convert logical values
+  if (is.logical(columns)) {
+    if (length(columns) < nrow(data))
+      columns <- rep(columns, length.out = nrow(data))
+    columns <- which(columns, useNames = FALSE)
+  }
+
+  # build output list
+  output <- vector("list", length(data))
+  for (i in seq_along(data))
+    output[[i]] <- .subset(.subset2(data, i), columns)
+
+  # copy relevant attributes
+  attrs <- attributes(data)
+  attrs[["row.names"]] <- .set_row_names(length(columns))
+  attributes(output) <- attrs
+
+  # return new data.frame
+  output
+
+}
+
+stringify <- function(object, collapse = " ") {
+  paste(deparse(object, width.cutoff = 500L), collapse = collapse)
 }

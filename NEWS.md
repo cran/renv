@@ -1,4 +1,97 @@
 
+# renv 0.17.0
+
+* The performance of `renv::snapshot()` has improved.
+
+* `renv` now maintains an index of available packages, as retrieved from the
+  active package repositories, that is shared across `R` sessions. This should
+  improve `renv`'s performance when querying for available packages across
+  multiple different `R` sessions.
+  
+* `renv::hydrate()` gains the `prompt` parameter. When `TRUE` (the default),
+  `renv` will prompt for confirmation before attempting to hydrate the active
+  library.
+  
+* Improved handling of package installation via SSH URLs with `git`. (#667)
+
+* Improved handling of R version validation when using projects with
+  Bioconductor. If you find `renv` is erroneously reporting that your version
+  of R is incompatible with the version of Bioconductor you are using, you can
+  set `options(renv.bioconductor.validate = FALSE)` to disable this validation
+  behaviour. (#1148)
+
+* Package names can now be associated with remotes in `renv::install()`; for
+  example, you can use `renv::install("igraph=igraph/rigraph")` to install
+  the `igraph` package. This is mainly important when using the `renv.auth`
+  authentication tools, where the package name of a remote needs to be
+  declared explicitly. (#667)
+  
+* Fixed an issue that could prevent `renv::restore()` from functioning when
+  attempting to install packages which had been archived on CRAN. (#1141)
+
+* `renv::install()` gains the `dependencies` argument, which behaves similarly
+  to the equivalent argument in `remotes::install_*()`. In particular, this can
+  be set to fields like `Config/Needs/dev` to tell `renv` to use custom
+  DESCRIPTION fields for dependency resolution in installation.
+
+* Fixed an issue where the function variant of the `renv.auth` option was not
+  resolved correctly. (#667)
+
+* `renv::install()` now supports remotes with a trailing slash -- such slashes
+  are now removed. (#1135)
+
+* Integration with the RStudio (Posit) Package Manager is now disabled
+  by default on aarch64 Linux instances.
+
+* The `RENV_CACHE_MODE` environment variable can now also be used
+  to adjust the permissions set on downloaded package tarballs / binaries.
+  (#988)
+
+* Fixed an issue where fields of the form `Remotes.1` could
+  enter lockfile records for older versions of R. (#736)
+
+* Fixed the performance of `renv::update()` in cases where
+  integration with MRAN is enabled.
+
+* Fixed an issue where package installation using `pak` could fail
+  in some cases.
+
+* `renv_file_find()` can now scan up to the root directory in Docker
+  containers. (#1115)
+
+* `renv` no longer uses the R temporary directory on Windows for the
+  sandbox. The sandbox directory can be customized via the
+  `RENV_PATHS_SANDBOX` environment variable if required. (#835)
+  
+* `renv` now reports the elapsed time when installing packages. (#1104)
+
+* For projects using "explicit" snapshots, `renv` now reports if
+  a package is required by the project, but the package is not
+  currently installed. (#949)
+
+* Fixed an issue where `renv::snapshot()` could fail to detect when
+  no changes had been made to the lockfile.
+
+* Fixed an issue where `renv` could emit JSON lockfiles which could not
+  be parsed by external JSON readers. (#1102)
+
+* `renv` now marks the sandbox as non-writable, which should hopefully
+  alleviate issues where attempts to update installed packages would
+  inadvertently install the updated package into the sandbox. (#1090)
+
+* `renv::use()` gains the `sandbox` argument, which allows one to control
+  whether the system library is sandboxed after a call to `renv::use()`.
+  (#1083)
+
+* The path to the Conda `environment.yml` file created by `renv` can
+  now be customized via the `RENV_PATHS_CONDA_EXPORT` environment
+  variable. We recommend setting this within your project-local
+  `.Renviron` file as appropriate. (#1089)
+
+* Fixed an issue where the `renv` sandbox location did not respect the
+  active `renv` profile. (#1088)
+
+
 # renv 0.16.0
 
 * `renv` now supports installation of packages with remotes of the form
