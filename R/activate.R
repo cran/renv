@@ -41,7 +41,7 @@ activate <- function(project = NULL, profile = NULL) {
   renv_scope_error_handler()
 
   project <- renv_project_resolve(project)
-  renv_scope_lock(project = project)
+  renv_project_lock(project = project)
 
   renv_profile_set(profile)
 
@@ -113,8 +113,8 @@ renv_activate_version_activate <- function(project) {
 
   contents <- readLines(activate, warn = FALSE)
   line <- grep("^\\s*version", contents, value = TRUE)
-  parsed <- parse(text = line)[[1]]
-  parsed[[3]]
+  parsed <- parse(text = line)[[1L]]
+  parsed[[3L]]
 
 }
 

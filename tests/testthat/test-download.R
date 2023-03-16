@@ -137,16 +137,14 @@ test_that("we can check that a URL is available", {
   skip_on_windows()
 
   python <- renv_tests_program("python3")
-  lsof <- renv_tests_program("lsof")
-  pgrep <- renv_tests_program("pgrep")
   timeout <- renv_tests_program("timeout")
 
   # start a local HTTP server using python, and then try to talk to it
   port <- "60128"
-  renv_scope_options(warn = 0L)
+  renv_scope_options(warn = -1L)
   status <- system2(
     command = timeout,
-    args    = c("3s", python, c("-m", "http.server", port)),
+    args    = c("5s", python, c("-m", "http.server", port)),
     stdout  = FALSE,
     stderr  = FALSE,
     wait    = FALSE
@@ -154,6 +152,10 @@ test_that("we can check that a URL is available", {
 
   if (status != 0L)
     skip("couldn't start HTTP server")
+
+  # sleep for a bit, since it seems like the server can take a little bit
+  # of time to get ready to accept connections
+  Sys.sleep(1)
 
   # okay, try to talk to the web server now
   url <- paste("http://localhost", port, sep = ":")

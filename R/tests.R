@@ -325,6 +325,12 @@ renv_tests_init_sandbox <- function() {
   Sys.setenv(RENV_PATHS_SANDBOX = tempdir())
   renv_sandbox_activate()
 
+  # make sure we make the sandbox writable on exit
+  reg.finalizer(renv_envir_self(), function(self) {
+    sandbox <- .Library
+    self$renv_sandbox_unlock(sandbox)
+  }, onexit = TRUE)
+
 }
 
 renv_tests_init_finish <- function() {
@@ -345,13 +351,6 @@ renv_tests_init_finish <- function() {
 
   # mark tests as running
   options(renv.tests.running = TRUE)
-
-  # make sure the sandbox is writable on shutdown so R can clean it up
-  reg.finalizer(renv_envir_self(), function(object) {
-    sandbox <- renv_sandbox_path()
-    if (file.exists(sandbox))
-      Sys.chmod(sandbox, "0755")
-  }, onexit = TRUE)
 
 }
 
@@ -387,12 +386,11 @@ renv_tests_verbose <- function() {
 
 }
 
-renv_test_code <- function(code, fileext = ".R") {
-
+renv_test_code <- function(code, data = list(), fileext = ".R") {
+  code <- do.call(substitute, list(substitute(code), data))
   file <- tempfile("renv-code-", fileext = fileext)
-  writeLines(deparse(substitute(code)), con = file)
+  writeLines(deparse(code), con = file)
   file
-
 }
 
 renv_test_retrieve <- function(record) {

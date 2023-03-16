@@ -111,7 +111,7 @@ test_that("available packages database refreshed on http_proxy change", {
 
   count <- 0L
   renv_scope_trace(
-    what   = renv:::renv_available_packages_impl,
+    what   = renv:::renv_available_packages_query,
     tracer = function() { count <<- count + 1L }
   )
 
@@ -166,5 +166,26 @@ test_that("we're compatible with R", {
   row.names(lhs) <- row.names(rhs) <- NULL
   fields <- c("Package", "Version")
   expect_equal(lhs[fields], rhs[fields])
+
+})
+
+test_that("we can query the R universe", {
+  skip_on_cran()
+  skip_sometimes()
+
+  lhs <- as.data.frame(
+    available.packages(
+      type = "source",
+      repos = "https://rstudio.r-universe.dev"
+    )
+  )
+
+  rhs <- available_packages(
+    type = "source",
+    repos = "https://rstudio.r-universe.dev/"
+  )[[1L]]
+
+  rownames(lhs) <- rownames(rhs) <- NULL
+  expect_identical(lhs, rhs)
 
 })

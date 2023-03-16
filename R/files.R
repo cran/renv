@@ -479,9 +479,11 @@ renv_file_find <- function(path, predicate) {
   path <- renv_path_canonicalize(path)
   parent <- dirname(path)
 
-  # compute number of slashes (avoid searching beyond home directory)
+  # compute number of slashes
+  # (avoid searching beyond home directory, unless we're virtualized)
+  virtualized <- renv_virtualization_type() != "native"
   slashes <- gregexpr("/", path, fixed = TRUE)[[1L]]
-  n <- length(slashes) - if (.docker) 0L else 2L
+  n <- length(slashes) - if (virtualized) 0L else 2L
 
   for (i in 1:n) {
 
@@ -501,6 +503,7 @@ renv_file_find <- function(path, predicate) {
 }
 
 renv_file_read <- function(path) {
+  renv_scope_options(warn = -1L)
   contents <- readLines(path, warn = FALSE, encoding = "UTF-8")
   paste(contents, collapse = "\n")
 }
@@ -518,6 +521,8 @@ renv_file_shebang <- function(path) {
 }
 
 renv_file_shebang_impl <- function(path) {
+
+  renv_scope_options(warn = -1L)
 
   # open connection to file
   con <- file(path, open = "rb", encoding = "native.enc")
@@ -604,9 +609,9 @@ renv_file_writable <- function(path) {
     return(FALSE)
 
   # try creating and removing a temporary file in this directory
-  tfile <- tempfile(".renv-write-test-", tmpdir = path)
-  ok <- dir.create(tfile, showWarnings = FALSE)
-  on.exit(unlink(tfile, recursive = TRUE), add = TRUE)
+  tempfile <- tempfile(".renv-write-test-", tmpdir = path)
+  ok <- dir.create(tempfile, showWarnings = FALSE)
+  on.exit(unlink(tempfile, recursive = TRUE, force = TRUE), add = TRUE)
 
   # return ok if we succeeded
   ok

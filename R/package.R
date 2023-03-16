@@ -113,7 +113,7 @@ renv_package_priority <- function(package) {
     return("base")
 
   # read priority from db
-  db <- renv_installed_packages()
+  db <- installed_packages()
   entry <- db[db$Package == package, ]
   entry$Priority %NA% ""
 
@@ -391,6 +391,17 @@ renv_package_built <- function(path) {
 }
 
 renv_package_checking <- function() {
+  memo(renv_package_checking_impl())
+}
+
+renv_package_checking_impl <- function() {
+
+  # check for devtools
+  calls <- sys.calls()
+  if (identical(calls[[1L]], quote(devtools::test())))
+    return(TRUE)
+
+  # otherwise, check other things
   "CheckExEnv" %in% search() ||
     !is.na(Sys.getenv("_R_CHECK_PACKAGE_NAME_", unset = NA)) ||
     !is.na(Sys.getenv("_R_CHECK_SIZE_OF_TARBALL_", unset = NA)) ||

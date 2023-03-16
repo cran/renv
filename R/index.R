@@ -7,20 +7,33 @@ index <- function(scope, key = NULL, value = NULL, limit = 3600L) {
   if (!enabled)
     return(value)
 
-  now <- as.integer(Sys.time())
+  # resolve variables of interest
+  root <- renv_paths_index(scope)
   key <- if (!is.null(key)) renv_index_encode(key)
+  now <- as.integer(Sys.time())
 
+  # make sure the directory we're indexing exists
+  memoize(
+    key   = root,
+    value = ensure_directory(root),
+    scope = "index"
+  )
+
+  # acquire index lock
+  lockfile <- file.path(root, "index.lock")
+  renv_scope_lock(lockfile)
+
+  # perform operation
   tryCatch(
-    renv_index_impl(scope, key, value, now, limit),
+    renv_index_impl(root, scope, key, value, now, limit),
     error = function(e) value
   )
 
 }
 
-renv_index_impl <- function(scope, key, value, now, limit) {
+renv_index_impl <- function(root, scope, key, value, now, limit) {
 
   # load the index file
-  root <- renv_paths_index(scope)
   index <- renv_index_load(root, scope)
 
   # return index as-is when key is NULL
@@ -38,20 +51,31 @@ renv_index_impl <- function(scope, key, value, now, limit) {
 }
 
 renv_index_load <- function(root, scope) {
-  tryCatch(
-    expr    = renv_index_load_impl(root, scope),
-    error   = function(e) NULL,
-    warning = function(e) NULL
-  )
-}
-
-renv_index_load_impl <- function(root, scope) {
 
   filebacked(
-    scope = paste("index", scope, sep = "."),
-    path = file.path(root, "index.json"),
-    callback = function(path) renv_json_read(path)
+    scope    = "renv_index_load",
+    path     = file.path(root, "index.json"),
+    callback = renv_index_load_impl
   )
+
+}
+
+renv_index_load_impl <- function(path) {
+
+  json <- tryCatch(
+    withCallingHandlers(
+      renv_json_read(path),
+      warning = function(w) invokeRestart("muffleWarning")
+    ),
+    error = identity
+  )
+
+  if (inherits(json, "error")) {
+    unlink(path)
+    return(list())
+  }
+
+  json
 
 }
 
@@ -107,7 +131,11 @@ renv_index_set <- function(root, scope, index, key, value, now, limit) {
   # update index file
   path <- file.path(root, "index.json")
   ensure_parent_directory(path)
-  renv_json_write(index, file = path)
+
+  # write to tempfile and then copy to minimize risk of collisions
+  tempfile <- tempfile(".index-", tmpdir = dirname(path), fileext = ".json")
+  renv_json_write(index, file = tempfile)
+  file.rename(tempfile, path)
 
   # return value
   value
@@ -115,8 +143,8 @@ renv_index_set <- function(root, scope, index, key, value, now, limit) {
 }
 
 renv_index_encode <- function(key) {
-  text <- deparse(key)
-  renv_hash_text(text)
+  key <- stringify(key)
+  memoize(key, renv_hash_text(key))
 }
 
 renv_index_clean <- function(root, scope, index, now, limit) {
@@ -156,7 +184,7 @@ renv_index_clean_impl <- function(key, entry, root, scope, index, now, limit) {
 }
 
 renv_index_expired <- function(entry, now, limit) {
-  now - entry$time > limit
+  now - entry$time >= limit
 }
 
 renv_index_enabled <- function(scope, key) {

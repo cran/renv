@@ -395,6 +395,29 @@ explicitly listed in the project’s <code>DESCRIPTION</code> file as
 dependencies.</p>
 </div>
 </div>
+<div id="how-do-i-update-the-lockfile" class="section level2">
+<h2>How do I update the lockfile?</h2>
+<p>The most important thing to remember is that
+<code>renv::snapshot()</code> captures the state of your project at the
+point in time when <code>renv::snapshot()</code> was called. In that
+sense, the “right” way to update the lockfile is to:</p>
+<ol style="list-style-type: decimal">
+<li>Load the <code>renv</code> project,</li>
+<li>Make the changes you want; e.g. install packages; call
+<code>options(repos = &lt;...&gt;)</code>; …</li>
+<li>Call <code>renv::snapshot()</code> to update the lockfile.</li>
+</ol>
+<p>That said, you are also free to modify the <code>renv.lock</code>
+lockfile by hand if necessary; e.g. if you want to manually add / change
+repositories, change the version of a package used, and so on. The
+<code>renv.lock</code> lockfile is a <a href="https://www.json.org/json-en.html">JSON</a> file, and while no
+schema is provided, you should be able to infer the structure from the
+existing fields.</p>
+<p>The main downside to editing a package record in the lockfile
+directly is that you won’t be able to provide a <code>Hash</code> for
+that package, and so <code>renv</code> won’t be able to use its global
+package cache when installing that package.</p>
+</div>
 <div id="how-should-i-handle-development-dependencies" class="section level2">
 <h2>How should I handle development dependencies?</h2>
 <p>This is related to the above question: by design,

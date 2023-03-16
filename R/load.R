@@ -16,7 +16,9 @@
 #'
 #' Use [renv::activate()] to activate (or re-activate) an `renv` project, so
 #' that newly-launched \R sessions can automatically load the associated
-#' project.
+#' project. Similarly, use [renv::deactivate()] to disable the project
+#' auto-loader, so that `renv` is no longer automatically activated for new
+#' \R sessions in this project.
 #'
 #' @inherit renv-params
 #'
@@ -37,14 +39,30 @@ load <- function(project = NULL, quiet = FALSE) {
 
   renv_scope_error_handler()
 
-  project <- project %||% renv_project_find(project)
-  renv_scope_lock(project = project)
+  project <- normalizePath(
+    project %||% renv_project_find(project),
+    winslash = "/",
+    mustWork = TRUE
+  )
+
+  action <- renv_load_action(project)
+  if (action[[1L]] == "cancel") {
+    renv_report_user_cancel()
+    invokeRestart("abort")
+  } else if (action[[1L]] == "init") {
+    return(init(project))
+  } else if (action[[1L]] == "alt") {
+    project <- action[[2L]]
+  }
+
+  renv_project_lock(project = project)
 
   # indicate that we're now loading the project
   renv_scope_options(renv.load.running = TRUE)
 
   # avoid suppressing the next auto snapshot
-  renv_scope_var("running", TRUE, envir = `_renv_snapshot_auto`)
+  `_renv_snapshot_running` <<- TRUE
+  on.exit(`_renv_snapshot_running` <<- FALSE, add = TRUE)
 
   # if load is being called via the autoloader,
   # then ensure RENV_PROJECT is unset
@@ -84,6 +102,7 @@ load <- function(project = NULL, quiet = FALSE) {
   renv_load_rprofile(project)
   renv_load_cache(project)
 
+  # load components encoded in lockfile
   lockfile <- renv_lockfile_load(project)
   if (length(lockfile)) {
     renv_load_r(project, lockfile$R)
@@ -101,6 +120,54 @@ load <- function(project = NULL, quiet = FALSE) {
   renv_load_finish(project, lockfile)
 
   invisible(project)
+}
+
+renv_load_action <- function(project) {
+
+  # don't do anything in non-interactive sessions
+  if (!interactive())
+    return("load")
+
+  # if this project doesn't yet contain an 'renv' folder, assume
+  # that it has not yet been initialized, and prompt the user
+  renv <- renv_paths_renv(project = project, profile = FALSE)
+  if (dir.exists(renv))
+    return("load")
+
+  # check and see if we're being called within a sub-directory
+  path <- renv_file_find(dirname(project), function(parent) {
+    if (file.exists(file.path(parent, "renv")))
+      return(parent)
+  })
+
+  fmt <- "The project located at %s has not yet been initialized."
+  header <- sprintf(fmt, renv_path_pretty(project))
+  title <- paste("", header, "", "What would you like to do?", sep = "\n")
+
+  choices <- c(
+    init    = "Initialize this project with `renv::init()`.",
+    load    = "Continue loading this project as-is.",
+    cancel  = "Cancel loading this project."
+  )
+
+  if (!is.null(path)) {
+    fmt <- "Load the project located at %s instead."
+    msg <- sprintf(fmt, renv_path_pretty(path))
+    choices <- c(choices, alt = msg)
+  }
+
+  selection <- tryCatch(
+    utils::select.list(choices, title = title, graphics = FALSE),
+    interrupt = identity
+  )
+
+  if (inherits(selection, "interrupt")) {
+    writef()
+    selection <- choices["cancel"]
+  }
+
+  list(names(selection), path)
+
 }
 
 renv_load_minimal <- function(project) {
@@ -253,6 +320,10 @@ renv_load_profile <- function(project) {
 
 renv_load_settings <- function(project) {
 
+  # migrate settings.dcf => settings.json
+  renv_settings_migrate(project = project)
+
+  # load settings.R
   settings <- renv_paths_renv("settings.R", project = project)
   if (!file.exists(settings))
     return(FALSE)
@@ -621,7 +692,8 @@ renv_load_check_description <- function(project) {
   if (!file.exists(descpath))
     return(TRUE)
 
-  contents <- readLines(descpath, warn = FALSE)
+  # read description file, with whitespace trimmed
+  contents <- read(descpath) %>% trim() %>% chop()
   bad <- which(grepl("^\\s*$", contents, perl = TRUE))
   if (empty(bad))
     return(TRUE)
@@ -653,7 +725,6 @@ renv_load_quiet <- function() {
 renv_load_finish <- function(project, lockfile) {
 
   options(renv.project.path = project)
-
   renv_load_check(project)
 
   if (!renv_load_quiet()) {

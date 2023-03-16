@@ -63,7 +63,42 @@ renv_project_initialized <- function(project) {
 }
 
 renv_project_type <- function(path) {
-  renv_bootstrap_project_type(path)
+
+  if (!nzchar(path))
+    return("unknown")
+
+  path <- renv_path_normalize(path)
+  filebacked(
+    scope    = "renv_project_type",
+    path     = file.path(path, "DESCRIPTION"),
+    callback = renv_project_type_impl
+  )
+
+}
+
+renv_project_type_impl <- function(path) {
+
+  if (!file.exists(path))
+    return("unknown")
+
+  desc <- tryCatch(
+    renv_dcf_read(path),
+    error = identity
+  )
+
+  if (inherits(desc, "error"))
+    return("unknown")
+
+  type <- desc$Type
+  if (!is.null(type))
+    return(tolower(type))
+
+  package <- desc$Package
+  if (!is.null(package))
+    return("package")
+
+  "unknown"
+
 }
 
 renv_project_remotes <- function(project, fields = NULL) {
@@ -237,11 +272,15 @@ renv_project_synchronized_check <- function(project = NULL, lockfile = NULL) {
 
   # check for packages referenced in the lockfile which are not installed
   lockpkgs <- names(lockfile$Packages)
-  libpkgs <- renv_snapshot_r_packages_impl(
-    library  = renv_libpaths_all(),
-    project  = project,
-    snapshot = FALSE
+  libpkgs <- renv_snapshot_library(
+    library = renv_libpaths_all(),
+    project = project,
+    records = FALSE
   )
+
+  # ignore renv
+  lockpkgs <- setdiff(lockpkgs, "renv")
+  libpkgs <- setdiff(libpkgs, "renv")
 
   # check for case where no packages are installed (except renv)
   if (length(lockpkgs) > 1L) {
@@ -309,4 +348,24 @@ renv_project_find <- function(project = NULL) {
 
   resolved
 
+}
+
+renv_project_lock <- function(project = NULL) {
+
+  if (!config$locking.enabled())
+    return()
+
+  path <- getOption("renv.project.path")
+  if (!identical(project, path))
+    return()
+
+  project <- renv_project_resolve(project)
+  path <- file.path(project, "renv/lock")
+  ensure_parent_directory(path)
+  renv_scope_lock(path, envir = parent.frame())
+
+}
+
+renv_project_active <- function() {
+  !is.null(getOption("renv.project.path"))
 }

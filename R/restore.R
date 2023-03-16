@@ -71,7 +71,7 @@ restore <- function(project  = NULL,
   renv_dots_check(...)
 
   project  <- renv_project_resolve(project)
-  renv_scope_lock(project = project)
+  renv_project_lock(project = project)
 
   renv_activate_prompt("restore", library, prompt, project)
 
@@ -106,6 +106,7 @@ restore <- function(project  = NULL,
   # set up Bioconductor version + repositories
   biocversion <- lockfile$Bioconductor$Version
   if (!is.null(biocversion)) {
+    renv_bioconductor_init(library = library)
     biocversion <- package_version(biocversion)
     renv_scope_options(renv.bioconductor.version = biocversion)
   }
@@ -167,7 +168,7 @@ renv_restore_run_actions <- function(project, actions, current, lockfile, rebuil
 
   renv_scope_restore(
     project  = project,
-    library  = renv_libpaths_default(),
+    library  = renv_libpaths_active(),
     records  = renv_records(lockfile),
     packages = packages,
     rebuild  = rebuild

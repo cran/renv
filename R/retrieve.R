@@ -149,7 +149,7 @@ renv_retrieve_impl <- function(package) {
 
       # try to find the record in the cache
       path <- renv_cache_find(record)
-      if (renv_cache_package_validate(path))
+      if (nzchar(path) && renv_cache_package_validate(path))
         return(renv_retrieve_successful(record, path))
     }
 
@@ -534,9 +534,11 @@ renv_retrieve_explicit <- function(record) {
 
   # try parsing as a local remote
   source <- record$Path %||% record$RemoteUrl %||% ""
-  resolved <- catch(renv_remotes_resolve_path(source))
-  if (inherits(resolved, "error"))
-    return(FALSE)
+  if (nzchar(source)) {
+    resolved <- catch(renv_remotes_resolve_path(source))
+    if (inherits(resolved, "error"))
+      return(FALSE)
+  }
 
   # treat as 'local' source but extract path
   normalized <- renv_path_normalize(source, winslash = "/", mustWork = TRUE)
@@ -677,10 +679,14 @@ renv_retrieve_url <- function(record) {
 }
 
 renv_retrieve_repos_archive_name <- function(record, type = "source") {
-  record$File %||% {
-    ext <- renv_package_ext(type)
-    paste0(record$Package, "_", record$Version, ext)
-  }
+
+  file <- record$File
+  if (length(file) && !is.na(file))
+    return(file)
+
+  ext <- renv_package_ext(type)
+  paste0(record$Package, "_", record$Version, ext)
+
 }
 
 renv_retrieve_repos_mran <- function(record) {
@@ -880,14 +886,17 @@ renv_retrieve_repos_impl <- function(record,
       return(FALSE)
     }
 
-    # add in the path if available
+    # get repository path
     repo <- entry$Repository
-    if (!is.null(entry$Path) && !is.na(entry$Path))
-      repo <- file.path(repo, entry$Path)
+
+    # add in the path if available
+    path <- entry$Path
+    if (length(path) && !is.na(path))
+      repo <- file.path(repo, path)
 
     # update the tarball name if it was declared
     file <- entry$File
-    if (!is.null(file))
+    if (length(file) && !is.na(file))
       name <- file
 
   }
@@ -1002,7 +1011,8 @@ renv_retrieve_successful <- function(record, path, install = TRUE) {
   })
 
   # read and handle remotes declared by this package
-  renv_retrieve_handle_remotes(record, subdir = subdir)
+  if (config$install.remotes())
+    renv_retrieve_handle_remotes(record, subdir = subdir)
 
   # ensure its dependencies are retrieved as well
   if (state$recursive)

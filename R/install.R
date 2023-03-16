@@ -150,7 +150,7 @@ install <- function(packages = NULL,
   packages <- c(packages, dots[!nzchar(names(dots))])
 
   project <- renv_project_resolve(project)
-  renv_scope_lock(project = project)
+  renv_project_lock(project = project)
 
   if (!is.null(dependencies)) {
     fields <- renv_description_dependency_fields(dependencies, project = project)
@@ -186,7 +186,7 @@ install <- function(packages = NULL,
   names(remotes) <- extract_chr(remotes, "Package")
 
   # update records with requested remotes
-  records <- renv_snapshot_r_packages(libpaths = libpaths, project = project)
+  records <- renv_snapshot_libpaths(libpaths = libpaths, project = project)
   records[names(remotes)] <- remotes
 
   # read remotes from the package DESCRIPTION file and use those to
@@ -201,9 +201,10 @@ install <- function(packages = NULL,
   # ensure package names are resolved if provided
   packages <- if (length(packages)) names(remotes)
 
+  before <- Sys.time()
   renv_scope_restore(
     project  = project,
-    library  = renv_libpaths_default(),
+    library  = renv_libpaths_active(),
     records  = records,
     packages = packages,
     rebuild  = rebuild
@@ -217,10 +218,9 @@ install <- function(packages = NULL,
   }
 
   # install retrieved records
-  before <- Sys.time()
   renv_install_impl(records)
-  after <- Sys.time()
 
+  after <- Sys.time()
   if (!renv_tests_running()) {
     time <- renv_difftime_format(difftime(after, before))
     n <- length(records)
@@ -233,7 +233,7 @@ install <- function(packages = NULL,
     vwritef(
       fmt,
       nplural("package", length(records)),
-      renv_path_pretty(renv_libpaths_default())
+      renv_path_pretty(renv_libpaths_active())
     )
   }
 
@@ -278,8 +278,8 @@ renv_install_staged <- function(records) {
 
   # clear filebacked cache entries
   descpaths <- file.path(targets, "DESCRIPTION")
-  renv_filebacked_clear("DESCRIPTION", descpaths)
-  renv_filebacked_clear("hash", descpaths)
+  renv_filebacked_clear("renv_description_read", descpaths)
+  renv_filebacked_clear("renv_hash_description", descpaths)
 
   invisible(targets)
 
@@ -292,7 +292,7 @@ renv_install_staged_library_path_impl <- function() {
   # retrieve current project, library path
   staging <- Sys.getenv("RENV_PATHS_LIBRARY_STAGING", unset = NA)
   project <- Sys.getenv("RENV_PROJECT", unset = NA)
-  libpath <- renv_libpaths_default()
+  libpath <- renv_libpaths_active()
 
   # determine root directory for staging
   root <- if (!is.na(staging))
@@ -344,7 +344,7 @@ renv_install_staged_library_path <- function() {
 
   # try to make sure it has the same permissions as the library itself
   if (!renv_platform_windows()) {
-    libpath <- renv_libpaths_default()
+    libpath <- renv_libpaths_active()
     umask <- Sys.umask("0")
     on.exit(Sys.umask(umask), add = TRUE)
     info <- renv_file_info(libpath)
@@ -433,7 +433,7 @@ renv_install_package_cache <- function(record, cache, linker) {
   if (renv_install_package_cache_skip(record, cache))
     return(TRUE)
 
-  library <- renv_libpaths_default()
+  library <- renv_libpaths_active()
   target <- file.path(library, record$Package)
 
   # back up the previous installation if needed
@@ -467,7 +467,7 @@ renv_install_package_cache_skip <- function(record, cache) {
     return(FALSE)
 
   # check for matching cache + target paths
-  library <- renv_restore_state("library") %||% renv_libpaths_default()
+  library <- renv_restore_state("library") %||% renv_libpaths_active()
   target <- file.path(library, record$Package)
 
   renv_file_same(cache, target)
@@ -576,7 +576,7 @@ renv_install_package_impl <- function(record, quiet = TRUE) {
   on.exit(after(package), add = TRUE)
 
   # backup an existing installation of the package if it exists
-  library <- renv_libpaths_default()
+  library <- renv_libpaths_active()
   destination <- file.path(library, package)
   callback <- renv_file_backup(destination)
   on.exit(callback(), add = TRUE)
@@ -585,7 +585,7 @@ renv_install_package_impl <- function(record, quiet = TRUE) {
   path <- renv_path_normalize(path, winslash = "/", mustWork = TRUE)
 
   # get library path
-  library <- renv_libpaths_default()
+  library <- renv_libpaths_active()
 
   # if a package already exists at that path, back it up first
   # this avoids problems with older versions of R attempting to

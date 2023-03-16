@@ -79,7 +79,7 @@ renv_paths_lockfile <- function(project = NULL) {
 }
 
 renv_paths_settings <- function(project = NULL) {
-  renv_paths_renv("settings.dcf", project = project)
+  renv_paths_renv("settings.json", project = project)
 }
 
 renv_paths_activate <- function(project = NULL) {
@@ -104,9 +104,9 @@ renv_paths_sandbox_unix <- function(project = NULL) {
   if (!is.na(root))
     return(paste(root, prefix, sep = "/"))
 
-  # otherwise, build path in renv folder
-  project <- renv_project_resolve(project)
-  renv_paths_renv("sandbox", prefix, profile = TRUE, project = project)
+  # otherwise, build path in user data directory
+  userdir <- renv_bootstrap_user_dir()
+  paste(userdir, "sandbox", prefix, sep = "/")
 
 }
 
@@ -192,26 +192,20 @@ renv_paths_root <- function(...) {
 # nocov start
 renv_paths_root_default <- function() {
 
-  # if we have a cached root value, use it
-  if (!is.null(`_renv_root`))
-    return(`_renv_root`)
+  `_renv_root` <<- `_renv_root` %||% {
 
-  # use tempdir for cache when running tests
-  # this check is necessary here to support packages which might use renv
-  # during testing (and we don't want those to try to use the user dir)
-  checking <- renv_package_checking()
+    # use tempdir for cache when running tests
+    # this check is necessary here to support packages which might use renv
+    # during testing (and we don't want those to try to use the user dir)
+    checking <- renv_package_checking()
 
-  # compute the root directory
-  root <- if (checking)
-    renv_paths_root_default_tempdir()
-  else
-    renv_paths_root_default_impl()
+    # compute the root directory
+    if (checking)
+      renv_paths_root_default_tempdir()
+    else
+      renv_paths_root_default_impl()
 
-  # cache the value
-  renv_binding_replace("_renv_root", root, renv_envir_self())
-
-  # return it
-  invisible(`_renv_root`)
+  }
 
 }
 

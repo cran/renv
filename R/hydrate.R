@@ -79,11 +79,11 @@ hydrate <- function(packages = NULL,
   renv_dots_check(...)
 
   project <- renv_project_resolve(project)
-  renv_scope_lock(project = project)
+  renv_project_lock(project = project)
 
   renv_activate_prompt("hydrate", library, prompt, project)
 
-  library <- renv_path_normalize(library %||% renv_libpaths_default())
+  library <- renv_path_normalize(library %||% renv_libpaths_active())
   packages <- packages %||% renv_hydrate_packages(project)
 
   # find packages used in this project, and the dependencies of those packages
@@ -176,9 +176,11 @@ renv_hydrate_filter_impl <- function(package, path, library, update) {
   # if so, we'll want to compare the version first and
   # hydrate only if the requested version is newer than the current
   descpath <- file.path(library, package, "DESCRIPTION")
-  desc <- catch(renv_description_read(path = descpath))
-  if (inherits(desc, "error"))
-    return(TRUE)
+  if (file.exists(descpath)) {
+    desc <- catch(renv_description_read(path = descpath))
+    if (inherits(desc, "error"))
+      return(TRUE)
+  }
 
   # get the current package version
   current <- catch(numeric_version(desc[["Version"]]))
@@ -252,15 +254,19 @@ renv_hydrate_libpaths <- function() {
   if (is.character(conf) && length(conf))
     conf <- unlist(strsplit(conf, ":", fixed = TRUE))
 
-  libpaths <- if (renv_tests_running())
-    renv_libpaths_all()
-  else if (length(conf))
-    conf
-  else
-    c(renv_libpaths_user(), renv_libpaths_site(), renv_libpaths_system())
+  libpaths <- case(
+    renv_tests_running() ~ renv_libpaths_all(),
+    length(conf) ~ conf,
+    ~ c(
+      renv_libpaths_default(),
+      renv_libpaths_user(),
+      renv_libpaths_site(),
+      renv_libpaths_system()
+    )
+  )
 
   libpaths <- .expand_R_libs_env_var(libpaths)
-  normalizePath(libpaths, winslash = "/", mustWork = FALSE)
+  unique(renv_path_normalize(libpaths))
 
 }
 
@@ -332,7 +338,7 @@ renv_hydrate_resolve_missing <- function(project, library, na) {
 
   # figure out which packages are missing (if any)
   packages <- names(na)
-  installed <- renv_installed_packages()
+  installed <- installed_packages()
   if (all(packages %in% installed$Package))
     return()
 

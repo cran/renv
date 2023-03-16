@@ -109,3 +109,44 @@ test_that("sys.call(sys.parent()) does what we think it does", {
   expect_equal(outer(), "outer")
 
 })
+
+test_that("new() creates objects", {
+
+  oop <- new({
+    .data <- NULL
+    get <- function() { .data }
+    set <- function(data) { .data <<- data }
+  })
+
+  expect_identical(oop$get(), NULL)
+  expect_identical(oop$set(42L), 42L)
+  expect_identical(oop$get(), 42L)
+
+  expect_null(oop$data)
+
+  data <- get(".data", envir = oop)
+  expect_equal(data, 42L)
+
+})
+
+test_that("rows(), cols() does what we want", {
+
+  indices <- list(
+    c(1, 3, 5),
+    c(TRUE, FALSE)
+  )
+
+  for (index in indices) {
+
+    lhs <- mtcars[index, ]
+    rhs <- rows(mtcars, index)
+    rownames(lhs) <- rownames(rhs) <- NULL
+    expect_equal(lhs, rhs)
+
+    lhs <- mtcars[index]
+    rhs <- cols(mtcars, index)
+    expect_equal(lhs, rhs)
+
+  }
+
+})

@@ -14,7 +14,7 @@ diagnostics <- function(project = NULL) {
   renv_scope_error_handler()
 
   project <- renv_project_resolve(project)
-  renv_scope_lock(project = project)
+  renv_project_lock(project = project)
 
   if (renv_file_type(project, symlinks = FALSE) != "directory") {
     fmt <- "project %s is not a directory"
@@ -109,18 +109,13 @@ renv_diagnostics_packages <- function(project) {
   libcodes[!is.na(libcodes)] <- sprintf("[%i]", libcodes[!is.na(libcodes)])
 
   # add in packages in library
-  data <- data.frame(
-
+  data <- data_frame(
     Library    = renv_diagnostics_packages_version(libstate, all),
     Source     = renv_diagnostics_packages_sources(libstate, all),
     Lockfile   = renv_diagnostics_packages_version(lockfile, all),
     Source     = renv_diagnostics_packages_sources(lockfile, all),
     Path       = libcodes,
-    Dependency = deps,
-
-    stringsAsFactors = FALSE,
-    check.names      = FALSE
-
+    Dependency = deps
   )
 
   # print it out

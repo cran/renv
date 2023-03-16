@@ -1,4 +1,41 @@
 
+# renv 0.17.1
+
+* `renv` gains the configuration option `install.remotes`, which can be used
+  to control whether `renv` attempts to read and use the `Remotes:` field
+  included with installed packages. This can be set to `FALSE` if you'd
+  like to ignore this field; e.g. because you know they will not be
+  accessible. (#1133)
+
+* General performance optimizations. In particular, `renv::update(check = TRUE)`
+  should now execute much faster.
+
+* `renv` now stores project settings within `renv/settings.json` rather than
+  `renv/settings.dcf`. Old settings will be automatically migrated.
+
+* The `renv` sandbox is now placed within the `renv` cache directory. (#1158)
+
+* Fixed an issue where `renv::status()` could erroneously report a project was
+  out-of-sync when using explicit snapshots. (#1159)
+
+* Fixed an issue where `renv::hydrate()` would print spurious warnings. (#1160)
+
+* `renv::status()` now suggests running `renv::restore()` if there are no
+  packages installed in the project library. (#1060)
+  
+* Fixed an issue where `renv` would fail to query [r-universe](https://r-universe.dev/)
+  repositories. (#1156)
+
+* `renv` no longer tries to set the `SDKROOT` environment variable on
+  macOS for R (>= 4.0.0).
+
+* Fixed an issue where installation of Bioconductor packages could fail
+  when `BiocManager` was not installed. (#1156, #1155)
+
+* Fixed an issue where the amount of time elapsed reported by `renv::install()`
+  failed to include the time spent retrieving packages.
+
+
 # renv 0.17.0
 
 * The performance of `renv::snapshot()` has improved.

@@ -223,7 +223,7 @@ update <- function(packages = NULL,
   renv_dots_check(...)
 
   project <- renv_project_resolve(project)
-  renv_scope_lock(project = project)
+  renv_project_lock(project = project)
 
   # resolve library path
   libpaths <- renv_libpaths_resolve(library)
@@ -241,7 +241,8 @@ update <- function(packages = NULL,
   }
 
   # get package records
-  records <- renv_snapshot_r_packages(libpaths = libpaths, project = project)
+  renv_scope_var("_renv_snapshot_hash", FALSE)
+  records <- renv_snapshot_libpaths(libpaths = libpaths, project = project)
   packages <- packages %||% names(records)
 
   # apply exclusions
@@ -308,7 +309,7 @@ update <- function(packages = NULL,
 
   # remove records that appear to be from an R package repository,
   # but are not actually available in the current repositories
-  selected <- Filter(function(record) {
+  selected <- filter(selected, function(record) {
 
     source <- renv_record_source(record, normalize = TRUE)
     if (!source %in% c("bioconductor", "cran", "repository"))
@@ -319,7 +320,7 @@ update <- function(packages = NULL,
     entry <- catch(renv_available_packages_latest(package))
     !inherits(entry, "error")
 
-  }, selected)
+  })
 
   updates <- renv_update_find(selected)
   vwritef("Done!")
@@ -345,8 +346,8 @@ update <- function(packages = NULL,
     )
 
     vwritef(fmt, length(diff))
-    updates <- renv_updates(diff = diff, old = old, new = new)
-    return(updates)
+    renv_updates_report(diff, old, new)
+    return(invisible(renv_updates_create(diff, old, new)))
 
   }
 

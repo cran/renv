@@ -25,9 +25,9 @@ remove <- function(packages,
   renv_dots_check(...)
 
   project <- renv_project_resolve(project)
-  renv_scope_lock(project = project)
+  renv_project_lock(project = project)
 
-  library <- renv_path_normalize(library %||% renv_libpaths_default())
+  library <- renv_path_normalize(library %||% renv_libpaths_active())
 
   descpaths <- file.path(library, packages, "DESCRIPTION")
   records <- lapply(descpaths, renv_snapshot_description)
@@ -52,7 +52,7 @@ remove <- function(packages,
       count <- count + 1
   }
 
-  vwritef("* Done! Removed %s.", count, nplural("package", count))
+  vwritef("* Done! Removed %s.", nplural("package", count))
   invisible(records)
 }
 

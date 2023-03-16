@@ -55,8 +55,12 @@ empty <- function(x) {
   length(x) == 0
 }
 
+trim <- function(x) {
+  gsub("^\\s+|\\s+$", "", x, perl = TRUE)
+}
+
 trimws <- function(x) {
-  gsub("^\\s+|\\s+$", "", x)
+  gsub("^\\s+|\\s+$", "", x, perl = TRUE)
 }
 
 case <- function(...) {
@@ -111,6 +115,10 @@ ask <- function(question, default = FALSE) {
   if (renv_tests_running())
     return(TRUE)
 
+  enabled <- getOption("renv.prompt.enabled", default = TRUE)
+  if (!enabled)
+    return(default)
+
   if (!interactive())
     return(default)
 
@@ -164,32 +172,28 @@ proceed <- function(default = FALSE) {
 inject <- function(contents,
                    pattern,
                    replacement,
-                   anchor = NULL)
+                   anchor = NULL,
+                   fixed  = FALSE)
 {
   # first, check to see if the pattern matches a line
-  index <- grep(pattern, contents)
+  index <- grep(pattern, contents, perl = !fixed, fixed = fixed)
   if (length(index)) {
     contents[index] <- replacement
     return(contents)
   }
 
   # otherwise, check for the anchor, and insert after
-  index <- if (!is.null(anchor)) grep(anchor, contents)
-  if (length(index)) {
-    contents <- c(
-      head(contents, n = index),
-      replacement,
-      tail(contents, n = -index)
-    )
-    return(contents)
-  }
+  index <- if (!is.null(anchor))
+    grep(anchor, contents, perl = !fixed, fixed = fixed)
 
-  # otherwise, just append the new line
-  c(contents, replacement)
-}
+  if (!length(index))
+    return(c(contents, replacement))
 
-env <- function(...) {
-  list2env(list(...), envir = new.env(parent = emptyenv()))
+  c(
+    head(contents, n = index),
+    replacement,
+    tail(contents, n = -index)
+  )
 }
 
 deparsed <- function(value, width = 60L) {
@@ -197,6 +201,7 @@ deparsed <- function(value, width = 60L) {
 }
 
 read <- function(file) {
+  renv_scope_options(warn = -1L)
   contents <- readLines(file, warn = FALSE)
   paste(contents, collapse = "\n")
 }
@@ -328,12 +333,12 @@ dequote <- function(strings) {
 
     # find strings matching pattern
     pattern <- paste0(quote, "(.*)", quote)
-    matches <- grep(pattern, strings)
+    matches <- grep(pattern, strings, perl = TRUE)
     if (empty(matches))
       next
 
     # remove outer quotes
-    strings[matches] <- gsub(pattern, "\\1", strings[matches])
+    strings[matches] <- gsub(pattern, "\\1", strings[matches], perl = TRUE)
 
     # un-escape inner quotes
     pattern <- paste0("\\", quote)
@@ -407,30 +412,23 @@ unique <- function(x) {
   base::unique(x)
 }
 
-rows <- function(data, columns) {
-
-  # evaluate columns in data
-  columns <- eval(
-    expr   = substitute(columns),
-    envir  = data,
-    enclos = parent.frame()
-  )
+rows <- function(data, indices) {
 
   # convert logical values
-  if (is.logical(columns)) {
-    if (length(columns) < nrow(data))
-      columns <- rep(columns, length.out = nrow(data))
-    columns <- which(columns, useNames = FALSE)
+  if (is.logical(indices)) {
+    if (length(indices) < nrow(data))
+      indices <- rep(indices, length.out = nrow(data))
+    indices <- which(indices, useNames = FALSE)
   }
 
   # build output list
   output <- vector("list", length(data))
   for (i in seq_along(data))
-    output[[i]] <- .subset(.subset2(data, i), columns)
+    output[[i]] <- .subset2(data, i)[indices]
 
   # copy relevant attributes
   attrs <- attributes(data)
-  attrs[["row.names"]] <- .set_row_names(length(columns))
+  attrs[["row.names"]] <- .set_row_names(length(indices))
   attributes(output) <- attrs
 
   # return new data.frame
@@ -438,6 +436,73 @@ rows <- function(data, columns) {
 
 }
 
+cols <- function(data, indices) {
+
+  # perform subset
+  output <- .subset(data, indices)
+
+  # copy relevant attributes
+  attrs <- attributes(data)
+  attrs[["names"]] <- attr(output, "names", exact = TRUE)
+  attributes(output) <- attrs
+
+  # return output
+  output
+
+}
+
 stringify <- function(object, collapse = " ") {
-  paste(deparse(object, width.cutoff = 500L), collapse = collapse)
+
+  if (is.symbol(object))
+    return(as.character(object))
+
+  paste(
+    deparse(object, width.cutoff = 500L),
+    collapse = collapse
+  )
+
+}
+
+env <- function(...) {
+  list2env(list(...), envir = new.env(parent = emptyenv()))
+}
+
+env2list <- function(env) {
+  as.list.environment(env, all.names = TRUE)
+}
+
+chop <- function(x, split = "\n", fixed = TRUE, perl = FALSE, useBytes = FALSE) {
+  strsplit(x, split, !perl, perl, useBytes)[[1L]]
+}
+
+prof <- function(expr, ...) {
+
+  profile <- tempfile("renv-profile-", fileext = ".Rprof")
+
+  Rprof(profile, ...)
+  result <- expr
+  Rprof(NULL)
+  print(summaryRprof(profile))
+
+  invisible(result)
+
+}
+
+recycle <- function(data) {
+
+  # compute number of columns
+  n <- lengths(data, use.names = FALSE)
+  nrow <- max(n)
+
+  # start recycling
+  for (i in seq_along(data)) {
+    if (n[[i]] == 0L) {
+      length(data[[i]]) <- nrow
+    } else if (n[[i]] != nrow) {
+      data[[i]] <- rep.int(data[[i]], nrow / n[[i]])
+    }
+  }
+
+  data
+
 }

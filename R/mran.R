@@ -21,11 +21,10 @@ renv_mran_database_encode_impl <- function(entry) {
 
   splat <- strsplit(keys, " ", fixed = TRUE)
 
-  encoded <- data.frame(
+  encoded <- data_frame(
     Package          = map_chr(splat, `[[`, 1L),
     Version          = map_chr(splat, `[[`, 2L),
-    Date             = as.integer(vals),
-    stringsAsFactors = FALSE
+    Date             = as.integer(vals)
   )
 
   encoded <- encoded[order(encoded$Package, encoded$Version), ]
@@ -73,8 +72,13 @@ renv_mran_database_save <- function(database, path = NULL) {
 }
 
 renv_mran_database_load <- function(path = NULL) {
-  path <- path %||% renv_mran_database_path()
-  filebacked("mran", path, renv_mran_database_load_impl)
+
+  filebacked(
+    scope    = "renv_mran_database_load",
+    path     = path %||% renv_mran_database_path(),
+    callback = renv_mran_database_load_impl
+  )
+
 }
 
 renv_mran_database_load_impl <- function(path) {
@@ -173,7 +177,7 @@ renv_mran_database_update_impl <- function(date, url, entry) {
 
   # retrieve available packages
   errors <- new.env(parent = emptyenv())
-  db <- renv_available_packages_query(url, errors)
+  db <- renv_available_packages_query_impl(url, errors)
   if (is.null(db)) {
     vwritef("ERROR")
     return(FALSE)
@@ -216,6 +220,13 @@ renv_mran_database_refresh <- function(explicit = TRUE) {
 }
 
 renv_mran_database_refresh_required <- function() {
+  dynamic(
+    key   = list(),
+    value = renv_mran_database_refresh_required_impl()
+  )
+}
+
+renv_mran_database_refresh_required_impl <- function() {
 
   # if the cache doesn't exist, we must refresh
   path <- renv_mran_database_path()

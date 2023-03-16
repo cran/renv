@@ -76,7 +76,7 @@ clean <- function(project = NULL,
   renv_dots_check(...)
 
   project <- renv_project_resolve(project)
-  renv_scope_lock(project = project)
+  renv_project_lock(project = project)
 
   renv_activate_prompt("clean", NULL, prompt, project)
 
@@ -160,7 +160,7 @@ renv_clean_system_library <- function(project, prompt) {
 
   # explicitly query for packages
   syslib <- renv_path_normalize(renv_libpaths_system(), winslash = "/", mustWork = FALSE)
-  db <- renv_installed_packages(lib.loc = syslib, priority = "NA")
+  db <- installed_packages(lib.loc = syslib, priority = "NA")
   packages <- setdiff(db$Package, "translations")
 
   # also look for leftover package folders

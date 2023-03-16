@@ -1,4 +1,15 @@
 
+renv_sandbox_init <- function() {
+
+  # check for envvar override
+  enabled <- Sys.getenv("RENV_SANDBOX_LOCKING_ENABLED", unset = NA)
+  if (!is.na(enabled)) {
+    enabled <- truthy(enabled, default = TRUE)
+    options(renv.sandbox.locking_enabled = enabled)
+  }
+
+}
+
 renv_sandbox_activate <- function(project = NULL) {
 
   # record start time
@@ -25,7 +36,9 @@ renv_sandbox_activate <- function(project = NULL) {
 
         RENV_CONFIG_SANDBOX_ENABLED = FALSE
 
-    within an appropriate start-up .Renviron file. See `?renv::config` for more details.
+    within an appropriate start-up .Renviron file.
+
+    See `?renv::config` for more details.
     ")
 
 
@@ -70,10 +83,6 @@ renv_sandbox_activate_impl <- function(project = NULL, path = NULL) {
     # protect against user profiles that might try
     # to update the library paths
     renv_sandbox_activate_check(newlibs)
-
-    # add a callback that double-checks the sandbox is active
-    # and working as intended
-    addTaskCallback(renv_sandbox_task)
 
   }
 
@@ -123,12 +132,23 @@ renv_sandbox_activate_check <- function(libs) {
 
 renv_sandbox_generate <- function(sandbox) {
 
+  # lock access to the sandbox
+  lockfile <- paste(sandbox, "lock", sep = ".")
+  renv_scope_lock(lockfile)
+
   # make the library temporarily writable
-  if (!renv_package_checking())
-    Sys.chmod(sandbox, "0755")
+  lock <- getOption("renv.sandbox.locking_enabled") %||% all(
+    !renv_package_checking() &&
+    !renv_path_within(sandbox, tempdir())
+  )
+
+  if (lock) {
+    dlog("sandbox", "Temporarily unlocking sandbox.")
+    renv_sandbox_unlock(sandbox)
+  }
 
   # find system packages in the system library
-  syspkgs <- renv_installed_packages(
+  syspkgs <- installed_packages(
     lib.loc = renv_libpaths_system(),
     priority = c("base", "recommended")
   )
@@ -140,8 +160,10 @@ renv_sandbox_generate <- function(sandbox) {
   enumerate(targets, renv_file_link, overwrite = TRUE)
 
   # make the library unwritable again
-  if (!renv_package_checking())
-    Sys.chmod(sandbox, "0555")
+  if (lock) {
+    dlog("sandbox", "Re-locking sandbox.")
+    renv_sandbox_lock(sandbox)
+  }
 
   # return sandbox path
   sandbox
@@ -152,7 +174,7 @@ renv_sandbox_deactivate <- function() {
 
   # get library paths sans .Library, .Library.site
   old <- renv_libpaths_all()
-  syslibs <- renv_path_normalize(c(.Library, .Library.site), winslash = "/", mustWork = FALSE)
+  syslibs <- renv_path_normalize(c(.Library, .Library.site))
 
   # restore old bindings
   base <- .BaseNamespaceEnv
@@ -169,20 +191,38 @@ renv_sandbox_deactivate <- function() {
 
 renv_sandbox_task <- function(...) {
 
-  enabled <- config$sandbox.enabled()
-  if (!enabled)
-    return(FALSE)
+  # check if we're enabled
+  if (!renv_sandbox_activated())
+    return()
 
+  enabled <- getOption("renv.sandbox.task", default = TRUE)
+  if (!enabled)
+    return()
+
+  # make sure the sandbox exists
   sandbox <- tail(.libPaths(), n = 1L)
   if (!file.exists(sandbox)) {
     warning("the renv sandbox was deleted; it will be re-generated", call. = FALSE)
+    ensure_directory(sandbox)
     renv_sandbox_generate(sandbox)
   }
-
-  TRUE
 
 }
 
 renv_sandbox_path <- function(project = NULL) {
   renv_paths_sandbox(project = project)
 }
+
+renv_sandbox_lock <- function(sandbox) {
+  Sys.chmod(sandbox, mode = "0555")
+}
+
+renv_sandbox_locked <- function(sandbox) {
+  mode <- suppressWarnings(file.mode(sandbox))
+  mode == 365L  # as.integer(as.octmode("0555"))
+}
+
+renv_sandbox_unlock <- function(sandbox) {
+  Sys.chmod(sandbox, mode = "0755")
+}
+

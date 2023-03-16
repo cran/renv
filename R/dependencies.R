@@ -909,7 +909,7 @@ renv_dependencies_discover_r <- function(path = NULL,
   # update current path
   state <- renv_dependencies_state()
   if (!is.null(state))
-    renv_scope_var("path", path, envir = state)
+    renv_scope_var("path", path, frame = state)
 
   methods <- c(
     renv_dependencies_discover_r_methods,
@@ -1214,6 +1214,10 @@ renv_dependencies_discover_r_box <- function(node, stack, envir) {
 
 renv_dependencies_discover_r_box_impl <- function(node, stack, envir) {
 
+  # if we're referencing a package via '/', try to extract those
+  while (is.call(node) && identical(node[[1L]], as.name("/")))
+    node <- node[[2L]]
+
   # if the node is just a symbol, then it's the name of a package
   # otherwise, if it's a call to `[`, the first argument is the package name
   name <- if (is.symbol(node) && !identical(node, quote(expr = ))) {
@@ -1503,31 +1507,29 @@ renv_dependencies_list <- function(source,
 
   source <- source %||% rep.int(NA_character_, length(packages))
 
-  data.frame(
+  data_frame(
     Source  = as.character(source),
     Package = as.character(packages),
     Require = require,
     Version = version,
-    Dev     = dev,
-    stringsAsFactors = FALSE
+    Dev     = dev
   )
 
 }
 
 renv_dependencies_list_empty <- function() {
 
-  data.frame(
+  data_frame(
     Source  = character(),
     Package = character(),
     Require = character(),
     Version = character(),
-    Dev     = logical(),
-    stringsAsFactors = FALSE
+    Dev     = logical()
   )
 
 }
 
-renv_dependencies_require <- function(package, type) {
+renv_dependencies_require <- function(package, type = NULL) {
 
   if (requireNamespace(package, quietly = TRUE))
     return(TRUE)
@@ -1535,12 +1537,13 @@ renv_dependencies_require <- function(package, type) {
   if (once()) {
 
     fmt <- lines(
-      "The '%1$s' package is required to parse dependencies within %2$s files.",
+      "The '%1$s' package is required to parse dependencies within %2$s",
       "Consider installing it with `install.packages(\"%1$s\")`."
     )
 
-    msg <- sprintf(fmt, package, type)
-      warning(msg, call. = FALSE)
+    within <- if (is.null(type)) "this project" else paste(type, "files")
+    msg <- sprintf(fmt, package, within)
+    warning(msg, call. = FALSE)
 
   }
 
@@ -1628,7 +1631,7 @@ renv_dependencies_report <- function(errors) {
 
 }
 
-renv_dependencies_scope <- function(path, action, .envir = NULL) {
+renv_dependencies_scope <- function(path, action, envir = NULL) {
 
   path <- renv_path_normalize(path, winslash = "/", mustWork = TRUE)
   if (exists(path, envir = `_renv_dependencies`))
@@ -1644,7 +1647,7 @@ renv_dependencies_scope <- function(path, action, .envir = NULL) {
 
   assign(path, deps, envir = `_renv_dependencies`)
 
-  envir <- .envir %||% parent.frame()
+  envir <- envir %||% parent.frame()
   defer(rm(list = path, envir = `_renv_dependencies`), envir = envir)
 
   invisible(deps)
