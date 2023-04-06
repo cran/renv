@@ -1,4 +1,39 @@
 
+# renv 0.17.3
+
+* Fixed an issue where `renv::install("bioc::<package>")` could fail if
+  `BiocManager` was not already installed. (#1184)
+
+* Fixed an issue where package names were not included in the output
+  of `renv::diagnostics()`. (#1182)
+
+* The clarity of the message printed by `renv::status()` has been improved;
+  in particular, `renv` should better report the recommended actions when
+  a package required by the project is not installed.
+
+* `renv::snapshot()` gains the `exclude` argument, for explicitly
+  excluding certain packages from the generated lockfile.
+
+* Fixed an issue where `renv` was passing the wrong argument name to
+  `installed.packages()`, causing usages of `renv` to fail with
+  R (<= 3.4.0). (#1173)
+  
+* `renv` now sets the `SDKROOT` environment variable on macOS if it detects
+  that R was built using an LLVM build of `clang` on macOS.
+
+* `renv::install()` now parses the remotes included within, for example,
+  a `DESCRIPTION` file's `Config/Needs/...` field.
+  
+* `renv` now checks that the index directory is writable before attempting to
+  use it, e.g. for the `R` available packages index maintained by `renv`. (#1171)
+  
+* `renv` now checks that the version of `curl` used for downloads appears to
+  be functional, and reports a warning if it does not (for example, because
+  a requisite system library is missing). The version of `curl` used for
+  downloads can also be configured via the `RENV_CURL_EXECUTABLE` environment
+  variable.
+  
+
 # renv 0.17.2
 
 * Fixed a regression that caused package hashes to be computed incorrectly

@@ -294,7 +294,7 @@ applications to run using the same pre-defined machine state.</p>
 image. The easiest way to accomplish this is with the
 <code>remotes</code> package. For example, if you wanted to install a
 specific version of <code>renv</code> from GitHub:</p>
-<pre><code>ENV RENV_VERSION 0.17.2
+<pre><code>ENV RENV_VERSION 0.17.3
 RUN R -e &quot;install.packages(&#39;remotes&#39;, repos = c(CRAN = &#39;https://cloud.r-project.org&#39;))&quot;
 RUN R -e &quot;remotes::install_github(&#39;rstudio/renv@${RENV_VERSION}&#39;)&quot;</code></pre>
 <p>Next, if you’d like the <code>renv.lock</code> lockfile to be used to

@@ -57,11 +57,8 @@ renv_scope_options <- function(..., envir = NULL) {
   envir <- envir %||% parent.frame()
 
   new <- list(...)
-  old <- lapply(names(new), getOption)
-  names(old) <- names(new)
-
-  do.call(base::options, new)
-  defer(do.call(base::options, old), envir = envir)
+  old <- options(new)
+  defer(options(old), envir = envir)
 
 }
 
@@ -403,4 +400,11 @@ renv_scope_tempfile <- function(pattern = "renv-tempfile-",
   defer(unlink(filepath, recursive = TRUE, force = TRUE), envir = envir)
 
   invisible(filepath)
+}
+
+renv_scope_umask <- function(umask, envir = NULL) {
+  envir <- envir %||% parent.frame()
+  oldmask <- Sys.umask(umask)
+  defer(Sys.umask(oldmask), envir = envir)
+  invisible(oldmask)
 }

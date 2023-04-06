@@ -401,3 +401,23 @@ test_that("dependencies() handles inline YAML comments", {
   deps <- dependencies("resources/chunk-yaml.Rmd", quiet = TRUE)
   expect_true("A" %in% deps$Package)
 })
+
+test_that("we can parse remotes from a DESCRIPTION file", {
+
+  desc <- heredoc('
+    Remotes: r-dbi/DBItest
+  ')
+
+  descfile <- renv_scope_tempfile()
+  writeLines(desc, con = descfile)
+  deps <- renv_dependencies_discover_description(descfile, fields = "Remotes")
+  expect_equal(deps$Package, "r-dbi/DBItest")
+
+})
+
+test_that("renv warns when parsing dependencies from a folder with too many files", {
+  renv_tests_scope()
+  file.create(letters)
+  renv_scope_options(renv.dependencies.limit = 10L)
+  expect_error(dependencies(progress = FALSE, errors = "fatal"))
+})

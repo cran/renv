@@ -39,7 +39,9 @@ dependencies are returned.}
 }
 \value{
 An \R \code{data.frame} of discovered dependencies, mapping inferred
-package names to the files in which they were discovered.
+package names to the files in which they were discovered. Note that the
+\code{Package} field might name a package remote, rather than just a plain
+package name.
 }
 \description{
 Find \R packages used within a project.
@@ -110,6 +112,10 @@ data/
 # ignore only data folders from the root of the project
 /data/
 }\if{html}{\out{</div>}}
+
+Using ignore files is important if your project contains a large number
+of files; for example, if you have a 'data' directory containing many
+text files.
 }
 
 \section{Errors}{

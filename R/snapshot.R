@@ -90,6 +90,8 @@
 #'   Recursive dependencies of the specified packages will be added to the
 #'   lockfile as well.
 #'
+#' @param exclude A vector of packages to be explicitly excluded from the lockfile.
+#'
 #' @param update Boolean; if the lockfile already exists, then attempt to update
 #'   that lockfile without removing any prior package records.
 #'
@@ -114,6 +116,7 @@ snapshot <- function(project  = NULL,
                      type     = settings$snapshot.type(project = project),
                      repos    = getOption("repos"),
                      packages = NULL,
+                     exclude  = NULL,
                      prompt   = interactive(),
                      update   = FALSE,
                      force    = FALSE,
@@ -151,7 +154,7 @@ snapshot <- function(project  = NULL,
 
   }
 
-  alt <- new <- renv_lockfile_create(project, libpaths, type, packages)
+  alt <- new <- renv_lockfile_create(project, libpaths, type, packages, exclude)
   if (is.null(lockfile))
     return(new)
 
@@ -181,15 +184,8 @@ snapshot <- function(project  = NULL,
   # check for missing dependencies and warn if any are discovered
   # (note: use 'new' rather than 'alt' here as we don't want to attempt
   # validation on uninstalled packages)
-  validated <- renv_snapshot_validate(project, new, libpaths)
-  if (!validated && !force) {
-    if (prompt && !proceed()) {
-      renv_report_user_cancel()
-      invokeRestart("abort")
-    } else {
-      stop("aborting snapshot due to pre-flight validation failure")
-    }
-  }
+  valid <- renv_snapshot_validate(project, new, libpaths)
+  renv_snapshot_validate_report(valid, prompt, force)
 
   # update new reference
   new <- alt
@@ -305,13 +301,41 @@ renv_snapshot_validate <- function(project, lockfile, libpaths) {
 
 }
 
+renv_snapshot_validate_report <- function(valid, prompt, force) {
+
+  # nothing to do if everything is valid
+  if (valid) {
+    dlog("snapshot", "passed pre-flight validation checks")
+    return(TRUE)
+  }
+
+  # if we're forcing snapshot, ignore the failures
+  if (force) {
+    dlog("snapshot", "ignoring error in pre-flight validation checks as 'force = TRUE'")
+    return(TRUE)
+  }
+
+  # in interactive sessions, ask the user what they want to do
+  if (interactive() && prompt && !proceed()) {
+    renv_report_user_cancel()
+    invokeRestart("abort")
+  }
+
+  # in non-interactive sessions, throw an error (user will need to use force)
+  if (!interactive())
+    stop("aborting snapshot due to pre-flight validation failure")
+
+  TRUE
+
+}
+
 # nocov start
 renv_snapshot_validate_bioconductor <- function(project, lockfile, libpaths) {
 
   ok <- TRUE
 
   # check whether any packages are installed from Bioconductor
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
   sources <- extract_chr(records, "Source")
   if (!"Bioconductor" %in% sources)
     return(ok)
@@ -397,7 +421,7 @@ renv_snapshot_validate_bioconductor <- function(project, lockfile, libpaths) {
 renv_snapshot_validate_dependencies_available <- function(project, lockfile, libpaths) {
 
   # use library to collect package dependency versions
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
   packages <- extract_chr(records, "Package")
   locs <- find.package(packages, lib.loc = libpaths, quiet = TRUE)
   deps <- bapply(locs, renv_dependencies_discover_description)
@@ -451,7 +475,7 @@ renv_snapshot_validate_dependencies_available <- function(project, lockfile, lib
 renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, libpaths) {
 
   # use library to collect package dependency versions
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
   packages <- extract_chr(records, "Package")
   locs <- find.package(packages, lib.loc = libpaths, quiet = TRUE)
   deps <- bapply(locs, renv_dependencies_discover_description)
@@ -518,7 +542,7 @@ renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, li
 }
 
 renv_snapshot_validate_sources <- function(project, lockfile, libpaths) {
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
   renv_check_unknown_source(records, project)
 }
 
@@ -529,7 +553,7 @@ renv_snapshot_libpaths <- function(libpaths = NULL,
                                    project  = NULL)
 {
   dynamic(
-    key   = list(libpaths, project),
+    key   = list(libpaths = libpaths, project = project),
     value = renv_snapshot_libpaths_impl(libpaths, project)
   )
 }
@@ -805,8 +829,8 @@ renv_snapshot_report_actions <- function(actions, old, new) {
   if (!renv_verbose() || empty(actions))
     return(invisible())
 
-  lhs <- renv_records(old)
-  rhs <- renv_records(new)
+  lhs <- renv_lockfile_records(old)
+  rhs <- renv_lockfile_records(new)
   renv_pretty_print_records_pair(
     lhs[names(lhs) %in% names(actions)],
     rhs[names(rhs) %in% names(actions)],
@@ -827,18 +851,27 @@ renv_snapshot_report_actions <- function(actions, old, new) {
 }
 # nocov end
 
-renv_snapshot_dependencies <- function(project, source = project) {
+renv_snapshot_dependencies <- function(project, type) {
 
   message <- "snapshot aborted"
   errors <- config$dependency.errors()
 
+  path <- case(
+    type %in% "implicit" ~ project,
+    type %in% "explicit" ~ file.path(project, "DESCRIPTION"),
+    ~ {
+      fmt <- "internal error: unhandled snapshot type '%s' in %s"
+      stopf(fmt, type, stringify(sys.call()))
+    }
+  )
+
   withCallingHandlers(
 
     dependencies(
-      path = source,
-      root = project,
+      path     = path,
+      root     = project,
       progress = FALSE,
-      errors = errors
+      errors   = errors
     ),
 
     renv.dependencies.error = renv_dependencies_error_handler(message, errors)
@@ -847,7 +880,7 @@ renv_snapshot_dependencies <- function(project, source = project) {
 
 }
 
-renv_snapshot_filter <- function(project, records, type, packages) {
+renv_snapshot_filter <- function(project, records, type, packages, exclude) {
 
   start <- Sys.time()
 
@@ -864,6 +897,9 @@ renv_snapshot_filter <- function(project, records, type, packages) {
     packages = renv_snapshot_filter_packages(project, records, packages),
     stopf("unknown snapshot type '%s'", type)
   )
+
+  if (length(exclude))
+    result <- exclude(result, exclude)
 
   if (type %in% c("all", "explicit"))
     return(result)
@@ -902,13 +938,18 @@ renv_snapshot_filter <- function(project, records, type, packages) {
 }
 
 renv_snapshot_filter_all <- function(project, records) {
-  records
+  renv_snapshot_filter_impl(project, records, names(records), "all")
 }
 
-renv_snapshot_filter_impl <- function(project, records, packages) {
+renv_snapshot_filter_impl <- function(project, records, packages, type) {
+
+  # warn if some required packages are missing
+  ignored <- c(renv_project_ignored_packages(project), renv_packages_base())
+  missing <- setdiff(packages, c(names(records), ignored))
+  if (!`_renv_status_running`)
+    renv_snapshot_filter_report_missing(missing, type)
 
   # ignore packages as defined by project
-  ignored <- renv_project_ignored_packages(project = project)
   used <- setdiff(packages, ignored)
 
   # include transitive dependencies
@@ -929,18 +970,7 @@ renv_snapshot_filter_impl <- function(project, records, packages) {
 
 }
 
-renv_snapshot_filter_implicit <- function(project, records) {
-
-  # get the requested dependencies
-  deps <- renv_snapshot_dependencies(project)
-  packages <- unique(c(deps$Package, "renv"))
-
-  # execute the filter
-  renv_snapshot_filter_impl(project, records, packages)
-
-}
-
-renv_snapshot_filter_explicit_report <- function(missing) {
+renv_snapshot_filter_report_missing <- function(missing, type) {
 
   missing <- setdiff(missing, "renv")
   if (empty(missing))
@@ -949,51 +979,44 @@ renv_snapshot_filter_explicit_report <- function(missing) {
   if (renv_tests_running())
     renv_condition_signal("renv.snapshot.missing_packages", missing)
 
-  preamble <- paste(
-    "The following packages are required by this project,",
-    "but are not installed:"
-  )
+  preamble <- "The following required packages are not installed:"
 
   postamble <- c(
     "Packages must first be installed before `renv` can snapshot them.",
     "Consider installing these packages using `renv::install()`.",
-    "Alternatively, remove these packages from the project DESCRIPTION file."
+    if (type %in% "explicit")
+      "If these packages are no longer required, consider removing them from your DESCRIPTION file."
+    else
+      "Use `renv::dependencies()` to see where this package is used in your project."
   )
 
-  renv_pretty_print(
-    values = csort(unique(missing)),
-    preamble = preamble,
-    postamble = postamble
-  )
+  if (!renv_tests_running()) {
+    renv_pretty_print(
+      values = csort(unique(missing)),
+      preamble = preamble,
+      postamble = postamble
+    )
+  }
 
   if (interactive() && !proceed()) {
     renv_report_user_cancel()
     invokeRestart("abort")
   }
 
-
   TRUE
 
 }
 
-renv_snapshot_filter_explicit <- function(project, records) {
-
-  # keep only packages mentioned in the project DESCRIPTION file
-  descpath <- file.path(project, "DESCRIPTION")
-  if (!file.exists(descpath))
-    return(records["renv"])
-
-  # get the requested dependencies
-  deps <- renv_snapshot_dependencies(project, descpath)
+renv_snapshot_filter_implicit <- function(project, records) {
+  deps <- renv_snapshot_dependencies(project, "implicit")
   packages <- unique(c(deps$Package, "renv"))
+  renv_snapshot_filter_impl(project, records, packages, "implicit")
+}
 
-  # warn if requested packages are missing
-  missing <- setdiff(packages, c(names(records), renv_packages_base()))
-  renv_snapshot_filter_explicit_report(missing)
-
-  # filter records
-  renv_snapshot_filter_impl(project, records, packages)
-
+renv_snapshot_filter_explicit <- function(project, records) {
+  deps <- renv_snapshot_dependencies(project, "explicit")
+  packages <- unique(c(deps$Package, "renv"))
+  renv_snapshot_filter_impl(project, records, packages, "explicit")
 }
 
 renv_snapshot_filter_packages <- function(project, records, packages) {

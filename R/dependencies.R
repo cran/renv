@@ -65,6 +65,10 @@
 #' /data/
 #' ```
 #'
+#' Using ignore files is important if your project contains a large number
+#' of files; for example, if you have a 'data' directory containing many
+#' text files.
+#'
 #' @inheritParams renv-params
 #'
 #' @param path The path to a (possibly multi-mode) \R file, or a directory
@@ -88,7 +92,9 @@
 #'   dependencies are returned.
 #'
 #' @return An \R `data.frame` of discovered dependencies, mapping inferred
-#'   package names to the files in which they were discovered.
+#'   package names to the files in which they were discovered. Note that the
+#'   `Package` field might name a package remote, rather than just a plain
+#'   package name.
 #'
 #' @section Errors:
 #'
@@ -356,6 +362,15 @@ renv_dependencies_find_dir_children <- function(path, root, depth) {
   # list files in the folder
   children <- renv_file_list(path, full.names = TRUE)
 
+  # skip if this contains too many files
+  # https://github.com/rstudio/renv/issues/1186
+  limit <- getOption("renv.dependencies.limit", default = 1000L)
+  count <- length(children)
+  if (count >= limit) {
+    relpath <- renv_path_relative(path, dirname(root))
+    renv_dependencies_find_dir_children_overload(relpath, count)
+  }
+
   # remove files which are broken symlinks
   children <- children[file.exists(children)]
 
@@ -369,6 +384,23 @@ renv_dependencies_find_dir_children <- function(path, root, depth) {
 
   # keep only non-excluded children
   children[!excluded]
+
+}
+
+renv_dependencies_find_dir_children_overload <- function(path, count) {
+
+  # check for missing state (e.g. if internal method called directly)
+  state <- renv_dependencies_state()
+  if (is.null(state))
+    return()
+
+  fmt <- "directory %s contains %s; consider ignoring this directory"
+  msg <- sprintf(fmt, renv_path_pretty(path), nplural("file", count))
+  error <- simpleError(message = msg)
+
+  path <- path %||% state$path
+  problem <- list(file = path, error = error)
+  state$problems$push(problem)
 
 }
 
@@ -461,12 +493,6 @@ renv_dependencies_discover_description <- function(path,
     renv_dependencies_discover_description_fields() %||%
     c("Depends", "Imports", "LinkingTo")
 
-  # build pattern used to split DESCRIPTION fields
-  pattern <- paste0(
-    "([a-zA-Z0-9._]+)",                      # package name
-    "(?:\\s*\\(([><=]+)\\s*([0-9.-]+)\\))?"  # optional version specification
-  )
-
   # if this is the DESCRIPTION file for the active project, include
   # Suggests since they're often needed as well. such packages will be
   # considered development dependencies, except for package projects
@@ -488,38 +514,51 @@ renv_dependencies_discover_description <- function(path,
 
   }
 
-  data <- lapply(fields, function(field) {
-
-    # read field
-    contents <- dcf[[field]]
-    if (!is.character(contents))
-      return(list())
-
-    # split on commas
-    parts <- strsplit(dcf[[field]], "\\s*,\\s*")[[1]]
-
-    # drop any empty fields
-    x <- parts[nzchar(parts)]
-
-    # match to split on package name, version
-    m <- regexec(pattern, x)
-    matches <- regmatches(x, m)
-    if (empty(matches))
-      return(list())
-
-    # create dependency list
-    dev <- field == "Suggests" && type != "package"
-    renv_dependencies_list(
-      path,
-      extract_chr(matches, 2L),
-      extract_chr(matches, 3L),
-      extract_chr(matches, 4L),
-      dev
-    )
-
-  })
+  data <- map(
+    fields,
+    renv_dependencies_discover_description_impl,
+    dcf  = dcf,
+    path = path,
+    type = type
+  )
 
   bind(data)
+
+}
+
+renv_dependencies_discover_description_impl <- function(dcf, field, path, type) {
+
+  # read field
+  contents <- dcf[[field]]
+  if (!is.character(contents))
+    return(list())
+
+  # split on commas
+  parts <- strsplit(dcf[[field]], "\\s*,\\s*")[[1]]
+
+  # drop any empty fields
+  x <- parts[nzchar(parts)]
+
+  # match to split on remote, version
+  pattern <- paste0(
+    "([^,\\([:space:]]+)",                    # remote name
+    "(?:\\s*\\(([><=]+)\\s*([0-9.-]+)\\))?"   # optional version specification
+  )
+
+  m <- regexec(pattern, x)
+  matches <- regmatches(x, m)
+  if (empty(matches))
+    return(list())
+
+  # create dependency list
+  dev <- field == "Suggests" && type != "package"
+  renv_dependencies_list(
+    path,
+    extract_chr(matches, 2L),
+    extract_chr(matches, 3L),
+    extract_chr(matches, 4L),
+    dev
+  )
 
 }
 

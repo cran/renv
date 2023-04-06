@@ -80,7 +80,7 @@ test_that("multiple libraries can be used when snapshotting", {
 
   libs <- c(lib1, lib2)
   lockfile <- renv::snapshot(lockfile = NULL, library = libs, type = "all")
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
 
   expect_length(records, 2L)
   expect_setequal(names(records), c("bread", "toast"))
@@ -97,14 +97,14 @@ test_that("implicit snapshots only include packages currently used", {
   # install toast, but don't declare that we use it
   renv::install("toast")
   lockfile <- snapshot(type = "implicit", lockfile = NULL)
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
   expect_length(records, 1L)
   expect_setequal(names(records), "oatmeal")
 
   # use toast
   writeLines("library(toast)", con = "toast.R")
   lockfile <- snapshot(type = "packrat", lockfile = NULL)
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
   expect_length(records, 3L)
   expect_setequal(names(records), c("oatmeal", "bread", "toast"))
 
@@ -119,7 +119,7 @@ test_that("explicit snapshots only capture packages in DESCRIPTION", {
 
   write.dcf(desc, file = "DESCRIPTION")
   lockfile <- snapshot(type = "explicit", lockfile = NULL)
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
   expect_true(length(records) == 2L)
   expect_true(!is.null(records[["bread"]]))
   expect_true(!is.null(records[["toast"]]))
@@ -131,11 +131,12 @@ test_that("a custom snapshot filter can be used", {
   renv_tests_scope("breakfast")
 
   settings$snapshot.type("custom")
-  options(renv.snapshot.filter = function(project) c("bread", "toast"))
+  filter <- function(project) c("bread", "toast")
+  renv_scope_options(renv.snapshot.filter = filter)
 
   renv::init()
   lockfile <- renv_lockfile_load(project = getwd())
-  expect_setequal(names(renv_records(lockfile)), c("bread", "toast"))
+  expect_setequal(names(renv_lockfile_records(lockfile)), c("bread", "toast"))
 
 })
 
@@ -145,7 +146,7 @@ test_that("snapshotted packages from CRAN include the Repository field", {
   init()
 
   lockfile <- renv_lockfile_read("renv.lock")
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
   expect_true(records$bread$Repository == "CRAN")
 
 })
@@ -175,7 +176,7 @@ test_that("snapshot ignores own package in package development scenarios", {
   writeLines("function() { library(bread) }", con = "R/deps.R")
 
   lockfile <- snapshot(lockfile = NULL)
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
   expect_true(is.null(records[["bread"]]))
 
 })
@@ -213,7 +214,7 @@ test_that("snapshot records packages discovered in cellar", {
 
   # validate the record in the lockfile
   lockfile <- snapshot(lockfile = NULL)
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
   skeleton <- records[["skeleton"]]
 
   expect_equal(skeleton$Package, "skeleton")
@@ -319,7 +320,7 @@ test_that("snapshot(packages = ...) captures package dependencies", {
 
   # check for expected records
   lockfile <- renv_lockfile_load(project = getwd())
-  records <- renv_records(lockfile)
+  records <- renv_lockfile_records(lockfile)
 
   expect_true(!is.null(records$breakfast))
   expect_true(!is.null(records$bread))
@@ -411,5 +412,32 @@ test_that("a project using explicit snapshots is marked in sync appropriately", 
 
   snapshot()
   expect_true(status()$synchronized)
+
+})
+
+test_that("we can explicitly exclude some packages from snapshot", {
+
+  skip_on_cran()
+  project <- renv_tests_scope("breakfast")
+  init()
+
+  snapshot(exclude = "oatmeal", force = TRUE)
+  lockfile <- renv_lockfile_load(project)
+  expect_null(lockfile$Packages$oatmeal)
+
+})
+
+test_that("snapshot() warns when required package is not installed", {
+
+  project <- renv_tests_scope("breakfast")
+  init()
+
+  remove("breakfast")
+  value <- tryCatch(snapshot(), renv.snapshot.missing_packages = identity)
+  expect_s3_class(value, "renv.snapshot.missing_packages")
+  install("breakfast")
+
+  remove("toast")
+  expect_error(snapshot())
 
 })

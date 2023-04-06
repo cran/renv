@@ -52,7 +52,11 @@ named <- function(object, names = object) {
 }
 
 empty <- function(x) {
-  length(x) == 0
+  length(x) == 0L
+}
+
+zlength <- function(x) {
+  length(x) != 0L
 }
 
 trim <- function(x) {
@@ -231,7 +235,7 @@ endswith <- function(string, suffix) {
 # like tools::file_ext, but includes leading '.', and preserves
 # '.tar.gz', '.tar.bz' and so on
 fileext <- function(path, default = "") {
-  indices <- regexpr("[.]((?:tar[.])?[[:alnum:]]+)$", path)
+  indices <- regexpr("[.]((?:tar[.])?[[:alnum:]]+)$", path, perl = TRUE)
   ifelse(indices > -1L, substring(path, indices), default)
 }
 
@@ -246,13 +250,9 @@ git <- function() {
 }
 
 visited <- function(name, envir) {
-
-  if (exists(name, envir = envir))
-    return(TRUE)
-
+  value <- envir[[name]] %??% FALSE
   envir[[name]] <- TRUE
-  FALSE
-
+  value
 }
 
 rowapply <- function(X, FUN, ...) {
@@ -319,7 +319,7 @@ keep <- function(x, keys) {
   x[intersect(keys, names(x))]
 }
 
-drop <- function(x, keys) {
+exclude <- function(x, keys) {
   x[setdiff(names(x), keys)]
 }
 

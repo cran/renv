@@ -7,17 +7,24 @@ index <- function(scope, key = NULL, value = NULL, limit = 3600L) {
   if (!enabled)
     return(value)
 
-  # resolve variables of interest
+  # resolve the root directory
   root <- renv_paths_index(scope)
-  key <- if (!is.null(key)) renv_index_encode(key)
-  now <- as.integer(Sys.time())
 
   # make sure the directory we're indexing exists
   memoize(
     key   = root,
-    value = ensure_directory(root),
-    scope = "index"
+    value = ensure_directory(root, umask = "0")
   )
+
+  # make sure the directory is readable / writable
+  # otherwise, attempts to lock will fail
+  # https://github.com/rstudio/renv/issues/1171
+  if (!renv_index_writable(root))
+    return(value)
+
+  # resolve other variables
+  key <- if (!is.null(key)) renv_index_encode(key)
+  now <- as.integer(Sys.time())
 
   # acquire index lock
   lockfile <- file.path(root, "index.lock")
@@ -117,6 +124,9 @@ renv_index_get <- function(root, scope, index, key, now, limit) {
 
 renv_index_set <- function(root, scope, index, key, value, now, limit) {
 
+  # files being written here should be shared
+  renv_scope_umask("0")
+
   # write data into index
   data <- tempfile("data-", tmpdir = root, fileext = ".rds")
   ensure_parent_directory(data)
@@ -177,7 +187,7 @@ renv_index_clean_impl <- function(key, entry, root, scope, index, now, limit) {
   cache[[key]] <- NULL
 
   # remove from disk
-  unlink(file.path(root, entry$data))
+  unlink(file.path(root, entry$data), force = TRUE)
 
   FALSE
 
@@ -189,4 +199,11 @@ renv_index_expired <- function(entry, now, limit) {
 
 renv_index_enabled <- function(scope, key) {
   getOption("renv.index.enabled", default = TRUE)
+}
+
+renv_index_writable <- function(root) {
+  memoize(
+    key   = root,
+    value = unname(file.access(root, 7L) == 0L)
+  )
 }
