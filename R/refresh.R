@@ -1,12 +1,12 @@
 
-#' Refresh the Local Cache of Available Packages
+#' Refresh the local cache of available packages
 #'
 #' Query the active R package repositories for available packages, and
 #' update the in-memory cache of those packages.
 #'
 #' Note that \R also maintains its own on-disk cache of available packages,
 #' which is used by `available.packages()`. Calling `refresh()` will force
-#' an update of both types of caches. `renv` prefers using an in-memory
+#' an update of both types of caches. renv prefers using an in-memory
 #' cache as on occasion the temporary directory can be slow to access (e.g.
 #' when it is a mounted network filesystem).
 #'

@@ -12,7 +12,7 @@ available_packages <- function(type,
 
     key = list(
       type = type,
-      repos = repos %??% getOption("repos"),
+      repos = repos %||% getOption("repos"),
       cellar = cellar
     ),
 
@@ -66,8 +66,8 @@ renv_available_packages_query <- function(type, repos, quiet = FALSE) {
   if (quiet)
     renv_scope_options(renv.verbose = FALSE)
 
-  fmt <- "* Querying repositories for available %s packages ... "
-  vprintf(fmt, type)
+  fmt <- "- Querying repositories for available %s packages ... "
+  printf(fmt, type)
 
   # exclude repositories which are known to not have packages available
   if (type == "binary") {
@@ -82,7 +82,7 @@ renv_available_packages_query <- function(type, repos, quiet = FALSE) {
   names(dbs) <- names(repos)
 
   # notify finished
-  vwritef("Done!")
+  writef("Done!")
 
   # propagate errors
   errors <- as.list(errors)
@@ -106,21 +106,24 @@ renv_available_packages_query <- function(type, repos, quiet = FALSE) {
 
 renv_available_packages_query_impl_packages_rds <- function(url) {
   path <- file.path(url, "PACKAGES.rds")
-  destfile <- tempfile("renv-packages-", fileext = ".rds")
+  destfile <- renv_scope_tempfile("renv-packages-", fileext = ".rds")
+
   download(url = path, destfile = destfile, quiet = TRUE)
   suppressWarnings(readRDS(destfile))
 }
 
 renv_available_packages_query_impl_packages_gz <- function(url) {
   path <- file.path(url, "PACKAGES.gz")
-  destfile <- tempfile("renv-packages-", fileext = ".gz")
+  destfile <- renv_scope_tempfile("renv-packages-", fileext = ".gz")
+
   download(url = path, destfile = destfile, quiet = TRUE)
   suppressWarnings(read.dcf(destfile))
 }
 
 renv_available_packages_query_impl_packages <- function(url) {
   path <- file.path(url, "PACKAGES")
-  destfile <- tempfile("renv-packages-")
+  destfile <- renv_scope_tempfile("renv-packages-")
+
   download(url = path, destfile = destfile, quiet = TRUE)
   suppressWarnings(read.dcf(destfile))
 }
@@ -495,8 +498,8 @@ renv_available_packages_latest_repos <- function(package,
                                                  type = NULL,
                                                  repos = NULL)
 {
-  type  <- type %??% getOption("pkgType")
-  repos <- repos %??% getOption("repos")
+  type  <- type %||% getOption("pkgType")
+  repos <- repos %||% getOption("repos")
 
   # detect requests for only source packages
   if (identical(type, "source"))
@@ -675,5 +678,25 @@ renv_available_packages_filter_version <- function(db) {
   })
 
   rows(db, ok)
+
+}
+
+# flattens available packages, keeping only the newest version
+renv_available_packages_flatten <- function(dbs) {
+
+  # stack the databases together
+  stacked <- bind(dbs)
+
+  # order by package + version
+  # TODO: 'order()' is kind of slow for numeric versions; can we do better?
+  index <- with(stacked, order(Package, numeric_version(Version), decreasing = TRUE))
+  ordered <- rows(stacked, index)
+
+  # remove duplicates
+  dupes <- duplicated(ordered$Package)
+  filtered <- rows(ordered, !dupes)
+
+  # ready to return
+  filtered
 
 }

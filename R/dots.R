@@ -6,9 +6,11 @@ renv_dots_check <- function(...) {
 
   # accept 'bioc' as an alias for 'bioconductor'
   bioc <- dots[["bioc"]]
-  if (!is.null("bioc") && exists("bioconductor", envir = parent)) {
-    assign("bioconductor", bioc, envir = parent)
-    dots[["bioc"]] <- NULL
+  if (!is.null(bioc) && exists("bioconductor", envir = parent)) {
+    if (is.null(parent$bioconductor)) {
+      assign("bioconductor", bioc, envir = parent)
+      dots[["bioc"]] <- NULL
+    }
   }
 
   # allow 'confirm' as an alias for 'prompt'
@@ -18,6 +20,7 @@ renv_dots_check <- function(...) {
     dots[["confirm"]] <- NULL
   }
 
+  # check for empty dots
   if (length(dots) == 0)
     return(TRUE)
 
@@ -32,7 +35,6 @@ renv_dots_check <- function(...) {
   n <- length(matched[["..."]])
 
   message <- paste("unused", plural("argument", n), args)
-  err <- simpleError(message = message, call = call)
-  stop(err)
+  stop(simpleError(message = message, call = call))
 
 }

@@ -20,22 +20,13 @@
 
 }
 
-`%""%` <- function(x, y) {
-  if (length(x) && nzchar(x)) x else y
-}
-
 `%NA%` <- function(x, y) {
   if (length(x) && is.na(x)) y else x
-}
-
-`%NULL%` <- function(x, y) {
-  if (is.null(x)) y else x
 }
 
 `%&&%` <- function(x, y) {
   if (length(x)) y
 }
-
 
 lines <- function(...) {
   paste(..., sep = "\n")
@@ -79,23 +70,27 @@ case <- function(...) {
     if (!inherits(dot, "formula"))
       return(dot)
 
-    else if (length(dot) == 2) {
-      expr <- dot[[2]]
-      return(eval(expr, envir = environment(dot)))
+    # Silence R CMD check note
+    expr <- NULL
+    cond <- NULL
+
+    # use delayed assignments below so we can allow return statements to
+    # be handled in the lexical scope where they were defined
+    if (length(dot) == 2L) {
+      do.call(delayedAssign, list("expr", dot[[2L]], eval.env = environment(dot)))
+      return(expr)
     }
 
-    else {
+    do.call(delayedAssign, list("cond", dot[[2L]], eval.env = environment(dot)))
+    do.call(delayedAssign, list("expr", dot[[3L]], eval.env = environment(dot)))
+    if (cond) return(expr)
 
-      cond <- dot[[2]]
-      expr <- dot[[3]]
-      if (eval(cond, envir = environment(dot)))
-        return(eval(expr, envir = environment(dot)))
-
-    }
   }
 
-  NULL
+}
 
+compose <- function(wrapper, callback) {
+  function(...) wrapper(callback(...))
 }
 
 catch <- function(expr) {
@@ -143,32 +138,72 @@ ask <- function(question, default = FALSE) {
     )
 
     # check for interrupts; treat as abort request
-    if (inherits(response, "interrupt")) {
-      renv_report_user_cancel()
-      invokeRestart("abort")
-    }
+    cancel_if(inherits(response, "interrupt"))
 
     # use default when no response
     if (!nzchar(response))
       return(default)
 
     # check for 'yes' responses
-    if (response %in% c("y", "yes"))
+    if (response %in% c("y", "yes")) {
+      writef("")
       return(TRUE)
+    }
 
     # check for 'no' responses
-    if (response %in% c("n", "no"))
+    if (response %in% c("n", "no")) {
+      writef("")
       return(FALSE)
+    }
 
     # ask the user again
-    writef("* Unrecognized response: please enter 'y' or 'n', or type Ctrl + C to cancel.")
+    writef("- Unrecognized response: please enter 'y' or 'n', or type Ctrl + C to cancel.")
 
   }
 
 }
 
-proceed <- function(default = FALSE) {
+proceed <- function(default = TRUE) {
   ask("Do you want to proceed?", default = default)
+}
+
+menu <- function(choices, title, default = 1L) {
+  testing <- getOption("renv.menu.choice", integer())
+  if (length(testing)) {
+    selected <- testing[[1]]
+    options(renv.menu.choice = testing[-1])
+  } else if (is_testing()) {
+    selected <- default
+  } else {
+    selected <- NULL
+  }
+
+  if (!is.null(selected)) {
+    writef(c(
+      title,
+      "",
+      paste0(seq_along(choices), ": ", choices),
+      "",
+      paste0("Selection: ", selected),
+      ""
+    ))
+    return(names(choices)[selected])
+  }
+
+  if (!interactive()) {
+    writef(c("Not interactive. Will:", choices[[default]]))
+    return(default)
+  }
+
+  idx <- tryCatch(
+    utils::menu(choices, paste(title, collapse = "\n"), graphics = FALSE),
+    interrupt = function(cnd) 0L
+  )
+  if (idx == 0L) {
+    "cancel"
+  } else {
+    names(choices)[idx]
+  }
 }
 
 # nocov end
@@ -224,10 +259,6 @@ trunc <- function(text, n = 78) {
   text
 }
 
-startswith <- function(string, prefix) {
-  substring(string, 1, nchar(prefix)) == prefix
-}
-
 endswith <- function(string, suffix) {
   substring(string, nchar(string) - nchar(suffix) + 1) == suffix
 }
@@ -239,18 +270,8 @@ fileext <- function(path, default = "") {
   ifelse(indices > -1L, substring(path, indices), default)
 }
 
-git <- function() {
-
-  gitpath <- Sys.which("git")
-  if (!nzchar(gitpath))
-    stop("failed to find git executable on the PATH")
-
-  gitpath
-
-}
-
 visited <- function(name, envir) {
-  value <- envir[[name]] %??% FALSE
+  value <- envir[[name]] %||% FALSE
   envir[[name]] <- TRUE
   value
 }
@@ -273,7 +294,7 @@ quietly <- function(expr, sink = TRUE) {
 
   if (sink) {
     sink(file = nullfile())
-    on.exit(sink(NULL), add = TRUE)
+    defer(sink(NULL))
   }
 
   withCallingHandlers(
@@ -285,6 +306,8 @@ quietly <- function(expr, sink = TRUE) {
 
 }
 
+# NOTE: This function can be used in preference to `as.*()` if you'd like
+# to preserve attributes on the incoming object 'x'.
 convert <- function(x, type) {
   storage.mode(x) <- type
   x
@@ -298,20 +321,6 @@ remap <- function(x, map) {
     remapped[remapped == key] <<- val
   })
   remapped
-
-}
-
-header <- function(label,
-                   prefix = "#",
-                   suffix = "=",
-                   n = 38L)
-{
-  n <- n - nchar(label) - nchar(prefix) - 2L
-  if (n <= 0)
-    return(paste(prefix, label))
-
-  tail <- paste(rep.int(suffix, n), collapse = "")
-  paste(prefix, label, tail)
 
 }
 
@@ -353,7 +362,7 @@ nth <- function(x, i) {
   x[[i]]
 }
 
-heredoc <- function(text) {
+heredoc <- function(text, leave = 0) {
 
   # remove leading, trailing whitespace
   trimmed <- gsub("^\\s*\\n|\\n\\s*$", "", text)
@@ -363,7 +372,7 @@ heredoc <- function(text) {
 
   # compute common indent
   indent <- regexpr("[^[:space:]]", lines)
-  common <- min(setdiff(indent, -1L))
+  common <- min(setdiff(indent, -1L)) - leave
   paste(substring(lines, common), collapse = "\n")
 
 }
@@ -390,14 +399,6 @@ recursing <- function() {
 
 }
 
-code <- function(x) {
-  paste(deparse(substitute(x)), collapse = "\n")
-}
-
-shcode <- function(x) {
-  shQuote(paste(deparse(substitute(x)), collapse = "\n"))
-}
-
 csort <- function(x, decreasing = FALSE, ...) {
   renv_scope_locale("LC_COLLATE", "C")
   sort(x, decreasing, ...)
@@ -405,11 +406,6 @@ csort <- function(x, decreasing = FALSE, ...) {
 
 fsub <- function(pattern, replacement, x, ignore.case = FALSE, useBytes = FALSE) {
   sub(pattern, replacement, x, ignore.case = ignore.case, useBytes = useBytes, fixed = TRUE)
-}
-
-# catch erroneous usages of unique
-unique <- function(x) {
-  base::unique(x)
 }
 
 rows <- function(data, indices) {
@@ -505,4 +501,63 @@ recycle <- function(data) {
 
   data
 
+}
+
+take <- function(data, index = NULL) {
+  if (is.null(index)) data else .subset2(data, index)
+}
+
+cancel <- function() {
+
+  renv_snapshot_auto_suppress_next()
+  if (is_testing())
+    stop("Operation canceled", call. = FALSE)
+
+  message("- Operation canceled.")
+  invokeRestart("abort")
+
+}
+
+cancel_if <- function(cnd) {
+  if (cnd) cancel()
+}
+
+rep_named <- function(names, x) {
+  values <- rep_len(x, length(names))
+  names(values) <- names
+  values
+}
+
+wait_until <- function(callback, ...) {
+  repeat if (callback(...)) return(TRUE)
+}
+
+timer <- function(units = "secs") {
+
+  .time <- Sys.time()
+  .units <- units
+
+  list(
+
+    now = function() {
+      Sys.time()
+    },
+
+    elapsed = function() {
+      difftime(Sys.time(), .time, units = .units)
+    }
+  )
+
+}
+
+summon <- function() {
+  envir <- do.call(attach, list(what = NULL, name = "renv"))
+  renv <- renv_envir_self()
+  list2env(as.list(renv), envir = envir)
+}
+
+assert <- function(...) stopifnot(...)
+
+overlay <- function(lhs, rhs) {
+  modifyList(as.list(lhs), as.list(rhs))
 }

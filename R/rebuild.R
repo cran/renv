@@ -1,5 +1,5 @@
 
-#' Rebuild the Packages in your Project Library
+#' Rebuild the packages in your project library
 #'
 #' Rebuild and reinstall packages in your library. This can be useful as a
 #' diagnostic tool -- for example, if you find that one or more of your
@@ -14,7 +14,7 @@
 #' @param recursive Boolean; should dependencies of packages be rebuilt
 #'   recursively? Defaults to `TRUE`.
 #'
-#' @return A named list of package records which were installed by `renv`.
+#' @return A named list of package records which were installed by renv.
 #'
 #' @export
 #'
@@ -59,7 +59,7 @@ rebuild <- function(packages  = NULL,
   # make sure records are named
   names(records) <- map_chr(records, `[[`, "Package")
   if (empty(records)) {
-    vwritef("* There are no packages currently installed -- nothing to rebuild.")
+    writef("- There are no packages currently installed -- nothing to rebuild.")
     return(invisible(records))
   }
 
@@ -73,12 +73,8 @@ rebuild <- function(packages  = NULL,
   else
     "The following package(s) will be reinstalled:"
 
-  renv_pretty_print_records(records[packages], preamble)
-
-  if (prompt && !proceed()) {
-    renv_report_user_cancel()
-    invokeRestart("abort")
-  }
+  renv_pretty_print_records(preamble, records[packages])
+  cancel_if(prompt && !proceed())
 
   # figure out rebuild parameter
   rebuild <- if (recursive) NA else packages

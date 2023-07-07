@@ -1,5 +1,7 @@
 
-renv_restart_request <- function(project, reason, ...) {
+renv_restart_request <- function(project = NULL, reason = "", ...) {
+
+  project <- renv_project_resolve(project)
 
   # if we're running in RStudio, explicitly open the project
   # if it differs from the current project
@@ -21,8 +23,8 @@ renv_restart_request_default <- function(project, reason, ...) {
 
   # otherwise, ask the user to restart
   if (interactive()) {
-    fmt <- "* %s -- please restart the R session."
-    vwritef(fmt, sprintf(reason, ...), con = stderr())
+    fmt <- "- %s -- please restart the R session."
+    writef(fmt, sprintf(reason, ...))
   }
 
 }

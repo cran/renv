@@ -1,19 +1,26 @@
 
-#' Install Packages
+# an explicitly-requested package type in a call to 'install()'
+the$install_pkg_type <- NULL
+
+# the formatted width of installation steps printed to the console
+the$install_step_width <- 48L
+
+#' Install packages
 #'
+#' @description
 #' Install one or more \R packages, from a variety of remote sources.
-#'
-#' `install()` uses the same machinery as [restore()] when installing packages.
+#' `install()` uses the same machinery as [restore()] for package installation.
 #' In particular, this means that the local cache of package installations is
 #' used when possible. This helps to avoid re-downloading packages that have
 #' already been downloaded before, and re-compiling packages from source when
 #' a binary copy of that package is already available.
 #'
+#' See `vignette("package-install")` for more details.
 #'
-#' @section Project DESCRIPTION Files:
+#' # Project `DESCRIPTION` files
 #'
 #' If your project contains a `DESCRIPTION` file, then calling `install()`
-#' without any arguments will instruct `renv` to install the latest versions of
+#' without any arguments will instruct renv to install the latest versions of
 #' all packages as declared within that `DESCRIPTION` file's `Depends`,
 #' `Imports` and `LinkingTo` fields; similar to how an \R package might declare
 #' its dependencies.
@@ -30,20 +37,7 @@
 #' Otherwise, you can declare the package sources in your `DESCRIPTION`'s
 #' `Remotes:` field.
 #'
-#'
-#' @section Remotes Syntax:
-#'
-#' `renv` supports a subset of the `remotes` syntax used for package installation,
-#' as described in <https://remotes.r-lib.org/articles/dependencies.html>. See
-#' the examples below for more details.
-#'
-#' If you wish to install packages from an external source requiring authentication
-#' (e.g. a private GitHub repository), see the **Authentication** documentation
-#' online at <https://rstudio.github.io/renv/articles/renv.html#authentication>,
-#' or view the documentation locally in the **Getting Started** vignette with
-#' `vignette("renv", package = "renv")`.
-#'
-#' @section Bioconductor:
+#' # Bioconductor
 #'
 #' Packages from Bioconductor can be installed by using the `bioc::` prefix.
 #' For example,
@@ -52,56 +46,33 @@
 #' renv::install("bioc::Biobase")
 #' ```
 #'
-#' will install the latest-available version of `Biobase` from Bioconductor.
+#' will install the latest-available version of Biobase from Bioconductor.
 #'
-#' `renv` depends on `BiocManager` (or, for older versions of \R, `BiocInstaller`)
+#' renv depends on BiocManager (or, for older versions of \R, BiocInstaller)
 #' for the installation of packages from Bioconductor. If these packages are
-#' not available, `renv` will attempt to automatically install them before
+#' not available, renv will attempt to automatically install them before
 #' fulfilling the installation request.
 #'
-#'
-#' @section Package Configuration:
-#'
-#' Many \R packages have a `configure` script that needs to be run to prepare
-#' the package for installation. Arguments and environment variables can be
-#' passed through to those scripts in a manner similar to [install.packages].
-#' In particular, the \R options `configure.args` and `configure.vars` can be
-#' used to map package names to their appropriate configuration. For example:
-#'
-#' ```
-#' # installation of RNetCDF may require us to set include paths for netcdf
-#' configure.args = c(RNetCDF = "--with-netcdf-include=/usr/include/udunits2"))
-#' options(configure.args = configure.args)
-#' renv::install("RNetCDF")
-#' ```
-#'
-#' This could also be specified as, for example,
-#'
-#' ```
-#' options(
-#'   configure.args.RNetCDF = "--with-netcdf-include=/usr/include/udunits2"
-#' )
-#' renv::install("RNetCDF")
-#' ```
-#'
-#' Similarly, additional flags that should be passed to `R CMD INSTALL` can
-#' be set via the `install.opts` \R option:
-#'
-#' ```
-#' # installation of R packages using the Windows Subsystem for Linux
-#' # may require the `--no-lock` flag to be set during install
-#' options(install.opts = "--no-lock")
-#' renv::install("xml2")
-#'
-#' # alternatively, you can set such options for specific packages with e.g.
-#' options(install.opts = list(xml2 = "--no-lock"))
-#' renv::install("xml2")
-#' ```
-#'
 #' @inherit renv-params
-#' @inheritParams install-params
+#' @param packages Either `NULL` (the default) to install all packages required
+#'  by the project, or a character vector of packages to install. renv
+#'  supports a subset of the remotes syntax used for package installation,
+#'  e.g:
 #'
-#' @return A named list of package records which were installed by `renv`.
+#'  * `pkg`: install latest version of `pkg` from CRAN.
+#'  * `pkg@version`: install specified version of `pkg` from CRAN.
+#'  * `username/repo`: install package from GitHub
+#'  * `bioc::pkg`: install `pkg` from Bioconductor.
+#'
+#'  See <https://remotes.r-lib.org/articles/dependencies.html> and the examples
+#'  below for more details.
+#'
+#'  renv deviates from the remotes spec in one important way: subdirectories
+#'  are separated from the main repository specification with a `:`, not `/`.
+#'  So to install from the `subdir` subdirectory of GitHub package
+#'  `username/repo` you'd use `"username/repo:subdir`.
+#'
+#' @return A named list of package records which were installed by renv.
 #'
 #' @export
 #'
@@ -145,23 +116,30 @@ install <- function(packages = NULL,
   renv_scope_error_handler()
 
   # allow user to provide additional package names as part of '...'
-  dots <- list(...)
-  names(dots) <- names(dots) %||% rep.int("", length(dots))
-  packages <- c(packages, dots[!nzchar(names(dots))])
+  if (!missing(...)) {
+    dots <- list(...)
+    names(dots) <- names(dots) %||% rep.int("", length(dots))
+    packages <- c(packages, dots[!nzchar(names(dots))])
+  }
 
   project <- renv_project_resolve(project)
   renv_project_lock(project = project)
 
+  # handle 'dependencies'
   if (!is.null(dependencies)) {
     fields <- renv_description_dependency_fields(dependencies, project = project)
     renv_scope_options(renv.settings.package.dependency.fields = fields)
   }
 
+  # set up library paths
   libpaths <- renv_libpaths_resolve(library)
   renv_scope_libpaths(libpaths)
 
-  type <- type %||% getOption("pkgType")
-  renv_scope_options(pkgType = type)
+  # check for explicitly-provided type -- we handle this specially for PPM
+  if (!is.null(type)) {
+    renv_scope_binding(the, "install_pkg_type", type)
+    renv_scope_options(pkgType = type)
+  }
 
   # override repositories if requested
   repos <- repos %||% config$repos.override()
@@ -174,68 +152,74 @@ install <- function(packages = NULL,
     return(renv_pak_install(packages, libpaths, project))
   }
 
-  # get and resolve the packages / remotes to be installed
-  remotes <- packages %||% renv_project_remotes(project, dependencies)
-  if (empty(remotes)) {
-    vwritef("* There are no packages to install.")
+  # resolve remotes from explicitly-requested packages
+  remotes <- if (length(packages)) {
+    remotes <- map(packages, renv_remotes_resolve)
+    names(remotes) <- map_chr(remotes, `[[`, "Package")
+    remotes
+  }
+
+  # figure out which packages we should install
+  packages <- names(remotes) %||% renv_snapshot_dependencies(project, dev = TRUE)
+  if (empty(packages)) {
+    writef("- There are no packages to install.")
     return(invisible(list()))
   }
 
-  # resolve remotes
-  remotes <- lapply(remotes, renv_remotes_resolve)
-  names(remotes) <- extract_chr(remotes, "Package")
-
-  # update records with requested remotes
-  records <- renv_snapshot_libpaths(libpaths = libpaths, project = project)
-  records[names(remotes)] <- remotes
-
-  # read remotes from the package DESCRIPTION file and use those to
-  # update non-specific package requests
-  records <- renv_install_remotes_update(records, project)
-
-  if (!renv_install_preflight(project, libpaths, remotes, prompt)) {
-    renv_report_user_cancel()
-    invokeRestart("abort")
+  # add bioconductor packages if necessary
+  if (renv_bioconductor_required(remotes)) {
+    bioc <- c(renv_bioconductor_manager(), "BiocVersion")
+    packages <- unique(c(packages, bioc))
   }
 
-  # ensure package names are resolved if provided
-  packages <- if (length(packages)) names(remotes)
+  # don't update renv unless it was explicitly requested
+  if (!"renv" %in% names(remotes))
+    packages <- setdiff(packages, "renv")
 
-  before <- Sys.time()
+  # start building a list of records; they should be resolved this priority:
+  #
+  # 1. explicit requests from the user
+  # 2. remotes declarations from the DESCRIPTION file
+  # 3. existing version in library, if any
+  # 4. fallback to package repositories
+  #
+  # we overlay 1 and 2 here, and then do 3 and 4 dynamically if required
+  # during the retrieve + install stages
+  records <- overlay(renv_project_remotes(project), remotes)
+
+  # run install preflight checks
+  if (!renv_install_preflight(project, libpaths, records))
+    cancel_if(prompt && !proceed())
+
+  # we're now ready to start installation
   renv_scope_restore(
     project  = project,
     library  = renv_libpaths_active(),
+    packages = names(remotes),
     records  = records,
-    packages = packages,
     rebuild  = rebuild
   )
 
   # retrieve packages
-  records <- retrieve(names(remotes))
+  records <- retrieve(packages)
   if (empty(records)) {
-    vwritef("* There are no packages to install.")
+    writef("- There are no packages to install.")
     return(invisible(list()))
   }
 
+  if (prompt || renv_verbose()) {
+    renv_install_report(records, library = renv_libpaths_active())
+    cancel_if(prompt && !proceed())
+  }
+
   # install retrieved records
+  before <- Sys.time()
   renv_install_impl(records)
-
   after <- Sys.time()
-  if (!renv_tests_running()) {
-    time <- renv_difftime_format(difftime(after, before))
-    n <- length(records)
-    vwritef("* Installed %s in %s.", nplural("package", n), time)
-  }
 
-  # a bit of extra test reporting
-  if (renv_tests_running()) {
-    fmt <- "Installed %s into library at path %s."
-    vwritef(
-      fmt,
-      nplural("package", length(records)),
-      renv_path_pretty(renv_libpaths_active())
-    )
-  }
+  time <- renv_difftime_format(difftime(after, before))
+  n <- length(records)
+  writef("Successfully installed %s in %s.", nplural("package", n), time)
 
   # check loaded packages and inform user if out-of-sync
   renv_install_postamble(names(records))
@@ -247,10 +231,15 @@ renv_install_impl <- function(records) {
 
   staged <- renv_config_install_staged()
 
+  writef(header("Installing packages"))
+  writef("")
+
   if (staged)
     renv_install_staged(records)
   else
     renv_install_default(records)
+
+  writef("")
 
   invisible(TRUE)
 
@@ -263,7 +252,7 @@ renv_install_staged <- function(records) {
 
   # set up a dummy library path for installation
   templib <- renv_install_staged_library_path()
-  on.exit(unlink(templib, recursive = TRUE), add = TRUE)
+  defer(unlink(templib, recursive = TRUE))
   renv_scope_libpaths(c(templib, libpaths))
 
   # perform the install
@@ -287,35 +276,43 @@ renv_install_staged <- function(records) {
 
 renv_install_staged_library_path_impl <- function() {
 
-  # allow user configuration of staged library location
-
-  # retrieve current project, library path
-  staging <- Sys.getenv("RENV_PATHS_LIBRARY_STAGING", unset = NA)
-  project <- Sys.getenv("RENV_PROJECT", unset = NA)
+  # get current library path
   libpath <- renv_libpaths_active()
 
-  # determine root directory for staging
-  root <- if (!is.na(staging))
-    staging
-  else if (!is.na(project))
-    renv_paths_renv("staging", project = project)
-  else
+  # retrieve current project, library path
+  stagedlib <- local({
+
+    # allow user configuration of staged library location
+    override <- Sys.getenv("RENV_PATHS_LIBRARY_STAGING", unset = NA)
+    if (!is.na(override))
+      return(override)
+
+    # if we have an active project, use that path
+    project <- renv_project_get(default = NULL)
+    if (!is.null(project))
+      return(renv_paths_renv("staging", project = project))
+
+    # otherwise, stage within library path
     file.path(libpath, ".renv")
 
+  })
+
   # attempt to create it
-  ok <- catch(ensure_directory(root))
+  ok <- catch(ensure_directory(stagedlib))
   if (inherits(ok, "error"))
-    return(tempfile("renv-staging"))
+    return(tempfile("renv-staging-"))
 
   # resolve a unique staging directory in this path
+  # we want to keep paths short just in case; it's easy to blow up the
+  # path length limit (hence we don't use tempfile below)
   for (i in 1:100) {
-    path <- file.path(root, i)
+    path <- file.path(stagedlib, i)
     if (dir.create(path, showWarnings = FALSE))
       return(path)
   }
 
   # all else fails, use tempfile
-  tempfile("renv-staging")
+  tempfile("renv-staging-")
 
 }
 
@@ -346,7 +343,7 @@ renv_install_staged_library_path <- function() {
   if (!renv_platform_windows()) {
     libpath <- renv_libpaths_active()
     umask <- Sys.umask("0")
-    on.exit(Sys.umask(umask), add = TRUE)
+    defer(Sys.umask(umask))
     info <- renv_file_info(libpath)
     Sys.chmod(path, info$mode)
   }
@@ -359,6 +356,7 @@ renv_install_staged_library_path <- function() {
 renv_install_default <- function(records) {
   state <- renv_restore_state()
   handler <- state$handler
+
   for (record in records) {
     package <- record$Package
     handler(package, renv_install_package(record))
@@ -396,10 +394,7 @@ renv_install_package <- function(record) {
   before <- Sys.time()
   withCallingHandlers(
     renv_install_package_impl(record),
-    error = function(e) {
-      vwritef("\tFAILED")
-      writef(e$output)
-    }
+    error = function(e) writef("FAILED")
   )
   after <- Sys.time()
 
@@ -407,12 +402,17 @@ renv_install_package <- function(record) {
   type <- renv_package_type(path, quiet = TRUE)
   feedback <- renv_install_package_feedback(path, type)
 
-  elapsed <- difftime(after, before, units = "auto")
-  vwritef("\tOK [%s in %s]", feedback, renv_difftime_format(elapsed))
 
   # link into cache
-  if (renv_cache_config_enabled(project = project))
+  if (renv_cache_config_enabled(project = project)) {
     renv_cache_synchronize(record, linkable = linkable)
+    feedback <- paste0(feedback, " and cached")
+  }
+
+  elapsed <- difftime(after, before, units = "auto")
+  renv_install_step_ok(feedback, time = elapsed)
+
+  invisible()
 
 }
 
@@ -438,23 +438,22 @@ renv_install_package_cache <- function(record, cache, linker) {
 
   # back up the previous installation if needed
   callback <- renv_file_backup(target)
-  on.exit(callback(), add = TRUE)
+  defer(callback())
 
   # report successful link to user
-  fmt <- "Installing %s [%s] ..."
-  with(record, vwritef(fmt, Package, Version))
+  renv_install_step_start("Installing", record$Package)
 
   before <- Sys.time()
   linker(cache, target)
   after <- Sys.time()
 
   type <- case(
-    identical(linker, renv_file_copy) ~ "copied",
-    identical(linker, renv_file_link) ~ "linked"
+    identical(linker, renv_file_copy) ~ "copied from cache",
+    identical(linker, renv_file_link) ~ "linked from cache"
   )
 
   elapsed <- difftime(after, before, units = "auto")
-  vwritef("\tOK [%s cache in %s]", type, renv_difftime_format(elapsed))
+  renv_install_step_ok(type, time = elapsed)
 
   return(TRUE)
 
@@ -472,11 +471,6 @@ renv_install_package_cache_skip <- function(record, cache) {
 
   renv_file_same(cache, target)
 
-}
-
-renv_install_package_preamble <- function(record) {
-  fmt <- "Installing %s [%s] ..."
-  with(record, vwritef(fmt, Package, Version))
 }
 
 renv_install_package_impl_prebuild <- function(record, path, quiet) {
@@ -507,8 +501,7 @@ renv_install_package_impl_prebuild <- function(record, path, quiet) {
     path <- file.path(exdir, pkgpath)
 
     # and ensure we build in this directory
-    owd <- setwd(path)
-    on.exit(setwd(owd), add = TRUE)
+    renv_scope_wd(path)
 
   }
 
@@ -519,12 +512,11 @@ renv_install_package_impl_prebuild <- function(record, path, quiet) {
   builder <- desc[["VignetteBuilder"]]
   if (!is.null(builder) && !renv_package_installed(builder)) {
     fmt <- "Skipping package build: vignette builder '%s' is not installed"
-    vwritef(fmt, builder)
+    writef(fmt, builder)
     return(path)
   }
 
-  fmt <- "Building %s [%s] ..."
-  with(record, vwritef(fmt, Package, Version))
+  renv_install_step_start("Building", record$Package)
 
   before <- Sys.time()
   package <- record$Package
@@ -532,8 +524,7 @@ renv_install_package_impl_prebuild <- function(record, path, quiet) {
   after <- Sys.time()
   elapsed <- difftime(after, before, units = "auto")
 
-  fmt <- "\tOK [built package in %s]"
-  vwritef(fmt, renv_difftime_format(elapsed))
+  renv_install_step_ok("from source", time = elapsed)
 
   newpath
 
@@ -563,9 +554,7 @@ renv_install_package_impl <- function(record, quiet = TRUE) {
 
   # check whether we should build before install
   path <- renv_install_package_impl_prebuild(record, path, quiet)
-
-  # report that we're about to start installation
-  renv_install_package_preamble(record)
+  renv_install_step_start("Installing", record$Package)
 
   # run user-defined hooks before, after install
   options <- renv_install_package_options(package)
@@ -573,16 +562,16 @@ renv_install_package_impl <- function(record, quiet = TRUE) {
   after  <- options$after.install %||% identity
 
   before(package)
-  on.exit(after(package), add = TRUE)
+  defer(after(package))
 
   # backup an existing installation of the package if it exists
   library <- renv_libpaths_active()
   destination <- file.path(library, package)
   callback <- renv_file_backup(destination)
-  on.exit(callback(), add = TRUE)
+  defer(callback())
 
   # normalize paths
-  path <- renv_path_normalize(path, winslash = "/", mustWork = TRUE)
+  path <- renv_path_normalize(path, mustWork = TRUE)
 
   # get library path
   library <- renv_libpaths_active()
@@ -594,7 +583,7 @@ renv_install_package_impl <- function(record, quiet = TRUE) {
   # https://github.com/rstudio/renv/issues/611
   installpath <- file.path(library, package)
   callback <- renv_file_backup(installpath)
-  on.exit(callback(), add = TRUE)
+  defer(callback())
 
   # if this failed for some reason, just remove it
   if (renv_file_broken(installpath))
@@ -602,9 +591,9 @@ renv_install_package_impl <- function(record, quiet = TRUE) {
 
   # if this is the path to an unpacked binary archive,
   # we can just copy the folder over
-  copyable <-
-    renv_file_type(path, symlinks = FALSE) == "directory" &&
-    renv_package_type(path, quiet = TRUE) == "binary"
+  isdir <- renv_file_type(path, symlinks = FALSE) == "directory"
+  isbin <- renv_package_type(path, quiet = TRUE) == "binary"
+  copyable <- isdir && isbin
 
   # shortcut via copying a binary directory if possible,
   # otherwise, install the package
@@ -613,11 +602,70 @@ renv_install_package_impl <- function(record, quiet = TRUE) {
   else
     r_cmd_install(package, path)
 
+  # if we just installed a binary package, check that it can be loaded
+  # (source packages are checked by default on install)
+  withCallingHandlers(
+    if (isbin) renv_install_test(package),
+    error = function(err) unlink(installpath, recursive = TRUE)
+  )
+
   # augment package metadata after install
   renv_package_augment(installpath, record)
 
   # return the path to the package
   invisible(installpath)
+
+}
+
+renv_install_test <- function(package) {
+
+  # add escape hatch, just in case
+  # (test binaries by default on Linux, but not Windows or macOS)
+  enabled <- Sys.getenv("RENV_INSTALL_TEST_LOAD", unset = renv_platform_linux())
+  if (!truthy(enabled))
+    return(TRUE)
+
+  # check whether we should skip installation testing
+  opts <- r_cmd_install_option(package, c("install.opts", "INSTALL_opts"), FALSE)
+  if (is.character(opts)) {
+    flags <- unlist(strsplit(opts, "\\s+", perl = TRUE))
+    if ("--no-test-load" %in% flags)
+      return(TRUE)
+  }
+
+  # make sure we use the current library paths in the launched process
+  rlibs <- paste(renv_libpaths_all(), collapse = .Platform$path.sep)
+  renv_scope_envvars(R_LIBS = rlibs, R_LIBS_USER = "NULL", R_LIBS_SITE = "NULL")
+
+  # also hide from user .Renviron files
+  # https://github.com/wch/r-source/blob/1c0a2dc8ce6c05f68e1959ffbe6318a309277df3/src/library/tools/R/check.R#L273-L276
+  renv_scope_envvars(R_ENVIRON_USER = "NULL")
+
+  # make sure R_TESTS is unset here, just in case
+  # https://github.com/wch/r-source/blob/1c0a2dc8ce6c05f68e1959ffbe6318a309277df3/src/library/tools/R/install.R#L76-L79
+  renv_scope_envvars(R_TESTS = NULL)
+
+  # the actual code we'll run in the other process
+  fmt <- heredoc("
+    options(warn = 1L)
+    library(%s)
+  ")
+
+  code <- sprintf(fmt, package)
+
+  # write it to a tempfile
+  script <- renv_scope_tempfile("renv-install-")
+  writeLines(code, con = script)
+
+  # check that the package can be loaded in a separate process
+  renv_system_exec(
+    command = R(),
+    args    = c("--vanilla", "-s", "-f", renv_shell_path(script)),
+    action  = sprintf("testing if '%s' can be loaded", package)
+  )
+
+  # return TRUE to indicate successful validation
+  TRUE
 
 }
 
@@ -674,10 +722,9 @@ renv_install_preflight_requirements <- function(records) {
   text <- sprintf(fmt, format(package), format(requires), format(actual))
   if (renv_verbose()) {
     renv_pretty_print(
-      text,
       "The following issues were discovered while preparing for installation:",
-      "Installation of these packages may not succeed.",
-      wrap = FALSE
+      text,
+      "Installation of these packages may not succeed."
     )
   }
 
@@ -693,49 +740,15 @@ renv_install_postamble <- function(packages) {
 
   # only diagnose packages currently loaded
   packages <- renv_vector_intersect(packages, loadedNamespaces())
-  if (empty(packages))
-    return(TRUE)
 
-  # get version of package in library
   installed <- map_chr(packages, renv_package_version)
-
-  # get version of package currently loaded
   loaded <- map_chr(packages, renv_namespace_version)
 
-  # collect into data.frame
-  data <- data.frame(
-    Package   = packages,
-    Installed = installed,
-    Loaded    = loaded,
-    stringsAsFactors = FALSE
+  renv_pretty_print(
+    c("", "The following loaded package(s) have been updated:"),
+    packages[installed != loaded],
+    "Restart your R session to use the new versions."
   )
-
-  # only keep mismatches
-  mismatches <- data[data$Installed != data$Loaded, ]
-  if (nrow(mismatches) == 0)
-    return(TRUE)
-
-  # format and print
-  text <- with(mismatches, {
-    fmt <- "%s [installed version %s != loaded version %s]"
-    sprintf(fmt, format(Package), format(Installed), format(Loaded))
-  })
-
-  if (renv_tests_running()) {
-    condition <- "renv.install.restart_required"
-    renv_condition_signal(condition)
-  }
-
-  # nocov start
-  if (renv_verbose()) {
-    renv_pretty_print(
-      text,
-      "The following package(s) have been updated:",
-      "Consider restarting the R session and loading the newly-installed packages.",
-      wrap = FALSE
-    )
-  }
-  # nocov end
 
   TRUE
 
@@ -748,9 +761,8 @@ renv_install_preflight_unknown_source <- function(records) {
 renv_install_preflight_permissions <- function(library) {
 
   # try creating and deleting a directory in the library folder
-  file <- tempfile(".renv-write-test-", tmpdir = library)
+  file <- renv_scope_tempfile(".renv-write-test-", tmpdir = library)
   dir.create(file, recursive = TRUE, showWarnings = FALSE)
-  on.exit(unlink(file, recursive = TRUE), add = TRUE)
 
   # check if we created the directory successfully
   info <- renv_file_info(file)
@@ -770,10 +782,9 @@ renv_install_preflight_permissions <- function(library) {
 
     # print it
     renv_pretty_print(
-      values = library,
       preamble = preamble,
-      postamble = postamble,
-      wrap = FALSE
+      values = library,
+      postamble = postamble
     )
 
   }
@@ -783,53 +794,34 @@ renv_install_preflight_permissions <- function(library) {
 
 }
 
-renv_install_preflight <- function(project, libpaths, records, prompt) {
+renv_install_preflight <- function(project, libpaths, records) {
 
-  # check for packages installed from an unknown source
   library <- nth(libpaths, 1L)
 
-  ok <- all(
+  all(
     renv_install_preflight_unknown_source(records),
     renv_install_preflight_permissions(library)
   )
 
-  if (ok)
-    return(TRUE)
-
-  if (prompt && !proceed())
-    return(FALSE)
-
-  TRUE
-
 }
 
-renv_install_remotes_update <- function(records, project) {
+renv_install_report <- function(records, library) {
+  renv_pretty_print_records(
+    "The following package(s) will be installed:",
+    records,
+    sprintf("These packages will be installed into %s.", renv_path_pretty(library))
+  )
+}
 
-  # check for DESCRIPTION file
-  descpath <- file.path(project, "DESCRIPTION")
-  if (!file.exists(descpath))
-    return(records)
+renv_install_step_start <- function(action, package) {
+  message <- sprintf("- %s %s ... ", action, package)
+  printf(format(message, width = the$install_step_width))
+}
 
-  # read Remotes field (if any)
-  remotes <- renv_description_remotes(descpath)
-  if (empty(remotes))
-    return(records)
-
-  # update records as appropriate
-  enumerate(remotes, function(package, remote) {
-
-    record <- records[[package]]
-
-    update <-
-      is.null(record) ||
-      identical(record, list(Package = package, Source = "Repository"))
-
-    if (update)
-      records[[package]] <<- remote
-
-  })
-
-  # return updated set of records
-  records
-
+renv_install_step_ok <- function(..., time = NULL) {
+  writef(
+    "OK [%s in %s]",
+    paste(..., collapse = ""),
+    renv_difftime_format_short(time)
+  )
 }

@@ -1,15 +1,21 @@
 
-renv_bioconductor_init <- function(library = NULL) {
+renv_bioconductor_manager <- function() {
   if (getRversion() >= "3.5.0")
+    "BiocManager"
+  else
+    "BiocInstaller"
+}
+
+renv_bioconductor_init <- function(library = NULL) {
+  renv_scope_options(renv.verbose = FALSE)
+
+  if (identical(renv_bioconductor_manager(), "BiocManager"))
     renv_bioconductor_init_biocmanager(library)
   else
     renv_bioconductor_init_biocinstaller(library)
 }
 
 renv_bioconductor_init_biocmanager <- function(library = NULL) {
-
-  if (renv_package_checking())
-    return(TRUE)
 
   library <- library %||% renv_libpaths_active()
   if (renv_package_installed("BiocManager", lib.loc = library))
@@ -23,16 +29,12 @@ renv_bioconductor_init_biocmanager <- function(library = NULL) {
 
 renv_bioconductor_init_biocinstaller <- function(library = NULL) {
 
-  if (renv_package_checking())
-    return(TRUE)
-
   library <- library %||% renv_libpaths_active()
   if (renv_package_installed("BiocInstaller", lib.loc = library))
     return(TRUE)
 
   url <- "https://bioconductor.org/biocLite.R"
-  destfile <- tempfile("renv-bioclite-", fileext = ".R")
-  on.exit(unlink(destfile), add = TRUE)
+  destfile <- renv_scope_tempfile("renv-bioclite-", fileext = ".R")
   download(url, destfile = destfile, quiet = TRUE)
 
   ensure_directory(library)
@@ -68,7 +70,7 @@ renv_bioconductor_version <- function(project, refresh = FALSE) {
   case(
 
     renv_package_available("BiocManager") ~ {
-      BiocManager <- renv_namespace_load("BiocManager")
+      BiocManager <- renv_scope_biocmanager()
       format(BiocManager$version())
     },
 
@@ -81,7 +83,10 @@ renv_bioconductor_version <- function(project, refresh = FALSE) {
 
 }
 
-renv_bioconductor_repos <- function(project, version = NULL) {
+# Returns the union of the inferred Bioconductor repositories, together with the
+# current value of the 'repos' R option. The Bioconductor repositories are
+# placed first in the repository list.
+renv_bioconductor_repos <- function(project = NULL, version = NULL) {
 
   # allow bioconductor repos override
   repos <- getOption("renv.bioconductor.repos")
@@ -95,17 +100,16 @@ renv_bioconductor_repos <- function(project, version = NULL) {
   version <- version %||% renv_bioconductor_version(project = project)
 
   # read Bioconductor repositories (prefer BiocInstaller for older R)
-  if (getRversion() < "3.5.0")
-    renv_bioconductor_repos_biocinstaller(version)
-  else
+  if (identical(renv_bioconductor_manager(), "BiocManager"))
     renv_bioconductor_repos_biocmanager(version)
+  else
+    renv_bioconductor_repos_biocinstaller(version)
 
 }
 
 renv_bioconductor_repos_biocmanager <- function(version) {
 
-  renv_scope_options(BiocManager.check_repositories = FALSE)
-  BiocManager <- asNamespace("BiocManager")
+  BiocManager <- renv_scope_biocmanager()
   version <- version %||% BiocManager$version()
 
   tryCatch(
@@ -121,4 +125,14 @@ renv_bioconductor_repos_biocinstaller <- function(version) {
   BiocInstaller <- asNamespace("BiocInstaller")
   version <- version %||% BiocInstaller$biocVersion()
   BiocInstaller$biocinstallRepos(version = version)
+}
+
+renv_bioconductor_required <- function(records) {
+
+  for (record in records)
+    if (identical(record$Source, "Bioconductor"))
+      return(TRUE)
+
+  FALSE
+
 }

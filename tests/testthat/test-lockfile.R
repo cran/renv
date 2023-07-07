@@ -1,6 +1,4 @@
 
-context("Lockfile")
-
 test_that("lockfiles can be diffed", {
 
   lhs <- list(A = 1, B = 2, C = "a", D = list(E = 1, F = 2))
@@ -75,5 +73,30 @@ test_that("the Requirements field is read as character", {
   actual <- lockfile$Packages$morning$Requirements
   expected <- c("coffee", "toast")
   expect_identical(actual, expected)
+
+})
+
+test_that("lockfile APIs can be used", {
+  renv_tests_scope("breakfast")
+  init()
+
+  lockfile <- lockfile_read()
+  expect_s3_class(lockfile, "renv_lockfile")
+
+  # try writing some repositories
+  repos <- list(CRAN = "https://cloud.r-project.org")
+  lockfile <- lockfile_modify(lockfile, repos = repos)
+  expect_equal(repos, lockfile$R$Repositories)
+
+  # try updating a record
+  lockfile <- lockfile_modify(lockfile, remotes = list(bread = "bread@0.1.0"))
+  bread <- lockfile$Packages$bread
+  expect_equal(bread$Version, "0.1.0")
+
+  # try writing to file
+  lockfile_write(lockfile)
+
+  # check that it's the same
+  expect_equal(lockfile, lockfile_read())
 
 })

@@ -14,9 +14,12 @@ renv_lockfile_init <- function(project) {
 
 renv_lockfile_init_r_version <- function(project) {
 
-  version <-
-    settings$r.version(project = project) %||%
-    getRversion()
+  # NOTE: older versions of renv may have written out an empty array
+  # for the R version in some cases, so we explicitly check that we
+  # receive a length-one string here.
+  version <- settings$r.version(project = project)
+  if (!pstring(version))
+    version <- getRversion()
 
   format(version)
 
@@ -41,8 +44,8 @@ renv_lockfile_init_r_repos <- function(project) {
     "https://cloud.r-project.org"
   )
 
-  # remove RSPM bits from URL
-  if (config$rspm.enabled()) {
+  # remove PPM bits from URL
+  if (renv_ppm_enabled()) {
     pattern <- "/__[^_]+__/[^/]+/"
     repos <- sub(pattern, "/", repos)
   }
@@ -130,11 +133,18 @@ renv_lockfile_save <- function(lockfile, project) {
   renv_lockfile_write(lockfile, file = file)
 }
 
-renv_lockfile_load <- function(project) {
+renv_lockfile_load <- function(project, strict = FALSE) {
 
   path <- renv_lockfile_path(project)
   if (file.exists(path))
     return(renv_lockfile_read(path))
+
+  if (strict) {
+    abort(c(
+      "This project does not contain a lockfile.",
+      i = "Have you called `snapshot()` yet?"
+    ))
+  }
 
   renv_lockfile_init(project = project)
 
@@ -142,16 +152,13 @@ renv_lockfile_load <- function(project) {
 
 renv_lockfile_sort <- function(lockfile) {
 
-  # ensure C locale for consistent sorting
-  renv_scope_locale("LC_COLLATE", "C")
-
   # extract R records (nothing to do if empty)
   records <- renv_lockfile_records(lockfile)
   if (empty(records))
     return(lockfile)
 
   # sort the records
-  sorted <- records[sort(names(records))]
+  sorted <- records[csort(names(records))]
   renv_lockfile_records(lockfile) <- sorted
 
   # sort top-level fields
@@ -164,24 +171,52 @@ renv_lockfile_sort <- function(lockfile) {
 }
 
 renv_lockfile_create <- function(project,
-                                 libpaths,
-                                 type,
+                                 type = NULL,
+                                 libpaths = NULL,
                                  packages = NULL,
-                                 exclude = NULL)
+                                 exclude = NULL,
+                                 prompt = NULL,
+                                 force = NULL)
 {
+  libpaths <- libpaths %||% renv_libpaths_all()
+  type <- type %||% settings$snapshot.type(project = project)
+
+  # use a restart, so we can allow the user to install packages before snapshot
+  lockfile <- withRestarts(
+    renv_lockfile_create_impl(project, type, libpaths, packages, exclude, prompt, force),
+    renv_recompute_records = function() {
+      renv_dynamic_reset()
+      renv_lockfile_create_impl(project, type, libpaths, packages, exclude, prompt, force)
+    }
+  )
+}
+
+renv_lockfile_create_impl <- function(project, type, libpaths, packages, exclude, prompt, force) {
+
   lockfile <- renv_lockfile_init(project)
 
-  renv_lockfile_records(lockfile) <-
+  # compute the project's top-level package dependencies
+  packages <- packages %||% renv_snapshot_dependencies(
+    project = project,
+    type = type,
+    dev = FALSE
+  )
 
-    renv_snapshot_libpaths(libpaths = libpaths,
-                           project  = project) %>%
+  # expand the recursive dependencies of these packages
+  records <- renv_snapshot_packages(
+    packages = setdiff(packages, exclude),
+    libpaths = libpaths,
+    project  = project
+  )
 
-    renv_snapshot_filter(project  = project,
-                         type     = type,
-                         packages = packages,
-                         exclude  = exclude) %>%
+  # warn if some required packages are missing
+  ignored <- c(renv_project_ignored_packages(project), renv_packages_base(), exclude)
+  missing <- setdiff(packages, c(names(records), ignored))
+  if (!the$status_running && !the$init_running)
+    renv_snapshot_report_missing(missing, type)
 
-    renv_snapshot_fixup()
+  records <- renv_snapshot_fixup(records)
+  renv_lockfile_records(lockfile) <- records
 
   lockfile <- renv_lockfile_fini(lockfile, project)
 
@@ -190,6 +225,7 @@ renv_lockfile_create <- function(project,
 
   class(lockfile) <- "renv_lockfile"
   lockfile
+
 }
 
 renv_lockfile_modify <- function(lockfile, records) {
@@ -207,8 +243,7 @@ renv_lockfile_compact <- function(lockfile) {
   records <- renv_lockfile_records(lockfile)
   remotes <- map_chr(records, renv_record_format_remote)
 
-  renv_scope_locale("LC_COLLATE", "C")
-  remotes <- sort(remotes)
+  remotes <- csort(remotes)
 
   formatted <- sprintf("  \"%s\"", remotes)
   joined <- paste(formatted, collapse = ",\n")
@@ -219,10 +254,13 @@ renv_lockfile_compact <- function(lockfile) {
 }
 
 renv_lockfile_records <- function(lockfile) {
-  as.list(lockfile$Packages %??% lockfile)
+  as.list(lockfile$Packages %||% lockfile)
 }
 
 `renv_lockfile_records<-` <- function(x, value) {
   x$Packages <- filter(value, zlength)
   invisible(x)
 }
+
+# for compatibility with older versions of RStudio
+renv_records <- renv_lockfile_records

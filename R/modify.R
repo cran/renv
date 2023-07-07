@@ -38,7 +38,7 @@ renv_modify_impl <- function(project, changes) {
   else
     renv_modify_noninteractive(project, changes)
 
-  if (identical(renv_project(), project))
+  if (renv_project_loaded(project))
     renv_modify_fini(lockfile)
 
 }
@@ -55,9 +55,8 @@ renv_modify_interactive <- function(project) {
     stopf("lockfile '%s' does not exist", renv_path_aliased(lockpath))
 
   # copy the lockfile to a temporary file
-  dir <- tempfile("renv-lockfile-")
+  dir <- renv_scope_tempfile("renv-lockfile-")
   ensure_directory(dir)
-  on.exit(unlink(dir, recursive = TRUE), add = TRUE)
 
   templock <- file.path(dir, "renv.lock")
   file.copy(lockpath, templock)
@@ -66,19 +65,16 @@ renv_modify_interactive <- function(project) {
   renv_file_edit(templock)
 
   # check that the new lockfile can be read
-  lockfile <- catch(renv_lockfile_read(file = templock))
-  if (inherits(lockfile, "error")) {
-
-    renv_pretty_print(
-      conditionMessage(lockfile),
-      preamble  = "renv was uanble to parse the modified lockfile:",
-      postamble = "Your changes will be discarded.",
-      wrap = FALSE
-    )
-
-    stop("error modifying lockfile")
-
-  }
+  withCallingHandlers(
+    lockfile <- catch(renv_lockfile_read(file = templock)),
+    error = function(cnd) {
+      stop(lines(
+        "renv was unable to parse the modified lockfile:",
+        conditionMessage(cnd),
+        "Your changes will be discarded"
+      ))
+    }
+  )
 
   lockfile
 
@@ -95,10 +91,10 @@ renv_modify_noninteractive <- function(project, changes) {
   lockfile <- renv_lockfile_read(file = lockpath)
 
   # merge changes
-  merged <- modifyList(lockfile, changes)
+  merged <- overlay(lockfile, changes)
 
   # write updated lockfile to a temporary file
-  templock <- tempfile("renv-lock-")
+  templock <- renv_scope_tempfile("renv-lock-")
   renv_lockfile_write(merged, file = templock)
 
   # try reading it once more

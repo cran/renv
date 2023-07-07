@@ -18,9 +18,13 @@ renv_description_read <- function(path = NULL,
     path <- paste(components, collapse = "/")
   }
 
+  # if the DESCRIPTION file doesn't exist, bail
+  if (!file.exists(path))
+    stopf("DESCRIPTION file %s does not exist", renv_path_pretty(path))
+
   # read value with filebacked cache
   description <- filebacked(
-    scope    = "renv_description_read",
+    context  = "renv_description_read",
     path     = path,
     callback = renv_description_read_impl,
     subdir   = subdir,
@@ -83,35 +87,6 @@ renv_description_path <- function(path) {
   path
 }
 
-renv_description_type <- function(path = NULL, desc = NULL) {
-
-  # read DESCRIPTION file when 'desc' not explicitly supplied
-  if (is.null(desc)) {
-
-    # read DESCRIPTION file
-    desc <- catch(renv_description_read(path))
-    if (inherits(desc, "error")) {
-      warning(desc)
-      return("unknown")
-    }
-
-  }
-
-  # check for explicitly recorded type
-  type <- desc$Type
-  if (!is.null(type))
-    return(tolower(type))
-
-  # infer otherwise from 'Package' field otherwise
-  package <- desc$Package
-  if (!is.null(package))
-    return("package")
-
-  # default to unknown
-  "unknown"
-
-}
-
 # parse the dependency requirements normally presented in
 # Depends, Imports, Suggests, and so on
 renv_description_parse_field <- function(field) {
@@ -145,40 +120,6 @@ renv_description_parse_field <- function(field) {
 
 }
 
-renv_description_remotes <- function(descpath) {
-
-  # read Remotes field from DESCRIPTION
-  desc <- renv_description_read(path = descpath)
-  remotes <- desc[["Remotes"]]
-  if (is.null(remotes))
-    return(NULL)
-
-  # parse each remote entry
-  entries <- strsplit(remotes, "\\s*,\\s*", perl = TRUE)[[1L]]
-  parsed <- map(entries, renv_description_remotes_parse)
-
-  # ensure named
-  names(parsed) <- map_chr(parsed, `[[`, "Package")
-
-  # and return
-  parsed
-
-}
-
-renv_description_remotes_parse <- function(entry) {
-
-  status <- catch(renv_remotes_resolve(entry))
-
-  if (inherits(status, "error")) {
-    fmt <- "failed to resolve remote '%s' from project DESCRIPTION file; skipping"
-    warningf(fmt, entry)
-    return(NULL)
-  }
-
-  status
-
-}
-
 renv_description_resolve <- function(path) {
 
   case(
@@ -199,22 +140,20 @@ renv_description_built_version <- function(desc = NULL) {
   substring(built, 3L, regexpr(";", built, fixed = TRUE) - 1L)
 }
 
-renv_description_dependency_fields <- function(fields, project) {
-
-  fields <- fields %||% settings$package.dependency.fields(project = project)
+renv_description_dependency_fields_expand <- function(fields) {
 
   expanded <- map(fields, function(field) {
 
     case(
 
       identical(field, FALSE)
-        ~ NULL,
+      ~ NULL,
 
       identical(field, "strong") || is.na(field)
-        ~ c("Depends", "Imports", "LinkingTo"),
+      ~ c("Depends", "Imports", "LinkingTo"),
 
       identical(field, "most") || identical(field, TRUE)
-        ~ c("Depends", "Imports", "LinkingTo", "Suggests"),
+      ~ c("Depends", "Imports", "LinkingTo", "Suggests"),
 
       identical(field, "all") ~
         c("Depends", "Imports", "LinkingTo", "Suggests", "Enhances"),
@@ -228,3 +167,32 @@ renv_description_dependency_fields <- function(fields, project) {
   unique(unlist(expanded, recursive = FALSE, use.names = FALSE))
 
 }
+
+renv_description_dependency_fields <- function(fields, project) {
+  fields <- fields %||% settings$package.dependency.fields(project = project)
+  renv_description_dependency_fields_expand(fields)
+}
+
+renv_description_remotes <- function(path) {
+
+  desc <- catch(renv_description_read(path))
+  if (inherits(desc, "error"))
+    return(list())
+
+  profile <- renv_profile_get()
+  field <- if (is.null(profile))
+    "Remotes"
+  else
+    sprintf("Config/renv/profiles/%s/remotes", profile)
+
+  remotes <- desc[[field]]
+  if (is.null(remotes))
+    return(list())
+
+  splat <- strsplit(remotes, "[[:space:]]*,[[:space:]]*")[[1]]
+  resolved <- lapply(splat, renv_remotes_resolve)
+  names(resolved) <- extract_chr(resolved, "Package")
+  resolved
+
+}
+

@@ -1,5 +1,5 @@
 
-`_renv_curl_valid` <- new.env(parent = emptyenv())
+the$curl_valid <- new.env(parent = emptyenv())
 
 renv_curl_exe <- function() {
 
@@ -16,7 +16,7 @@ renv_curl_exe <- function() {
 
 renv_curl_validate <- function(curl) {
 
-  `_renv_curl_valid`[[curl]] <- `_renv_curl_valid`[[curl]] %??% {
+  the$curl_valid[[curl]] <- the$curl_valid[[curl]] %||% {
     renv_curl_validate_impl(curl)
   }
 
@@ -39,7 +39,7 @@ renv_curl_validate_impl <- function(curl) {
   )
 
   if (!inherits(output, "error")) {
-    status <- attr(output, "status") %??% 0L
+    status <- attr(output, "status") %||% 0L
     if (status == 0L)
       return(curl)
   }
@@ -53,10 +53,9 @@ renv_curl_validate_impl <- function(curl) {
   footer <- sprintf(fmt, curl)
   all <- c("", header(paste(curl, "--version"), prefix = "$"), message, "", footer)
 
-  envir <- renv_dynamic_envir()
   defer(
     message(paste(all, collapse = "\n")),
-    envir = envir
+    scope = renv_dynamic_envir()
   )
 
   return(curl)

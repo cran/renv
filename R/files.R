@@ -25,7 +25,7 @@ renv_file_copy <- function(source, target, overwrite = FALSE) {
     return(TRUE)
 
   callback <- renv_file_preface(source, target, overwrite)
-  on.exit(callback(), add = TRUE)
+  defer(callback())
 
   # check to see if we're copying a plain file -- if so, things are simpler
   if (dir.exists(source))
@@ -179,7 +179,7 @@ renv_file_move <- function(source, target, overwrite = FALSE) {
     return(TRUE)
 
   callback <- renv_file_preface(source, target, overwrite)
-  on.exit(callback(), add = TRUE)
+  defer(callback())
 
   # first, attempt to do a plain rename
   # use catchall since this might fail for e.g. cross-device links
@@ -238,7 +238,7 @@ renv_file_link <- function(source, target, overwrite = FALSE) {
     return(TRUE)
 
   callback <- renv_file_preface(source, target, overwrite)
-  on.exit(callback(), add = TRUE)
+  defer(callback())
 
   if (renv_platform_windows()) {
 
@@ -294,8 +294,8 @@ renv_file_same <- function(source, target) {
 
   # check to see if they're equal after normalization
   # (e.g. for symlinks pointing to same file)
-  source <- renv_path_normalize(source, mustWork = FALSE)
-  target <- renv_path_normalize(target, mustWork = FALSE)
+  source <- renv_path_normalize(source)
+  target <- renv_path_normalize(target)
   if (identical(source, target))
     return(TRUE)
 
@@ -315,7 +315,7 @@ renv_file_same <- function(source, target) {
 
 }
 
-# NOTE: returns a callback which should be used in e.g. an on.exit handler
+# NOTE: returns a callback which should be used in e.g. an defer handler
 # to restore the file if the attempt to update the file failed
 renv_file_backup <- function(path) {
 
@@ -327,11 +327,11 @@ renv_file_backup <- function(path) {
   # by the time the callback is invoked). note that the file may
   # be a broken symlink so construct the path by normalizing the
   # parent directory and building path relative to that
-  parent <- renv_path_normalize(dirname(path), winslash = "/", mustWork = TRUE)
+  parent <- renv_path_normalize(dirname(path), mustWork = TRUE)
   path <- file.path(parent, basename(path))
 
   # attempt to rename the file
-  pattern <- sprintf(".renv-backup-%s", basename(path))
+  pattern <- sprintf(".renv-backup-%i-%s", Sys.getpid(), basename(path))
   tempfile <- tempfile(pattern, tmpdir = dirname(path))
   if (!renv_file_move(path, tempfile))
     return(function() {})
@@ -360,10 +360,18 @@ renv_file_mode <- function(paths) {
 renv_file_exists <- function(path) {
 
   if (renv_platform_windows())
-    return(file.exists(path))
+    renv_file_exists_win32(path)
+  else
+    renv_file_exists_unix(path)
 
+}
+
+renv_file_exists_win32 <- function(path) {
+  file.exists(path)
+}
+
+renv_file_exists_unix <- function(path) {
   !is.na(Sys.readlink(path)) | file.exists(path)
-
 }
 
 renv_file_list <- function(path, full.names = TRUE) {
@@ -374,7 +382,7 @@ renv_file_list <- function(path, full.names = TRUE) {
   # NOTE: paths may be marked with UTF-8 encoding;
   # if that's the case we need to use paste rather
   # than file.path to preserve the encoding
-  if (full.names)
+  if (full.names && length(files))
     files <- paste(path, files, sep = "/")
 
   files
@@ -404,14 +412,13 @@ renv_file_list_impl_win32 <- function(path) {
   #
   # change working directory (done just to avoid encoding issues
   # when submitting path to cmd shell)
-  owd <- setwd(path)
-  on.exit(setwd(owd), add = TRUE)
+  renv_scope_wd(path)
 
   # NOTE: a sub-shell is required here in some contexts; e.g. when running
   # tests non-interactively or building in the RStudio pane
   command <- paste(comspec(), "/U /C dir /B")
   conn <- pipe(command, open = "rb", encoding = "native.enc")
-  on.exit(close(conn), add = TRUE)
+  defer(close(conn))
 
   # read binary output from connection
   output <- stack()
@@ -530,7 +537,7 @@ renv_file_shebang_impl <- function(path) {
 
   # open connection to file
   con <- file(path, open = "rb", encoding = "native.enc")
-  on.exit(close(con), add = TRUE)
+  defer(close(con))
 
   # validate file starts with '#!' -- read using 'raw' vector to avoid
   # issues which files that might start with null bytes
@@ -613,9 +620,8 @@ renv_file_writable <- function(path) {
     return(FALSE)
 
   # try creating and removing a temporary file in this directory
-  tempfile <- tempfile(".renv-write-test-", tmpdir = path)
+  tempfile <- renv_scope_tempfile(".renv-write-test-", tmpdir = path)
   ok <- dir.create(tempfile, showWarnings = FALSE)
-  on.exit(unlink(tempfile, recursive = TRUE, force = TRUE), add = TRUE)
 
   # return ok if we succeeded
   ok

@@ -1,5 +1,5 @@
 
-`_renv_index` <- new.env(parent = emptyenv())
+the$index <- new.env(parent = emptyenv())
 
 index <- function(scope, key = NULL, value = NULL, limit = 3600L) {
 
@@ -30,18 +30,10 @@ index <- function(scope, key = NULL, value = NULL, limit = 3600L) {
   lockfile <- file.path(root, "index.lock")
   renv_scope_lock(lockfile)
 
-  # perform operation
-  tryCatch(
-    renv_index_impl(root, scope, key, value, now, limit),
-    error = function(e) value
-  )
-
-}
-
-renv_index_impl <- function(root, scope, key, value, now, limit) {
-
   # load the index file
-  index <- renv_index_load(root, scope)
+  index <- tryCatch(renv_index_load(root, scope), error = identity)
+  if (inherits(index, "error"))
+    return(value)
 
   # return index as-is when key is NULL
   if (is.null(key))
@@ -60,7 +52,7 @@ renv_index_impl <- function(root, scope, key, value, now, limit) {
 renv_index_load <- function(root, scope) {
 
   filebacked(
-    scope    = "renv_index_load",
+    context  = "renv_index_load",
     path     = file.path(root, "index.json"),
     callback = renv_index_load_impl
   )
@@ -98,7 +90,7 @@ renv_index_get <- function(root, scope, index, key, now, limit) {
     return(NULL)
 
   # check for in-memory cached value
-  value <- `_renv_index`[[scope]][[key]]
+  value <- the$index[[scope]][[key]]
   if (!is.null(value))
     return(value)
 
@@ -111,11 +103,11 @@ renv_index_get <- function(root, scope, index, key, now, limit) {
   value <- readRDS(data)
 
   # add to in-memory cache
-  `_renv_index`[[scope]] <-
-    `_renv_index`[[scope]] %||%
+  the$index[[scope]] <-
+    the$index[[scope]] %||%
     new.env(parent = emptyenv())
 
-  `_renv_index`[[scope]][[key]] <- value
+  the$index[[scope]][[key]] <- value
 
   # return value
   value
@@ -123,6 +115,9 @@ renv_index_get <- function(root, scope, index, key, now, limit) {
 }
 
 renv_index_set <- function(root, scope, index, key, value, now, limit) {
+
+  # force promises
+  force(value)
 
   # files being written here should be shared
   renv_scope_umask("0")
@@ -183,7 +178,7 @@ renv_index_clean_impl <- function(key, entry, root, scope, index, now, limit) {
     return(TRUE)
 
   # remove from in-memory cache
-  cache <- `_renv_index`[[scope]]
+  cache <- the$index[[scope]]
   cache[[key]] <- NULL
 
   # remove from disk
@@ -206,4 +201,11 @@ renv_index_writable <- function(root) {
     key   = root,
     value = unname(file.access(root, 7L) == 0L)
   )
+}
+
+# in case of emergency, break glass
+renv_index_reset <- function(root = NULL) {
+  root <- root %||% renv_paths_index()
+  lockfiles <- list.files(root, pattern = "^index\\.lock$", full.names = TRUE)
+  unlink(lockfiles)
 }

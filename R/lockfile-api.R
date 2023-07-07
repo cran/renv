@@ -1,21 +1,7 @@
 
-renv_lockfile_resolve <- function(lockfile) {
-
-  if (inherits(lockfile, "renv_lockfile_api"))
-    return(lockfile$data())
-
-  if (is.character(lockfile)) {
-    if (any(grepl("\n", lockfile)))
-      return(renv_lockfile_read(text = lockfile))
-    else if (file.exists(lockfile))
-      return(renv_lockfile_read(file = lockfile))
-    else
-      return(invisible(NULL))
-  }
-
-  lockfile
-
-}
+# NOTE: These functions are used by the 'dockerfiler' package, even though
+# they are not exported. We retain these functions here just to avoid issues
+# during CRAN submission. We'll consider removing them in a future release.
 
 renv_lockfile_api <- function(lockfile = NULL) {
 
@@ -123,6 +109,11 @@ renv_lockfile_api <- function(lockfile = NULL) {
 #' lock$write("renv.lock")
 #'
 #' }
+#'
+#' @keywords internal
+#' @rdname lockfile-api
+#' @name lockfile-api
+#'
 lockfile <- function(file = NULL, project = NULL) {
   project <- renv_project_resolve(project)
   renv_scope_error_handler()

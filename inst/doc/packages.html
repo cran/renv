@@ -12,7 +12,7 @@
 
 
 
-<title>Package Development with renv</title>
+<title>Package development</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -235,7 +235,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<h1 class="title toc-ignore">Package Development with renv</h1>
+<h1 class="title toc-ignore">Package development</h1>
 
 
 
@@ -263,40 +263,39 @@ appropriate.</p>
 latest-available versions of its dependencies on CRAN. However, in some
 cases, you may need to ensure your package is compatible with other
 packages also currently under development.</p>
-<p>In these cases, the <code>renv</code> project library can be useful –
-you can install the development version(s) of your dependencies into the
-project library, without worrying about clobbering any packages already
-installed in your user library.</p>
+<p>In these cases, the renv project library can be useful – you can
+install the development version(s) of your dependencies into the project
+library, without worrying about clobbering any packages already
+installed in your system library.</p>
 <p>In these cases, you can declare your development dependencies using
 the <code>Remotes</code> field of the <code>DESCRIPTION</code> file;
 e.g.</p>
 <pre><code>Remotes:
   r-lib/ggplot2</code></pre>
 <p>and <code>renv::install()</code> will parse that remotes declaration
-and retrieve the requested package. See the <code>remotes</code>
-vignette, <a href="https://CRAN.R-project.org/package=remotes/vignettes/dependencies.html">Dependency
+and retrieve the requested package. See the remotes vignette, <a href="https://CRAN.R-project.org/package=remotes/vignettes/dependencies.html">Dependency
 resolution for R package development</a>, for more details.</p>
 </div>
 <div id="testing" class="section level2">
 <h2>Testing</h2>
 <p>While developing your package, you may want to use a continuous
 integration service (such as <a href="https://www.travis-ci.com">Travis
-CI</a>) to build and test your package remotely. You can use
-<code>renv</code> to help facilitate this testing – see the <a href="https://CRAN.R-project.org/package=renv/vignettes/ci.html">Continuous
+CI</a>) to build and test your package remotely. You can use renv to
+help facilitate this testing – see the <a href="https://CRAN.R-project.org/package=renv/vignettes/ci.html">Continuous
 Integration</a> vignette for more information. In particular, clever use
-of the <code>renv</code> cache can help save time that might normally be
-spent on package installation. See <a href="https://github.com/rstudio/renv/blob/main/.github/workflows/R-CMD-check.yaml" class="uri">https://github.com/rstudio/renv/blob/main/.github/workflows/R-CMD-check.yaml</a>
-for an example of how <code>renv</code> uses itself for package
-management in its own CI tests.</p>
+of the renv cache can help save time that might normally be spent on
+package installation. See <a href="https://github.com/rstudio/renv/blob/main/.github/workflows/R-CMD-check.yaml" class="uri">https://github.com/rstudio/renv/blob/main/.github/workflows/R-CMD-check.yaml</a>
+for an example of how renv uses itself for package management in its own
+CI tests.</p>
 </div>
 <div id="r-cmd-build-and-the-project-library" class="section level2">
-<h2>R CMD build and the Project Library</h2>
+<h2><code>R CMD build</code> and the project library</h2>
 <p>By default, when building a package tarball, R will copy all files
 within the package directory to a temporary build directory before
 building the package. This can be time consuming if your project
-contains a large number of files. For this reason, <code>renv</code>
-places the project library for package projects within a separate
-external directory by default. This directory is:</p>
+contains a large number of files. For this reason, renv places the
+project library for package projects within a separate external
+directory by default. This directory is:</p>
 <pre><code>tools::R_user_dir(&quot;renv/library&quot;, &quot;cache&quot;)</code></pre>
 <p>If you want to use your own custom path, you can use, for
 example:</p>
@@ -312,7 +311,7 @@ These paths are of the form:</p>
 <p>If you’d prefer to omit the <code>&lt;id&gt;</code>, then you can set
 the environment variable:</p>
 <pre><code>RENV_PATHS_LIBRARY_ROOT_ASIS = TRUE</code></pre>
-<p>to instruct <code>renv</code> to forego the use of an identifier.</p>
+<p>to instruct renv to forego the use of an identifier.</p>
 </div>
 
 

@@ -9,10 +9,10 @@ renv_dcf_read <- function(file, text = NULL, ...) {
   contents <- text %||% renv_dcf_read_impl(file, ...)
 
   # split on newlines
-  parts <- strsplit(contents, "\\n(?=\\S)", perl = TRUE)[[1L]]
+  parts <- strsplit(contents, "\\r?\\n(?=\\S)", perl = TRUE)[[1L]]
 
   # remove embedded newlines
-  parts <- gsub("\\n\\s*", " ", parts, perl = TRUE)
+  parts <- gsub("\\r?\\n\\s*", " ", parts, perl = TRUE)
 
   # split into key / value pairs
   index <- regexpr(":", parts, fixed = TRUE)
@@ -67,7 +67,7 @@ renv_dcf_read_impl_encoding <- function(bytes) {
   }
 
   # find the end of the encoding field
-  end <- grepRaw("\n", bytes, fixed = TRUE, offset = start + 1L)
+  end <- grepRaw("\\r?\\n", bytes, offset = start + 1L)
   if (length(end) == 0L)
     end <- length(bytes)
 
@@ -108,6 +108,12 @@ renv_dcf_read_impl <- function(file, ...) {
 }
 
 renv_dcf_write <- function(x, file = "") {
+
   keep.white <- c("Description", "Authors@R", "Author", "Built", "Packaged")
-  write.dcf(as.list(x), file = file, indent = 4L, width = 80L, keep.white = keep.white)
+  result <- write.dcf(as.list(x), file = file, indent = 4L, width = 80L, keep.white = keep.white)
+
+  renv_filebacked_invalidate(file)
+
+  invisible(result)
+
 }

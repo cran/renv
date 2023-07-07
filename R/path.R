@@ -1,10 +1,10 @@
 
-`_renv_alpha` <- c(letters, LETTERS)
+the$alpha <- c(letters, LETTERS)
 
 renv_path_absolute <- function(path) {
 
   substr(path, 1L, 1L) %in% c("~", "/", "\\") || (
-    substr(path, 1L, 1L) %in% `_renv_alpha` &&
+    substr(path, 1L, 1L) %in% the$alpha &&
     substr(path, 2L, 3L) %in% c(":/", ":\\")
   )
 
@@ -12,10 +12,7 @@ renv_path_absolute <- function(path) {
 
 renv_path_aliased <- function(path) {
 
-  home <-
-    Sys.getenv("HOME") %""%
-    Sys.getenv("R_USER")
-
+  home <- Sys.getenv("HOME", unset = Sys.getenv("R_USER"))
   if (!nzchar(home))
     return(path)
 
@@ -108,7 +105,18 @@ renv_path_normalize_win32_impl <- function(path,
                                            winslash = "/",
                                            mustWork = FALSE)
 {
-  short <- utils::shortPathName(path.expand(path))
+  # get short path
+  expanded <- path.expand(path)
+  short <- utils::shortPathName(expanded)
+
+  # if a UTF-8 string is passed to utils::shortPathName(), it seems that
+  # the string might be latin1-encoded, even though it's marked as UTF-8?
+  if (!identical(R.version$crt, "ucrt")) {
+    utf8 <- Encoding(short) == "UTF-8"
+    Encoding(short[utf8]) <- "latin1"
+  }
+
+  # normalize
   normalizePath(short, winslash, mustWork)
 }
 
@@ -116,7 +124,7 @@ renv_path_normalize_win32_impl <- function(path,
 # don't use this for paths that need to be uniquely resolved!
 renv_path_canonicalize <- function(path) {
   parent <- dirname(path)
-  root <- renv_path_normalize(parent, winslash = "/", mustWork = FALSE)
+  root <- renv_path_normalize(parent)
   trimmed <- sub("/+$", "", root)
   file.path(trimmed, basename(path))
 }

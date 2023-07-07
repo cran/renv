@@ -90,13 +90,13 @@ graph <- function(root = NULL,
 
   remaining <- intersect(root, names(graph)[ok])
   if (empty(remaining)) {
-    fmt <- "* Could not find any relationship between the requested packages."
-    vwritef(fmt)
+    fmt <- "- Could not find any relationship between the requested packages."
+    writef(fmt)
     return(invisible(NULL))
   }
 
   defaults <- renv_graphviz_defaults(renderer)
-  attributes <- modifyList(defaults, attributes)
+  attributes <- overlay(defaults, attributes)
 
   # render attributes
   attrtext <- renv_graphviz_render(attributes, TRUE)
@@ -215,7 +215,7 @@ renv_graph_revdeps_impl <- function(package, envir, revdeps) {
 
 renv_graph_roots <- function(project) {
 
-  deps <- dependencies(project, quiet = TRUE)
+  deps <- renv_dependencies_impl(project, errors = "ignored")
   sort(unique(deps$Package))
 
 }

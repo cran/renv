@@ -11,8 +11,8 @@
 # particular call.
 #
 
-`_renv_dynamic_envir` <- NULL
-`_renv_dynamic_objects` <- new.env(parent = emptyenv())
+the$dynamic_envir <- NULL
+the$dynamic_objects <- new.env(parent = emptyenv())
 
 dynamic <- function(key, value, envir = NULL) {
 
@@ -23,11 +23,11 @@ dynamic <- function(key, value, envir = NULL) {
 
   # get a unique id for the scope where this function was invoked
   caller <- sys.call(sys.parent())[[1L]]
-  if (is.call(caller) && identical(caller[[1L]], as.symbol(":::")))
+  if (renv_call_matches(caller, name = ":::"))
     caller <- caller[[3L]]
 
   # handle cases like FUN
-  if (is.null(`__self__`[[as.character(caller)]])) {
+  if (is.null(the$envir_self[[as.character(caller)]])) {
     if (!renv_tests_running()) {
       fmt <- "internal error: dynamic() received unexpected call '%s'"
       stopf(fmt, stringify(sys.call(sys.parent())))
@@ -41,10 +41,7 @@ dynamic <- function(key, value, envir = NULL) {
   }
 
   # make sure we have a dynamic scope active
-  `_renv_dynamic_envir` <<- `_renv_dynamic_envir` %??% {
-    dlog("dynamic", "initializing dynamic environment '%s'", format(envir))
-    renv_dynamic_envir(envir)
-  }
+  the$dynamic_envir <- the$dynamic_envir %||% renv_dynamic_envir(envir)
 
   # resolve key from variables in the parent frame
   key <- paste(
@@ -58,7 +55,7 @@ dynamic <- function(key, value, envir = NULL) {
   id <- sprintf("%s(%s)", as.character(caller), key)
 
   # memoize the result of the expression
-  `_renv_dynamic_objects`[[id]] <- `_renv_dynamic_objects`[[id]] %??% {
+  the$dynamic_objects[[id]] <- the$dynamic_objects[[id]] %||% {
     dlog("dynamic", "memoizing dynamic value for '%s'", id)
     value
   }
@@ -68,7 +65,7 @@ dynamic <- function(key, value, envir = NULL) {
 renv_dynamic_envir <- function(envir = NULL) {
 
   envir <- envir %||% renv_dynamic_envir_impl()
-  defer(renv_dynamic_reset(), envir = envir)
+  defer(renv_dynamic_reset(), scope = envir)
 
   dlog("dynamic", "using dynamic environment '%s'", format(envir))
   envir
@@ -77,7 +74,7 @@ renv_dynamic_envir <- function(envir = NULL) {
 renv_dynamic_envir_impl <- function() {
 
   for (envir in sys.frames())
-    if (identical(parent.env(envir), `__self__`))
+    if (identical(parent.env(envir), the$envir_self))
       return(envir)
 
   stop("internal error: no renv frame available for dynamic call")
@@ -86,6 +83,6 @@ renv_dynamic_envir_impl <- function() {
 
 renv_dynamic_reset <- function() {
   dlog("dynamic", "resetting dynamic objects")
-  `_renv_dynamic_envir` <<- NULL
-  `_renv_dynamic_objects` <<- new.env(parent = emptyenv())
+  the$dynamic_envir <- NULL
+  renv_envir_clear(the$dynamic_objects)
 }

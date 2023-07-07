@@ -1,6 +1,4 @@
 
-context("Available Packages")
-
 test_that("available_packages() returns NULL when no repos set", {
   skip_on_cran()
 
@@ -36,10 +34,7 @@ test_that("available_packages() errs on incorrect repository", {
 test_that("renv handles multiple available source packages", {
   skip_on_cran()
 
-  renv_scope_options(repos = getOption("repos"))
   renv_tests_scope()
-  repos <- tempfile("renv-test-repos-")
-  renv_tests_init_repos(repos)
 
   dbs <- available_packages(type = "source")
   cran <- dbs[["CRAN"]]
@@ -60,7 +55,6 @@ test_that("renv handles multiple available source packages", {
 test_that("available_packages() succeeds with unnamed repositories", {
   skip_on_cran()
   renv_tests_scope()
-  renv_scope_options(repos = unname(getOption("repos")))
 
   entry <- renv_available_packages_entry(
     package = "breakfast",
@@ -96,8 +90,7 @@ test_that("local sources are preferred when available", {
   skip_on_cran()
   renv_tests_scope()
 
-  root <- renv_tests_root()
-  renv_scope_envvars(RENV_PATHS_LOCAL = file.path(root, "local"))
+  renv_scope_envvars(RENV_PATHS_LOCAL = renv_tests_path("local"))
 
   record <- renv_available_packages_latest(package = "skeleton", type = "source")
   expect_identical(record$Source, "Cellar")
@@ -109,13 +102,17 @@ test_that("available packages database refreshed on http_proxy change", {
   skip_on_cran()
   skip_on_os("windows")
 
+  renv_tests_scope_repos()
+  renv_scope_envvars("https_proxy" = "123")
+  available_packages(type = "source")
+
   count <- 0L
   renv_scope_trace(
     what   = renv:::renv_available_packages_query,
     tracer = function() { count <<- count + 1L }
   )
 
-  Sys.setenv("https_proxy" = "")
+  renv_scope_envvars("https_proxy" = "")
   available_packages(type = "source")
   expect_identical(count, 1L)
 
@@ -171,13 +168,13 @@ test_that("we're compatible with R", {
 
 test_that("we can query the R universe", {
   skip_on_cran()
-  skip_sometimes()
 
   lhs <- as.data.frame(
     available.packages(
       type = "source",
       repos = "https://rstudio.r-universe.dev"
-    )
+    ),
+    stringsAsFactors = FALSE
   )
 
   rhs <- available_packages(
@@ -185,7 +182,15 @@ test_that("we can query the R universe", {
     repos = "https://rstudio.r-universe.dev/"
   )[[1L]]
 
+  # skip renv, since we just updated it
+  lhs <- lhs[lhs$Package != "renv", ]
+  rhs <- rhs[rhs$Package != "renv", ]
+
+  # reduce risk of false positive test failures
   rownames(lhs) <- rownames(rhs) <- NULL
+  lhs$MD5sum <- rhs$MD5sum <- NULL
+
+  # otherwise, check they're identical
   expect_identical(lhs, rhs)
 
 })

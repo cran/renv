@@ -1,5 +1,5 @@
 
-`_renv_repos_archive` <- new.env(parent = emptyenv())
+the$repos_archive <- new.env(parent = emptyenv())
 
 # this routine retrieves a package + its dependencies, and as a side
 # effect populates the restore state's `retrieved` member with a
@@ -14,13 +14,13 @@ retrieve <- function(packages) {
   # normalize repositories (ensure @CRAN@ is resolved)
   options(repos = renv_repos_normalize())
 
-  # transform repository URLs for RSPM
-  if (renv_rspm_enabled()) {
+  # transform repository URLs for PPM
+  if (renv_ppm_enabled()) {
     repos <- getOption("repos")
-    renv_scope_options(repos = renv_rspm_transform(repos))
+    renv_scope_options(repos = renv_ppm_transform(repos))
   }
 
-  # ensure HTTPUserAgent is set (required for RSPM binaries)
+  # ensure HTTPUserAgent is set (required for PPM binaries)
   agent <- renv_http_useragent()
   if (!grepl("renv", agent)) {
     renv <- sprintf("renv (%s)", renv_metadata_version())
@@ -28,12 +28,14 @@ retrieve <- function(packages) {
   }
   renv_scope_options(HTTPUserAgent = agent)
 
-  # TODO: parallel?
   handler <- state$handler
   for (package in packages)
     handler(package, renv_retrieve_impl(package))
 
   state <- renv_restore_state()
+  if (identical(state$downloaded, TRUE))
+    writef("")
+
   data <- state$install$data()
   names(data) <- extract_chr(data, "Package")
   data
@@ -53,7 +55,7 @@ renv_retrieve_impl <- function(package) {
 
   # extract record for package
   records <- state$records
-  record <- records[[package]] %||% renv_retrieve_missing_record(package)
+  record <- records[[package]] %||% renv_retrieve_resolve(package)
 
   # normalize the record source
   source <- renv_record_source(record, normalize = TRUE)
@@ -94,11 +96,10 @@ renv_retrieve_impl <- function(package) {
     is.null(record$Version)
 
   if (uselatest) {
-    record <- renv_available_packages_latest(package)
-    if (is.null(record)) {
-      stopf("package '%s' is not available", package)
-      return()
-    }
+    record <- withCallingHandlers(
+      renv_available_packages_latest(package),
+      error = function(err) stopf("package '%s' is not available", package)
+    )
   }
 
   # if the requested record is incompatible with the set
@@ -136,8 +137,10 @@ renv_retrieve_impl <- function(package) {
 
     # if we have an installed package matching the requested record, finish early
     path <- renv_restore_find(package, record)
-    if (file.exists(path))
-      return(renv_retrieve_successful(record, path, install = FALSE))
+    if (file.exists(path)) {
+      install <- !dirname(path) %in% renv_libpaths_all()
+      return(renv_retrieve_successful(record, path, install = install))
+    }
 
     # if the requested record already exists in the cache,
     # we'll use that package for install
@@ -181,7 +184,7 @@ renv_retrieve_impl <- function(package) {
     }
 
     # otherwise, success
-    path <- normalizePath(path, winslash = "/", mustWork = TRUE)
+    path <- renv_path_normalize(path, mustWork = TRUE)
     return(renv_retrieve_successful(record, path))
 
   }
@@ -202,6 +205,11 @@ renv_retrieve_impl <- function(package) {
         return(TRUE)
     }
 
+  }
+
+  if (!identical(state$downloaded, TRUE)) {
+    writef(header("Downloading packages"))
+    state$downloaded <- TRUE
   }
 
   # time to retrieve -- delegate based on previously-determined source
@@ -232,9 +240,9 @@ renv_retrieve_path <- function(record, type = "source", ext = NULL) {
   name <- renv_retrieve_name(record, type, ext)
   source <- renv_record_source(record)
 
-  # check for packages from an RSPM binary URL, and
+  # check for packages from an PPM binary URL, and
   # update the package type if known
-  if (renv_rspm_enabled()) {
+  if (renv_ppm_enabled()) {
     url <- attr(record, "url")
     if (is.character(url) && grepl("/__[^_]+__/", url))
       type <- "binary"
@@ -357,6 +365,8 @@ renv_retrieve_gitlab <- function(record) {
 }
 
 renv_retrieve_git <- function(record) {
+  # NOTE: This path will later be used during the install step, so we don't
+  # want to clean it up afterwards
   path <- tempfile("renv-git-")
   ensure_directory(path)
   renv_retrieve_git_impl(record, path)
@@ -384,7 +394,6 @@ renv_retrieve_git_impl <- function(record, path) {
   quiet <- if (quiet) "--quiet" else ""
 
   template <- heredoc('
-    cd "${DIR}"
     git init ${QUIET}
     git remote add origin "${ORIGIN}"
     git fetch ${QUIET} --depth=1 origin "${REF}"
@@ -392,7 +401,6 @@ renv_retrieve_git_impl <- function(record, path) {
   ')
 
   data <- list(
-    DIR    = renv_path_normalize(path),
     ORIGIN = url,
     REF    = gitref,
     QUIET  = quiet
@@ -403,11 +411,13 @@ renv_retrieve_git_impl <- function(record, path) {
   if (renv_platform_windows())
     command <- paste(comspec(), "/C", command)
 
-  vwritef("Cloning '%s' ...", url)
+  printf("- Cloning '%s' ... ", url)
 
   before <- Sys.time()
 
   status <- local({
+    ensure_directory(path)
+    renv_scope_wd(path)
     renv_scope_auth(record)
     renv_scope_git_auth()
     system(command)
@@ -420,9 +430,9 @@ renv_retrieve_git_impl <- function(record, path) {
     stopf(fmt, package, url, status)
   }
 
-  fmt <- "\tOK [cloned repository in %s]"
+  fmt <- "OK [cloned repository in %s]"
   elapsed <- difftime(after, before, units = "auto")
-  vwritef(fmt, renv_difftime_format(elapsed))
+  writef(fmt, renv_difftime_format(elapsed))
 
   TRUE
 
@@ -437,7 +447,7 @@ renv_retrieve_cellar_find <- function(record, project = NULL) {
   # have a RemoteUrl entry that we can use
   url <- record$RemoteUrl %||% ""
   if (file.exists(url)) {
-    path <- renv_path_normalize(url, winslash = "/", mustWork = TRUE)
+    path <- renv_path_normalize(url, mustWork = TRUE)
     type <- if (fileext(path) %in% c(".tgz", ".zip")) "binary" else "source"
     return(named(path, type))
   }
@@ -473,8 +483,8 @@ renv_retrieve_cellar_report <- function(record) {
   if (source == "cellar")
     return(record)
 
-  fmt <- "* Package %s [%s] will be installed from the cellar."
-  with(record, vwritef(fmt, Package, Version))
+  fmt <- "- Package %s [%s] will be installed from the cellar."
+  with(record, writef(fmt, Package, Version))
 
   record
 
@@ -541,7 +551,7 @@ renv_retrieve_explicit <- function(record) {
   }
 
   # treat as 'local' source but extract path
-  normalized <- renv_path_normalize(source, winslash = "/", mustWork = TRUE)
+  normalized <- renv_path_normalize(source, mustWork = TRUE)
   resolved$Source <- "Local"
   renv_retrieve_successful(resolved, normalized)
 
@@ -575,7 +585,7 @@ renv_retrieve_repos <- function(record) {
     methods$push(renv_retrieve_repos_binary_fallback)
 
     # if MRAN is enabled, check those binaries as well
-    if (config$mran.enabled())
+    if (renv_mran_enabled())
       methods$push(renv_retrieve_repos_mran)
 
   }
@@ -656,12 +666,11 @@ renv_retrieve_repos_error_report <- function(record, errors) {
   preamble <- sprintf(fmt, record$Package)
 
   renv_pretty_print(
-    values   = paste("-", messages),
     preamble = preamble,
-    wrap     = FALSE
+    values   = paste("-", messages)
   )
 
-  if (renv_tests_running() && renv_tests_verbose())
+  if (renv_verbose())
     str(errors)
 
 }
@@ -811,8 +820,8 @@ renv_retrieve_repos_archive_path <- function(repo, record) {
   }
 
   # if we already know the format of the repository, use that
-  if (exists(repo, envir = `_renv_repos_archive`)) {
-    formatter <- get(repo, envir = `_renv_repos_archive`)
+  if (exists(repo, envir = the$repos_archive)) {
+    formatter <- get(repo, envir = the$repos_archive)
     root <- formatter(repo, record)
     return(root)
   }
@@ -846,7 +855,7 @@ renv_retrieve_repos_archive_path <- function(repo, record) {
     root <- formatter(repo, record)
     url <- file.path(root, name)
     if (renv_download_available(url)) {
-      assign(repo, formatter, envir = `_renv_repos_archive`)
+      assign(repo, formatter, envir = the$repos_archive)
       return(root)
     }
   }
@@ -911,11 +920,18 @@ renv_retrieve_repos_impl <- function(record,
 
 renv_retrieve_package <- function(record, url, path) {
 
+  state <- renv_restore_state()
+  count <- state$retrieve_package_count %||% 0L
+  state$retrieve_package_count <- count + 1L
+  if (count == 0L)
+    writef("")
+
   ensure_parent_directory(path)
   type <- renv_record_source(record)
   status <- local({
     renv_scope_auth(record)
-    catch(download(url, destfile = path, type = type))
+    preamble <- renv_retrieve_package_preamble(record, url)
+    catch(download(url, preamble = preamble, destfile = path, type = type))
   })
 
   # report error for logging upstream
@@ -937,6 +953,18 @@ renv_retrieve_package <- function(record, url, path) {
 
   # handle success
   renv_retrieve_successful(record, path)
+
+}
+
+renv_retrieve_package_preamble <- function(record, url) {
+
+  message <- sprintf(
+    "- Downloading %s from %s ... ",
+    record$Package,
+    record$Repository %||% record$Source
+  )
+
+  format(message, width = the$install_step_width)
 
 }
 
@@ -1000,7 +1028,11 @@ renv_retrieve_successful <- function(record, path, install = TRUE) {
   # record this package's requirements
   state <- renv_restore_state()
   requirements <- state$requirements
-  deps <- renv_dependencies_discover_description(path, subdir = subdir)
+  deps <- renv_dependencies_discover_description(
+    path,
+    subdir = subdir,
+    fields = if (!record$Package %in% state$packages) "strong"
+  )
   if (length(deps$Source))
     deps$Source <- record$Package
 
@@ -1011,12 +1043,16 @@ renv_retrieve_successful <- function(record, path, install = TRUE) {
   })
 
   # read and handle remotes declared by this package
-  if (config$install.remotes())
-    renv_retrieve_handle_remotes(record, subdir = subdir)
+  remotes <- desc$Remotes
+  if (length(remotes) && config$install.remotes())
+    renv_retrieve_remotes(remotes)
 
   # ensure its dependencies are retrieved as well
-  if (state$recursive)
+  if (state$recursive) local({
+    repos <- if (is.null(desc$biocViews)) getOption("repos") else renv_bioconductor_repos()
+    renv_scope_options(repos = repos)
     renv_retrieve_successful_recurse(deps)
+  })
 
   # mark package as requiring install if needed
   if (install)
@@ -1055,7 +1091,7 @@ renv_retrieve_successful_recurse_impl_one <- function(remote) {
   }
 
   # otherwise, handle custom remotes
-  record <- renv_retrieve_handle_remotes_impl(remote)
+  record <- renv_retrieve_remotes_impl(remote)
   if (length(record)) {
     renv_retrieve_impl(record$Package)
     return(list())
@@ -1078,41 +1114,30 @@ renv_retrieve_unknown_source <- function(record) {
 
 }
 
-renv_retrieve_handle_remotes <- function(record, subdir) {
-
-  # TODO: what should we do if we detect incompatible remotes?
-  # e.g. if pkg A requests 'r-lib/rlang@0.3' but pkg B requests
-  # 'r-lib/rlang@0.2'.
-
-  # check and see if this package declares Remotes -- if so,
-  # use those to fill in any missing records
-  path <- record$Path
-  desc <- renv_description_read(path = path, subdir = subdir)
-  if (is.null(desc$Remotes))
-    return(NULL)
-
-  remotes <- strsplit(desc$Remotes, "\\s*,\\s*")[[1]]
+# TODO: what should we do if we detect incompatible remotes?
+# e.g. if pkg A requests 'r-lib/rlang@0.3' but pkg B requests
+# 'r-lib/rlang@0.2'.
+renv_retrieve_remotes <- function(remotes) {
+  remotes <- strsplit(remotes, "\\s*,\\s*")[[1L]]
   for (remote in remotes)
-    renv_retrieve_handle_remotes_impl(remote)
-
+    renv_retrieve_remotes_impl(remote)
 }
 
-renv_retrieve_handle_remotes_impl <- function(remote) {
+renv_retrieve_remotes_impl <- function(remote) {
 
   dynamic(
     key   = list(remote = remote),
-    value = renv_retrieve_handle_remotes_impl_one(remote)
+    value = renv_retrieve_remotes_impl_one(remote)
   )
 
 }
 
-renv_retrieve_handle_remotes_impl_one <- function(remote) {
+renv_retrieve_remotes_impl_one <- function(remote) {
 
   # TODO: allow customization of behavior when remote parsing fails?
   resolved <- catch(renv_remotes_resolve(remote))
   if (inherits(resolved, "error")) {
-    fmt <- "failed to resolve remote '%s' declared by package '%s'; skipping"
-    warningf(fmt, remote, record$Package)
+    warningf("failed to resolve remote '%s'; skipping", remote)
     return(invisible(NULL))
   }
 
@@ -1128,13 +1153,13 @@ renv_retrieve_handle_remotes_impl_one <- function(remote) {
     !identical(record, list(Package = package, Source = "Repository"))
 
   if (skip) {
-    dlog("retrieve", "Skipping remote '%s'; it's already been declared.", remote)
-    dlog("retrieve", "Using existing remote '%s'.", stringify(record))
+    dlog("retrieve", "skipping remote '%s'; it's already been declared", remote)
+    dlog("retrieve", "using existing remote '%s'", stringify(record))
     return(invisible(NULL))
   }
 
   # update the requested record
-  dlog("retrieve", "Using remote '%s'.", remote)
+  dlog("retrieve", "using remote '%s'", remote)
   state$records[[package]] <- resolved
 
   # mark the record as needing retrieval
@@ -1143,6 +1168,15 @@ renv_retrieve_handle_remotes_impl_one <- function(remote) {
   # return new record
   invisible(resolved)
 
+}
+
+renv_retrieve_resolve <- function(package) {
+  tryCatch(
+    renv_snapshot_description(package = package),
+    error = function(e) {
+      renv_retrieve_missing_record(package)
+    }
+  )
 }
 
 renv_retrieve_missing_record <- function(package) {
@@ -1169,8 +1203,7 @@ renv_retrieve_missing_record <- function(package) {
   entry <- renv_available_packages_entry(package, type = "source")
   version <- entry$Version %||% "<unknown>"
 
-  msg <- sprintf(fmt, package, version)
-  writeLines(msg)
+  writef(fmt, package, version)
 
   stopf("failed to find a compatible version of the '%s' package", package)
 
@@ -1233,10 +1266,9 @@ renv_retrieve_incompatible_report <- function(package, record, replacement, comp
 
   if (!renv_tests_running()) {
     renv_pretty_print(
-      values = values,
       preamble = preamble,
-      postamble = postamble,
-      wrap = FALSE
+      values = values,
+      postamble = postamble
     )
   }
 

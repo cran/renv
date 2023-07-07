@@ -12,7 +12,7 @@
 
 
 
-<title>Project Profiles</title>
+<title>Project profiles</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -336,7 +336,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<h1 class="title toc-ignore">Project Profiles</h1>
+<h1 class="title toc-ignore">Project profiles</h1>
 
 
 
@@ -358,40 +358,39 @@ application.</li>
 a different set of paths for the project library and lockfile. With
 this, it is possible to associate different packages, and different
 dependencies, with different workflows in a single project using
-<code>renv</code>.</p>
+renv.</p>
 </div>
 <div id="usage" class="section level2">
 <h2>Usage</h2>
-<p>By default, <code>renv</code> projects use the “default” profile,
-which implies that library and lockfile paths are set in the typical
-way. To activate a particular profile, use:</p>
+<p>By default, renv projects use the “default” profile, which implies
+that library and lockfile paths are set in the typical way. To activate
+a particular profile, use:</p>
 <pre><code>renv::activate(profile = &quot;dev&quot;)</code></pre>
 <p>This creates a profile called <code>&quot;dev&quot;</code>, and sets it as the
 default for the project, so that newly-launched R sessions will operate
 using the <code>&quot;dev&quot;</code> profile. After setting this and
-re-launching R, you should see that the default library and lockfile
+re-launching R, you should see that the project library and lockfile
 paths are resolved within the <code>renv/profiles/dev</code> folder from
 the project root.</p>
 <p>Alternatively, if you want to activate a particular profile for an R
 session without setting it as the default for new R sessions, you can
 use:</p>
 <pre><code>Sys.setenv(RENV_PROFILE = &quot;dev&quot;)</code></pre>
-<p>and <code>renv</code> will automatically use that profile as
-appropriate when computing library and lockfile paths. Similarly, from
-the command line, you might enforce the use of a particular profile in
-an <code>renv</code> project with:</p>
+<p>and renv will automatically use that profile as appropriate when
+computing library and lockfile paths. Similarly, from the command line,
+you might enforce the use of a particular profile in an renv project
+with:</p>
 <pre><code>export RENV_PROFILE=dev</code></pre>
-<p>With that set, <code>renv</code> would default to using the
-<code>&quot;dev&quot;</code> profile for any newly-launched R sessions within
-<code>renv</code> projects.</p>
+<p>With that set, renv would default to using the <code>&quot;dev&quot;</code>
+profile for any newly-launched R sessions within renv projects.</p>
 <p>To activate the “default” profile used by a project, use:</p>
 <pre><code>renv::activate(profile = NULL)</code></pre>
 </div>
 <div id="managing-profile-specific-dependencies" class="section level2">
-<h2>Managing Profile-specific Dependencies</h2>
+<h2>Managing profile-specific dependencies</h2>
 <p>Profile-specific package dependencies can be declared within the
 project’s top-level <code>DESCRIPTION</code> file. For example, to
-declare that the <code>shiny</code> profile depends on the <a href="https://shiny.rstudio.com/">shiny</a> and <a href="https://www.tidyverse.org/">tidyverse</a> packages:</p>
+declare that the shiny profile depends on the <a href="https://shiny.posit.co/">shiny</a> and <a href="https://www.tidyverse.org/">tidyverse</a> packages:</p>
 <pre><code>Config/renv/profiles/shiny/dependencies: shiny, tidyverse</code></pre>
 <p>If you’d like to also declare that these packages should be installed
 from a custom remote (analogous to the <code>Remotes</code> field for
@@ -400,11 +399,11 @@ field:</p>
 <pre><code>Config/renv/profiles/shiny/remotes: rstudio/shiny, tidyverse/tidyverse</code></pre>
 <p>These remotes will then be respected in calls to
 <code>renv::install()</code>.</p>
-<p>The packages and remotes must be specified separately, as
-<code>renv</code> cannot determine the package name associated with a
-particular remote without explicitly resolving that remote. Remote
-resolution normally requires a web request, which <code>renv</code>
-tries to avoid in “regular” dependency discovery.</p>
+<p>The packages and remotes must be specified separately, as renv cannot
+determine the package name associated with a particular remote without
+explicitly resolving that remote. Remote resolution normally requires a
+web request, which renv tries to avoid in “regular” dependency
+discovery.</p>
 <p>If you’d prefer that only the packages enumerated in this field are
 used, you can opt-in to using <code>&quot;explicit&quot;</code> snapshots, and
 leave the <code>Imports</code>, <code>Depends</code> and

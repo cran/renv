@@ -1,7 +1,7 @@
 
 #' Resolve a Remote
 #'
-#' Given a remote specification, resolve it into an `renv` package record that
+#' Given a remote specification, resolve it into an renv package record that
 #' can be used for download and installation (e.g. with [install]).
 #'
 #' @param spec A remote specification. This should be a string, conforming
@@ -53,14 +53,6 @@ renv_remotes_resolve <- function(spec, latest = FALSE) {
     prefix <- sprintf(fmt, spec)
     message <- paste(prefix, e$message, sep = " -- ")
 
-    # if the error occurred while running tests, and the error appears
-    # to be due to an HTTP error (unauthorized), then just skip instead
-    if (renv_tests_running()) {
-      unauth <- any(grepl("403", e$message %||% ""))
-      if (unauth)
-        testthat::skip("Ignoring transient 403 error")
-    }
-
     # otherwise, propagate the error
     stop(simpleError(message = message, call = e$call))
 
@@ -78,8 +70,17 @@ renv_remotes_resolve_impl <- function(spec, latest = FALSE) {
 
   remote <- renv_remotes_parse(spec)
 
+  # fixup for bioconductor
+  isbioc <-
+    identical(remote$type, "repository") &&
+    identical(remote$repository, "bioc")
+
+  if (isbioc)
+    remote$type <- "bioc"
+
   resolved <- switch(
     remote$type,
+    bioc       = renv_remotes_resolve_bioc(remote),
     bitbucket  = renv_remotes_resolve_bitbucket(remote),
     gitlab     = renv_remotes_resolve_gitlab(remote),
     github     = renv_remotes_resolve_github(remote),
@@ -89,7 +90,12 @@ renv_remotes_resolve_impl <- function(spec, latest = FALSE) {
     stopf("unknown remote type '%s'", remote$type %||% "<NA>")
   )
 
-  reject(resolved, is.null)
+  # ensure that attributes on the record are preserved, but drop NULL entries
+  for (key in names(resolved))
+    if (is.null(resolved[[key]]))
+      resolved[[key]] <- NULL
+
+  resolved
 
 }
 
@@ -319,6 +325,55 @@ renv_remotes_parse <- function(spec) {
 
 }
 
+renv_remotes_resolve_bioc_version <- function(version) {
+
+  # initialize Bioconductor
+  renv_bioconductor_init()
+  BiocManager <- renv_scope_biocmanager()
+
+  # handle versions like 'release' and 'devel'
+  versions <- BiocManager$.version_map()
+  row <- versions[versions$BiocStatus == version, ]
+  if (nrow(row))
+    return(row$Bioc)
+
+  # otherwise, use the default version
+  BiocManager$version()
+
+}
+
+renv_remotes_resolve_bioc_plain <- function(remote) {
+
+  list(
+    Package = remote$package,
+    Version = remote$version,
+    Source  = "Bioconductor"
+  )
+
+}
+
+renv_remotes_resolve_bioc <- function(remote) {
+
+  # if we parsed this as a repository remote, use that directly
+  if (!is.null(remote$package))
+    return(renv_remotes_resolve_bioc_plain(remote))
+
+  # otherwise, this was parsed as a regular remote, declaring the package
+  # should be obtained from a particular Bioconductor release
+  package <- remote$repo
+  biocversion <- renv_remotes_resolve_bioc_version(remote$user)
+  biocrepos <- renv_bioconductor_repos(version = biocversion)
+  record <- renv_available_packages_latest(package, repos = biocrepos)
+
+  # update fields
+  record$Source <- "Bioconductor"
+  record$Repository <- NULL
+
+  # return the resolved record
+  record
+
+}
+
 renv_remotes_resolve_bitbucket <- function(remote) {
 
   user   <- remote$user
@@ -501,7 +556,10 @@ renv_remotes_resolve_github_description <- function(host, user, repo, subdir, sh
   renv_scope_auth(repo)
 
   # add headers
-  headers <- c(Accept = "application/vnd.github.raw")
+  headers <- c(
+    Accept = "application/vnd.github.raw",
+    renv_download_auth_github()
+  )
 
   # get the DESCRIPTION contents
   fmt <- "%s/repos/%s/%s/contents/%s?ref=%s"
@@ -710,7 +768,7 @@ renv_remotes_resolve_git_sha_ref <- function(record) {
 
 renv_remotes_resolve_git_description <- function(record) {
 
-  path <- tempfile("renv-git-")
+  path <- renv_scope_tempfile("renv-git-")
   ensure_directory(path)
 
   # TODO: is there a cheaper way for us to accomplish this?

@@ -1,33 +1,59 @@
+test_that("reports if status not possible", {
 
-context("Status")
-
-test_that("status reports packages to be installed / changed", {
-
-  renv_tests_scope(c("toast", "breakfast"))
-  renv_scope_options(renv.config.auto.snapshot = FALSE)
-  renv_scope_sink()
+  renv_tests_scope()
+  expect_snapshot(status())
 
   init(bare = TRUE)
-  snapshot()
-  expect_signal(status(), class = "renv.status.used_but_not_installed")
+  expect_snapshot(status())
 
-  install("breakfast")
-  expect_signal(status(), class = "renv.status.installed_but_not_recorded")
   snapshot()
-
-  record("egg")
-  expect_signal(status(), class = "renv.status.recorded_but_not_used")
-  snapshot()
+  unlink("renv/library", recursive = TRUE)
+  expect_snapshot(status())
 
 })
 
-test_that("status reports packages which are used but not installed", {
+test_that("reports when project is synchronised", {
 
   renv_tests_scope()
-  renv_scope_sink()
   init()
 
+  expect_snapshot(status())
+
+})
+
+test_that("reports synchronisation problems with non-installed packages", {
+
+  renv_tests_scope()
+  init()
+
+  writeLines(c("library(egg)", "library(bread)"), con = "script.R")
+  record("egg")
+  record("oatmeal")
+
+  expect_snapshot(status())
+
+})
+
+test_that("reports synchronisation problems with installed packages", {
+
+  renv_tests_scope()
+  init()
+  install(c("egg", "bread"))
+
   writeLines("library(bread)", con = "script.R")
-  expect_signal(status(), class = "renv.status.used_but_not_installed")
+  record("egg")
+
+  expect_snapshot(status())
+
+})
+
+test_that("reports version differences", {
+
+  renv_tests_scope(c("egg", "oatmeal"))
+  init()
+  record("egg@2.0.0")
+  record("oatmeal@0.9.0")
+
+  expect_snapshot(status())
 
 })

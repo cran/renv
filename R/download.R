@@ -4,8 +4,13 @@
 # what form of authentication is appropriate; the 'quiet'
 # argument is used to display / suppress output. use 'headers'
 # (as a named character vector) to supply additional headers
-download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) {
-
+download <- function(url,
+                     destfile,
+                     preamble = NULL,
+                     type = NULL,
+                     quiet = FALSE,
+                     headers = NULL)
+{
   # allow for user-defined overrides
   override <- getOption("renv.download.override")
   if (is.function(override)) {
@@ -39,7 +44,8 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
   destfile <- chartr("\\", "/", destfile)
 
   # notify user we're about to try downloading
-  vwritef("Retrieving '%s' ...", url)
+  preamble <- preamble %||% sprintf("- Downloading '%s' ... ", url)
+  printf(preamble)
 
   # add custom headers as appropriate for the URL
   headers <- c(headers, renv_download_custom_headers(url))
@@ -57,14 +63,14 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
   if (identical(info$isdir, FALSE)) {
     size <- renv_download_size(url, type, headers)
     if (info$size == size) {
-      vwritef("\tOK [file is up to date]")
+      writef("OK [file is up to date]")
       return(destfile)
     }
   }
 
   # back up a pre-existing file if necessary
   callback <- renv_file_backup(destfile)
-  on.exit(callback(), add = TRUE)
+  defer(callback())
 
   # form path to temporary file
   tempfile <- renv_scope_tempfile(tmpdir = dirname(destfile))
@@ -113,7 +119,6 @@ download <- function(url, destfile, type = NULL, quiet = FALSE, headers = NULL) 
 
   # and return path to successfully retrieved file
   destfile
-
 }
 
 # NOTE: only 'GET' and 'HEAD' are supported
@@ -206,7 +211,7 @@ renv_download_default <- function(url, destfile, type, request, headers) {
 
 }
 
-renv_download_default_agent_scope <- function(headers) {
+renv_download_default_agent_scope <- function(headers, scope = parent.frame()) {
 
   if (empty(headers))
     return(FALSE)
@@ -214,18 +219,13 @@ renv_download_default_agent_scope <- function(headers) {
   if (getRversion() >= "3.6.0")
     return(FALSE)
 
-  envir <- parent.frame()
-  renv_download_default_agent_scope_impl(headers, envir)
-
+  renv_download_default_agent_scope_impl(headers, scope)
 }
 
-renv_download_default_agent_scope_impl <- function(headers, envir = NULL) {
-
-  envir <- envir %||% parent.frame()
+renv_download_default_agent_scope_impl <- function(headers, scope = parent.frame()) {
 
   utils <- asNamespace("utils")
   makeUserAgent <- utils$makeUserAgent
-
   ok <-
     is.function(makeUserAgent) &&
     identical(formals(makeUserAgent), pairlist(format = TRUE))
@@ -233,16 +233,13 @@ renv_download_default_agent_scope_impl <- function(headers, envir = NULL) {
   if (!ok)
     return(FALSE)
 
-  do.call("unlockBinding", list("makeUserAgent", utils))
-  defer(do.call("lockBinding", list("makeUserAgent", utils)), envir = envir)
-
   agent <- makeUserAgent(FALSE)
   all <- c("User-Agent" = agent, headers)
   headertext <- paste0(names(all), ": ", all, "\r\n", collapse = "")
 
-  assign("makeUserAgent", envir = utils, function(format = TRUE) {
+  renv_scope_binding(utils, "makeUserAgent", function(format = TRUE) {
     if (format) headertext else agent
-  })
+  }, scope = scope)
 
   return(TRUE)
 
@@ -511,9 +508,16 @@ renv_download_auth_bitbucket <- function() {
 
 renv_download_auth_github <- function() {
 
-  pat <- Sys.getenv("GITHUB_PAT", unset = NA)
-  if (is.na(pat))
-    return(character())
+  if (renv_envvar_exists("GITHUB_PAT")) {
+    pat <- Sys.getenv("GITHUB_PAT")
+  } else {
+    token <- tryCatch(gitcreds::gitcreds_get(), error = function(e) NULL)
+    if (is.null(token)) {
+      return(character())
+    }
+
+    pat <- token$password
+  }
 
   c("Authorization" = paste("token", pat))
 
@@ -651,10 +655,13 @@ renv_download_report <- function(elapsed, file) {
     return()
 
   info <- renv_file_info(file)
-  size <- structure(info$size, class = "object_size")
+  size <- if (is_testing())
+    "XXXX bytes"
+  else
+    structure(info$size, class = "object_size")
 
-  fmt <- "\tOK [downloaded %s in %s]"
-  vwritef(fmt, format(size, units = "auto"), renv_difftime_format(elapsed))
+  fmt <- "OK [%s in %s]"
+  writef(fmt, format(size, units = "auto"), renv_difftime_format_short(elapsed))
 
 }
 
@@ -858,7 +865,7 @@ renv_download_available_fallback <- function(url) {
 
 renv_download_error <- function(url, fmt, ...) {
   msg <- sprintf(fmt, ...)
-  vwritef("\tERROR [%s]", msg)
+  writef("\tERROR [%s]", msg)
   stopf("error downloading '%s' [%s]", url, msg, call. = FALSE)
 }
 
@@ -875,7 +882,7 @@ renv_download_trace_begin <- function(url, type) {
   msg <- sprintf(fmt, url, type)
 
   title <- header(msg, n = 78L)
-  writeLines(c(title, ""))
+  writef(c(title, ""))
 
 }
 
@@ -885,7 +892,7 @@ renv_download_trace_request <- function(text) {
     return()
 
   title <- header("Request", n = 78L, prefix = "##")
-  writeLines(c(title, text, ""))
+  writef(c(title, text, ""))
 
 }
 
@@ -897,11 +904,11 @@ renv_download_trace_result <- function(output) {
   title <- header("Output", prefix = "##", n = 78L)
   text <- if (empty(output)) "[no output generated]" else output
   all <- c(title, text, "")
-  writeLines(all)
+  writef(all)
 
   status <- attr(output, "status", exact = TRUE) %||% 0L
   title <- header("Status", prefix = "##", n = 78L)
   all <- c(title, status, "")
-  writeLines(all)
+  writef(all)
 
 }
