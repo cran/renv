@@ -24,7 +24,8 @@ are matched to \code{...}, renv will signal an error.}
 \item{library}{The library paths. By default, the library paths associated
 with the requested project are used.}
 
-\item{lockfile}{Path to a lockfile. When \code{NULL} (the default), the \code{renv.lock} located in the root of the current project will be used.}
+\item{lockfile}{Path to a lockfile. When \code{NULL} (the default), the
+\code{renv.lock} located in the root of the current project will be used.}
 
 \item{sources}{Boolean; check that each of the recorded packages have a
 known installation source? If a package has an unknown source, renv
@@ -58,18 +59,19 @@ See the headings below for specific advice on resolving any issues
 revealed by \code{status()}.
 }
 \section{Missing packages}{
-First, ensure that all packages used by the project are installed. This is
-important to do first because if any packages are missing we can't tell for
-sure that a package isn't used; it might be a dependency that we don’t know
-about.
+\code{status()} first checks that all packages used by the project are installed.
+This must be done first because if any packages are missing we can't tell for
+sure that a package isn't used; it might be a dependency that we don't know
+about. Once you have resolve any installation issues, you'll need to run
+\code{status()} again to reveal the next set of potential problems.
 
 There are four possibilities for an uninstalled package:
 \itemize{
-\item If it’s used and recorded, call \code{renv::restore()} to install the version
+\item If it's used and recorded, call \code{renv::restore()} to install the version
 specified in the lockfile.
-\item If it’s used and not recorded, call \code{renv::install()} to install it
+\item If it's used and not recorded, call \code{renv::install()} to install it
 from CRAN or elsewhere.
-\item If it’s not used and recorded, call \code{renv::snapshot()} to
+\item If it's not used and recorded, call \code{renv::snapshot()} to
 remove it from the lockfile.
 \item If it's not used and not recorded, there's nothing to do. This the most
 common state because you only use a small fraction of all available
@@ -87,12 +89,12 @@ only if they are used by the project. Fixing issues of this nature only
 requires calling  \code{snapshot()} because there are four possibilities for
 a package:
 \itemize{
-\item If it’s used and recorded, it’s ok.
-\item If it’s used and not recorded, call \code{renv::snapshot()} to add it to the
+\item If it's used and recorded, it's ok.
+\item If it's used and not recorded, call \code{renv::snapshot()} to add it to the
 lockfile.
-\item If it’s not used but is recorded, call \code{renv::snapshot()} to remove
+\item If it's not used but is recorded, call \code{renv::snapshot()} to remove
 it from the lockfile.
-\item If it’s not used and not recorded, it’s also ok, as it may be a
+\item If it's not used and not recorded, it's also ok, as it may be a
 development dependency.
 }
 }

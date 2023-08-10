@@ -115,12 +115,18 @@
 #'
 #' # Development dependencies
 #'
-#' renv attempts to distinguish between 'development' dependencies and
-#' 'runtime' dependencies. For example, you might rely on e.g.
-#' [devtools](https://cran.r-project.org/package=devtools) and
-#' [roxygen2](https://cran.r-project.org/package=roxygen2) during development
-#' for a project, but may not actually require these packages at runtime.
-
+#' renv has some support for distinguishing between development and run-time
+#' dependencies. For example, your Shiny app might rely on
+#' [ggplot2](https://ggplot2.tidyverse.org) (a run-time dependency) but while
+#' you use [usethis](https://usethis.r-lib.org) during development, your app
+#' doesn't need it to run (i.e. it's only a development dependency).
+#'
+#' You can record development dependencies by listing them in the `Suggests`
+#' field of your project's `DESCRIPTION` file. Development dependencies will be installed by
+#' [renv::install()] (when called without arguments) but will not be tracked in
+#' the project snapshot. If you need greater control, you can also try project
+#' profiles as discussed in `vignette("profiles")`.
+#'
 #' @inheritParams renv-params
 #'
 #' @param path The path to a `.R`, `.Rmd`, `.qmd`, `DESCRIPTION`, a directory
@@ -391,6 +397,9 @@ renv_dependencies_find_dir <- function(path, root, depth) {
   # list children
   children <- renv_dependencies_find_dir_children(path, root, depth)
 
+  # notify about number of children
+  renv_condition_signal("renv.dependencies.count", list(path = path, count = length(children)))
+
   # find recursive dependencies
   depth <- depth + 1
   paths <- map(children, renv_dependencies_find_impl, root = root, depth = depth)
@@ -523,6 +532,29 @@ renv_dependencies_discover_renv_lock <- function(path) {
   renv_dependencies_list(path, "renv")
 }
 
+renv_dependencies_discover_description_fields <- function(path, project = NULL) {
+
+  # most callers don't pass in project so we need to get it from global state
+  project <- project %||%
+    renv_dependencies_state(key = "root") %||%
+    renv_restore_state(key = "root") %||%
+    renv_project_resolve()
+
+  # by default, respect fields defined in settings
+  fields <- settings$package.dependency.fields(project = project)
+
+  # if this appears to be the DESCRIPTION associated with the active project,
+  # and an explicit set of dependencies was provided in install, then use those
+  if (renv_path_same(file.path(project, "DESCRIPTION"), path)) {
+    default <- the$install_dependency_fields %||% c(fields, "Suggests")
+    profile <- sprintf("Config/renv/profiles/%s/dependencies", renv_profile_get())
+    fields <- c(default, profile)
+  }
+
+  fields
+
+}
+
 renv_dependencies_discover_description <- function(path,
                                                    fields = NULL,
                                                    subdir = NULL,
@@ -532,29 +564,8 @@ renv_dependencies_discover_description <- function(path,
   if (inherits(dcf, "error"))
     return(renv_dependencies_error(path, error = dcf))
 
-  fields <- fields %||% {
-
-    # most callers don't pass in project so we need to get it from global state
-    project <- project %||%
-      renv_dependencies_state(key = "root") %||%
-      renv_restore_state(key = "root") %||%
-      renv_project_resolve()
-
-    # get fields from settings
-    fields <- settings$package.dependency.fields(project = project)
-
-    # if this is the DESCRIPTION file for the active project, include
-    # the dependencies for the active profile (if any) and Suggested fields.
-    # collect profile-specific dependencies as well
-    if (renv_path_same(file.path(project, "DESCRIPTION"), path)) {
-      fmt <- "Config/renv/profiles/%s/dependencies"
-      profile <- renv_profile_get()
-      fields <- c(fields, "Suggests", sprintf(fmt, profile))
-    }
-
-    fields
-
-  }
+  # resolve the dependency fields to be used
+  fields <- fields %||% renv_dependencies_discover_description_fields(path, project)
 
   # make sure dependency fields are expanded
   fields <- renv_description_dependency_fields_expand(fields)
@@ -946,7 +957,7 @@ renv_dependencies_discover_ipynb <- function(path) {
 
   deps <- stack()
   if (identical(json$metadata$kernelspec$name, "ir"))
-    deps$push(renv_dependencies_list(path, "IRKernel"))
+    deps$push(renv_dependencies_list(path, "IRkernel"))
 
   for (cell in json$cells) {
     if (cell$cell_type != "code")
@@ -1673,8 +1684,6 @@ renv_dependencies_report <- function(errors) {
   if (empty(problems))
     return(TRUE)
 
-  writef("WARNING: One or more problems were discovered while enumerating dependencies.\n")
-
   # bind into list
   bound <- bapply(problems, function(problem) {
     fields <- c(renv_path_aliased(problem$file), problem$line, problem$column)
@@ -1687,13 +1696,17 @@ renv_dependencies_report <- function(errors) {
   splat <- split(bound, bound$file)
 
   # emit messages
-  enumerate(splat, function(file, problem) {
+  lines <- enumerate(splat, function(file, problem) {
     messages <- paste("Error", problem$message, sep = ": ", collapse = "\n\n")
-    text <- c(header(file), messages, "")
-    writef(text)
+    paste(c(header(file), messages, ""), collapse = "\n")
   })
 
-  writef("Please see `?renv::dependencies` for more information.")
+  caution_bullets(
+    "WARNING: One or more problems were discovered while enumerating dependencies.",
+    c("", lines),
+    "Please see `?renv::dependencies` for more information.",
+    bullets = FALSE
+  )
 
   if (identical(errors, "fatal")) {
     fmt <- "one or more problems were encountered while enumerating dependencies"
@@ -1707,8 +1720,19 @@ renv_dependencies_report <- function(errors) {
 
 renv_dependencies_eval <- function(expr) {
 
-  # create environment with small subset of symbols
-  syms <- c("list", "c")
+  # create environment with small subset of "safe" symbols, that
+  # are commonly used for chunk expressions
+  syms <- c(
+    "list", "c", "T", "F",
+    "{", "(", "[", "[[",
+    "::", ":::", "$", "@",
+    ":",
+    "+", "-", "*", "/",
+    "<", ">", "<=", ">=", "==", "!=",
+    "!",
+    "&", "&&", "|", "||"
+  )
+
   vals <- mget(syms, envir = baseenv())
   envir <- list2env(vals, parent = emptyenv())
 

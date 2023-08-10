@@ -1,4 +1,72 @@
 
+# renv 1.0.1
+
+* Fixed an issue where authentication headers could be duplicated when
+  using the `libcurl` download method. (#1605)
+
+* `renv::use()` now defaults to setting `isolate = TRUE` when `sandbox = TRUE`.
+
+* Fixed an issue where the renv watchdog could fail to load, leading to slowness
+  in activating the sandbox on startup. (#1617)
+
+* Fixed an issue where renv did not display warnings / errors from `renv::snapshot()`
+  when `options(renv.verbose = FALSE)` was set. The display of these messages
+  is now controlled via the `renv.caution.verbose` R option. (#1607, #1608)
+
+* `renv::load()` now notifies the user if the synchronization check took an
+  excessive amount of time due to the number of files being scanned in the
+  project. (#1573)
+
+* `renv::init()` gains the `load` argument, making it possible to initialize
+  a project without explicitly loading it. (#1583)
+  
+* renv now uses a lock when synchronizing installed packages with the cache.
+  This should help alleviate issues that can arise when multiple R processes
+  are installing and caching packages concurrently. (#1571)
+
+* Fixed a regression in parsing expressions within R Markdown chunk options. (#1558)
+
+* Fixed an issue that prevented `renv::install()` from functioning
+  when source-only repositories were included. (#1578)
+  
+* Fixed a logic error in reading `RENV_AUTOLOAD_ENABLED`. (#1580)
+
+* `renv::restore()` no longer runs without prompting on load if the 
+  library is empty. (#1543)
+
+* `renv::repair()` now checks for installed packages which lack a known
+  remote source, and updates their `DESCRIPTION` files if it can infer an
+  appropriate remote source. This typically occurs when a package is installed
+  from local sources, but appears to be maintained or published on a remote
+  repository (e.g. GitHub). This was previously done in `renv::snapshot()`, but
+  we've rolled back that change as the prompting was over-aggressive. (#1574)
+
+* `renv::status()` now first reports on uninstalled packages, before reporting on
+  used <-> installed mismatches. (#1538)
+
+* When the `RENV_STARTUP_DIAGNOSTICS` environment variable is set to `TRUE`,
+  renv now displays a short diagnostics report after a project's autoloader
+  has been run. This can be useful when diagnosing why renv is slow to load
+  in certain projects. (#1557)
+
+* renv now ensures the sandbox is activated on load, for R processes which
+  are launched with the renv sandbox on the library paths. (#1565)
+
+* `renv::restore()` no longer erroneously prompts when determining the packages
+  which need to be installed. (#1544)
+
+* `renv::update()` now ensures the `prompt` parameter is properly respected
+  during package installation. (#1540)
+
+* `renv::activate()` no longer erroneously preserves the previous library
+  paths after restarting the session within RStudio. (#1530)
+
+* Use correct spelling of IRkernel package (#1528).
+
+* Honor `R_LIBCURL_SSL_REVOKE_BEST_EFFORT` when using an external `curl.exe`
+  binary to download files. (#1624)
+
+
 # renv 1.0.0
 
 ## New features
@@ -29,10 +97,6 @@
   `install()` continues to install them (#1019). `Suggested` packages listed in 
   `DESCRIPTION` files are declared as development dependencies regardless of 
   whether or not they're a "package" project.
-
-* renv now attempts to infer remote dependencies for GitHub packages that
-  appear to be installed from sources; that is, for packages without a
-  recognizable remote source encoded in its DESCRIPTION file. (#841)
 
 * MRAN integration is now disabled by default, pending the upcoming shutdown
   of Microsoft's MRAN service. Users who require binaries of older R packages

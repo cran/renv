@@ -121,11 +121,8 @@ ask <- function(question, default = FALSE) {
   if (!interactive())
     return(default)
 
-  # TODO: presumedly we don't want to prompt in the autoloader
-  # because it might cause issues in RStudio?
-  initializing <- getOption("renv.autoloader.running")
-  if (identical(initializing, TRUE))
-    return(default)
+  # be verbose in this scope, as we're asking the user for input
+  renv_scope_options(renv.verbose = TRUE)
 
   repeat {
 
@@ -560,4 +557,21 @@ assert <- function(...) stopifnot(...)
 
 overlay <- function(lhs, rhs) {
   modifyList(as.list(lhs), as.list(rhs))
+}
+
+# the 'top' renv function in the call stack
+topfun <- function() {
+
+  self <- renv_envir_self()
+  frames <- sys.frames()
+
+  for (i in seq_along(frames))
+    if (identical(self, parent.env(frames[[i]])))
+      return(sys.function(i))
+
+}
+
+warnify <- function(cnd) {
+  class(cnd) <- c("warning", "condition")
+  warning(cnd)
 }

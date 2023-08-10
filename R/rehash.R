@@ -16,6 +16,7 @@
 rehash <- function(prompt = interactive(), ...) {
   renv_scope_error_handler()
   renv_dots_check(...)
+  renv_scope_verbose_if(prompt)
   invisible(renv_rehash_impl(prompt))
 }
 
@@ -53,7 +54,7 @@ renv_rehash_cache <- function(cache, prompt, action, label) {
     packages <- basename(old)[changed]
     oldhash <- renv_path_component(old[changed], 2L)
     newhash <- renv_path_component(new[changed], 2L)
-    renv_pretty_print(
+    caution_bullets(
       "The following packages will be re-cached:",
       sprintf(fmt, format(packages), format(oldhash), format(newhash)),
       sprintf("Packages will be %s to their new locations in the cache.", label)

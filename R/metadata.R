@@ -33,8 +33,13 @@ renv_metadata_remote <- function(metadata = the$metadata) {
 
 }
 
-renv_metadata_version_friendly <- function(metadata = the$metadata) {
-  renv_bootstrap_version_friendly(metadata$version)
+renv_metadata_version_friendly <- function(metadata = the$metadata,
+                                           shafmt = NULL)
+{
+  renv_bootstrap_version_friendly(
+    version = metadata$version,
+    shafmt  = shafmt
+  )
 }
 
 renv_metadata_init <- function() {
@@ -44,9 +49,13 @@ renv_metadata_init <- function() {
     return()
 
   # renv doesn't appear to be embedded; initialize metadata
-  pkgpath <- renv_namespace_path("renv")
-  record <- renv_description_read(path = file.path(pkgpath, "DESCRIPTION"))
+  path <- renv_namespace_path("renv")
+  record <- renv_description_read(path = file.path(path, "DESCRIPTION"))
   version <- renv_metadata_version_create(record)
-  the$metadata <- renv_metadata_create(embedded = FALSE, version = version)
+
+  the$metadata <- renv_metadata_create(
+    embedded = FALSE,
+    version  = version
+  )
 
 }

@@ -469,10 +469,10 @@ test_that("snapshot doesn't include development dependencies", {
 
 test_that("automatic snapshot works as expected", {
 
-  renv_scope_options(renv.config.auto.snapshot = TRUE)
+  renv_scope_binding(the, "auto_snapshot_forced", TRUE)
   defer(the$library_info <- NULL)
 
-  renv_tests_scope("oatmeal")
+  project <- renv_tests_scope("oatmeal")
   init()
   expect_silent(renv_snapshot_task())
 
@@ -521,7 +521,7 @@ test_that("we report if dependency discover during snapshot() is slow", {
 
 test_that("failures in automatic snapshots disable automatic snapshots", {
 
-  renv_scope_options(renv.config.auto.snapshot = TRUE)
+  renv_scope_binding(the, "auto_snapshot_forced", TRUE)
   defer(the$library_info <- NULL)
 
   project <- renv_tests_scope("bread")
@@ -534,12 +534,22 @@ test_that("failures in automatic snapshots disable automatic snapshots", {
   })
 
   the$library_info <- list()
-  expect_false(the$snapshot_failed)
+  expect_false(the$auto_snapshot_failed)
   expect_snapshot(renv_snapshot_task())
-  expect_true(the$snapshot_failed)
+  expect_true(the$auto_snapshot_failed)
 
   the$library_info <- list()
   expect_silent(renv_snapshot_task())
   expect_equal(count, 1L)
 
+})
+
+# https://github.com/rstudio/renv/issues/1607
+test_that("snapshot() reports missing packages even if renv.verbose is FALSE", {
+  project <- renv_tests_scope()
+  init()
+
+  renv_scope_options(renv.verbose = FALSE)
+  writeLines("library(bread)", con = "deps.R")
+  expect_snapshot(. <- snapshot(force = TRUE))
 })

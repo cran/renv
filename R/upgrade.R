@@ -1,10 +1,13 @@
 
 #' Upgrade renv
 #'
+#' @description
 #' Upgrade the version of renv associated with a project, including using
-#' a development version from GitHub. If you want to update all
-#' packages (including renv) to their latest CRAN versions, use
-#' [renv::update()].
+#' a development version from GitHub. Automatically snapshots the update
+#' renv, updates the activate script, and restarts R.
+#'
+#' If you want to update all packages (including renv) to their latest CRAN
+#' versions, use [renv::update()].
 #'
 #' @inherit renv-params
 #'
@@ -19,8 +22,8 @@
 #'
 #' @param reload Boolean; reload renv after install? When `NULL` (the
 #'   default), renv will be re-loaded only if updating renv for the
-#'   active project. Note that this may fail if you've loaded packages
-#'   which also depend on renv.
+#'   active project. Since it's not possible to guarantee a clean reload
+#'   in the current session, this will attempt to restart your R session.
 #'
 #' @return A boolean value, indicating whether the requested version of
 #'   renv was successfully installed. Note that this function is normally
@@ -44,6 +47,7 @@ upgrade <- function(project = NULL,
                     prompt = interactive())
 {
   renv_scope_error_handler()
+  renv_scope_verbose_if(prompt)
   invisible(renv_upgrade_impl(project, version, reload, prompt))
 }
 
@@ -54,14 +58,15 @@ renv_upgrade_impl <- function(project, version, reload, prompt) {
 
   reload <- reload %||% renv_project_loaded(project)
 
-  old <- renv_snapshot_description(package = "renv")
+  lockfile <- renv_lockfile_load(project)
+  old <- lockfile$Packages$renv
   new <- renv_upgrade_find_record(version)
 
   # check for some form of change
   if (renv_records_equal(old, new)) {
     fmt <- "- renv [%s] is already installed and active for this project."
-    writef(fmt, new$Version)
-    return(TRUE)
+    writef(fmt, renv_metadata_version_friendly())
+    return(FALSE)
   }
 
   if (prompt || renv_verbose()) {
@@ -94,13 +99,27 @@ renv_upgrade_impl <- function(project, version, reload, prompt) {
   renv_lockfile_records(lockfile) <- records
   renv_lockfile_save(lockfile, project = project)
 
-  # now update the infrastructure to use this version of renv
-  version <- renv_metadata_version_create(records[["renv"]])
-  renv_infrastructure_write(project, version = version)
+  # now update the infrastructure to use this version of renv.
+  # do this in a separate process to avoid issues that could arise
+  # if the old version of renv is still loaded
+  #
+  # https://github.com/rstudio/renv/issues/1546
+  writef("- Updating activate script")
+  code <- substitute({
+    renv <- asNamespace("renv"); renv$summon()
+    version <- renv_metadata_version_create(record)
+    renv_infrastructure_write(project, version = version)
+  }, list(project = project, record = records[["renv"]]))
 
-  # reload renv
-  if (reload)
-    renv_upgrade_reload()
+  script <- renv_scope_tempfile("renv-activate-", fileext = ".R")
+  writeLines(deparse(code), con = script)
+
+  args <- c("--vanilla", "-s", "-f", renv_shell_path(script))
+  r(args, stdout = FALSE, stderr = FALSE)
+
+  if (reload) {
+    renv_restart_request(project)
+  }
 
   invisible(TRUE)
 
@@ -172,7 +191,7 @@ renv_upgrade_reload <- function() {
     invisible(FALSE)
   }
 
-  environment(callback) <- .BaseNamespaceEnv
+  environment(callback) <- baseenv()
 
   # add the task callback; don't name it so that the renv infrastructure
   # doesn't try to remove this callback (it'll resolve and remove itself)

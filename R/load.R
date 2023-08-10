@@ -72,8 +72,8 @@ load <- function(project = NULL, quiet = FALSE) {
   renv_scope_options(renv.load.running = TRUE)
 
   # avoid suppressing the next auto snapshot
-  the$snapshot_running <- TRUE
-  defer(the$snapshot_running <- FALSE)
+  the$auto_snapshot_running <- TRUE
+  defer(the$auto_snapshot_running <- FALSE)
 
   # if load is being called via the autoloader,
   # then ensure RENV_PROJECT is unset
@@ -186,8 +186,10 @@ renv_load_minimal <- function(project) {
   renv_load_libpaths(project)
 
   lockfile <- renv_lockfile_load(project)
-  if (length(lockfile))
+  if (length(lockfile)) {
+    renv_load_r(project, lockfile$R)
     renv_load_python(project, lockfile$Python)
+  }
 
   renv_load_finish(project, lockfile)
   invisible(project)
@@ -344,7 +346,7 @@ renv_load_settings <- function(project) {
 
   tryCatch(
     eval(parse(settings), envir = baseenv()),
-    error = warning
+    error = warnify
   )
 
   TRUE
@@ -436,9 +438,10 @@ renv_load_rprofile_impl <- function(profile) {
 }
 
 renv_load_libpaths <- function(project = NULL) {
-  libpaths <- renv_libpaths_activate(project)
+  libpaths <- renv_init_libpaths(project)
   lapply(libpaths, renv_library_diagnose, project = project)
   Sys.setenv(R_LIBS_USER = paste(libpaths, collapse = .Platform$path.sep))
+  renv_libpaths_set(libpaths)
 }
 
 renv_load_sandbox <- function(project) {
@@ -711,7 +714,7 @@ renv_load_check_description <- function(project) {
 
   values <- sprintf("[line %i is blank]", bad)
 
-  renv_pretty_print(
+  caution_bullets(
     sprintf("%s contains blank lines:", renv_path_pretty(descpath)),
     values,
     c(
@@ -750,7 +753,7 @@ renv_load_finish <- function(project = NULL, lockfile = NULL) {
 renv_load_report_project <- function(project) {
 
   profile <- renv_profile_get()
-  version <- renv_metadata_version_friendly()
+  version <- renv_metadata_version_friendly(shafmt = "; sha: %s")
 
   if (!is.null(profile)) {
     fmt <- "- Project '%s' loaded. [renv %s; using profile '%s']"
@@ -815,12 +818,16 @@ renv_load_report_synchronized <- function(project = NULL, lockfile = NULL) {
   # check for case where no packages are installed (except renv)
   if (length(intersect(lockpkgs, libpkgs)) == 0 && length(lockpkgs) > 0L) {
 
-    writef(lines(
-      "- None of the packages recorded in the lockfile are installed.",
-      "- Using `renv::restore()` to restore the project library."
-    ))
+    caution("- No packages recorded in the lockfile are installed.")
+    choice <- menu(
+      title = "What do you want to do?",
+      choices = c(
+        restore = "Restore the project library with `renv::restore()`",
+        cancel = "Leave project library empty"
+      )
+    )
 
-    if (proceed()) {
+    if (choice == "restore") {
       restore(project, prompt = FALSE, exclude = "renv")
       return(TRUE)
     } else {
@@ -835,18 +842,19 @@ renv_load_report_synchronized <- function(project = NULL, lockfile = NULL) {
       "- One or more packages recorded in the lockfile are not installed.",
       "- Use `renv::status()` for more details."
     )
-    writef(msg)
+    caution(msg)
     return(FALSE)
   }
 
   # otherwise, use status to detect if we're synchronized
   info <- local({
     renv_scope_options(renv.verbose = FALSE)
+    renv_scope_caution(FALSE)
     status(project = project, sources = FALSE)
   })
 
   if (!identical(info$synchronized, TRUE)) {
-    writef("- The project is out-of-sync -- use `renv::status()` for details.")
+    caution("- The project is out-of-sync -- use `renv::status()` for details.")
     return(FALSE)
   }
 

@@ -443,7 +443,7 @@ renv_bootstrap_git_extract_sha1_tar <- function(bundle) {
 
   # open the bundle for reading
   # We use gzcon for everything because (from ?gzcon)
-  # > Reading from a connection which does not supply a ‘gzip’ magic
+  # > Reading from a connection which does not supply a 'gzip' magic
   # > header is equivalent to reading from the original connection
   conn <- gzcon(file(bundle, open = "rb", raw = TRUE))
   on.exit(close(conn))
@@ -706,10 +706,12 @@ renv_bootstrap_library_root_impl <- function(project) {
 renv_bootstrap_validate_version <- function(version, description = NULL) {
 
   # resolve description file
-  description <- description %||% {
-    path <- getNamespaceInfo("renv", "path")
-    packageDescription("renv", lib.loc = dirname(path))
-  }
+  #
+  # avoid passing lib.loc to `packageDescription()` below, since R will
+  # use the loaded version of the package by default anyhow. note that
+  # this function should only be called after 'renv' is loaded
+  # https://github.com/rstudio/renv/issues/1625
+  description <- description %||% packageDescription("renv")
 
   # check whether requested version 'version' matches loaded version of renv
   sha <- attr(version, "sha", exact = TRUE)
@@ -780,7 +782,7 @@ renv_bootstrap_load <- function(project, libpath, version) {
   hooks <- getHook("renv::autoload")
   for (hook in hooks)
     if (is.function(hook))
-      tryCatch(hook(), error = warning)
+      tryCatch(hook(), error = warnify)
 
   # load the project
   renv::load(project)
@@ -921,10 +923,15 @@ renv_bootstrap_user_dir_impl <- function() {
 
 }
 
-renv_bootstrap_version_friendly <- function(version, sha = NULL) {
+renv_bootstrap_version_friendly <- function(version, shafmt = NULL, sha = NULL) {
   sha <- sha %||% attr(version, "sha", exact = TRUE)
-  parts <- c(version, sprintf("[sha: %s]", substring(sha, 1L, 7L)))
-  paste(parts, collapse = " ")
+  parts <- c(version, sprintf(shafmt %||% " [sha: %s]", substring(sha, 1L, 7L)))
+  paste(parts, collapse = "")
+}
+
+renv_bootstrap_exec <- function(project, libpath, version) {
+  if (!renv_bootstrap_load(project, libpath, version))
+    renv_bootstrap_run(version, libpath)
 }
 
 renv_bootstrap_run <- function(version, libpath) {
@@ -954,4 +961,12 @@ renv_bootstrap_run <- function(version, libpath) {
 
 renv_bootstrap_in_rstudio <- function() {
   commandArgs()[[1]] == "RStudio"
+}
+
+# Used to work around buglet in RStudio if hook uses readline
+renv_bootstrap_flush_console <- function() {
+  tryCatch({
+    tools <- as.environment("tools:rstudio")
+    tools$.rs.api.sendToConsole("", echo = FALSE, focus = FALSE)
+  }, error = function(cnd) {})
 }

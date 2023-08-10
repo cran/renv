@@ -1,7 +1,7 @@
 
 # controls whether hashes are computed when computing a snapshot
 # can be scoped to FALSE when hashing is not necessary
-the$snapshot_hash <- TRUE
+the$auto_snapshot_hash <- TRUE
 
 #' Record current state of the project library in the lockfile
 #'
@@ -139,6 +139,7 @@ snapshot <- function(project  = NULL,
 
   project <- renv_project_resolve(project)
   renv_project_lock(project = project)
+  renv_scope_verbose_if(prompt)
 
   repos <- renv_repos_validate(repos)
   renv_scope_options(repos = repos)
@@ -256,8 +257,6 @@ renv_snapshot_preserve_impl <- function(record) {
 
 renv_snapshot_preflight <- function(project, libpaths) {
   lapply(libpaths, renv_snapshot_preflight_impl, project = project)
-  if (interactive())
-    renv_snapshot_preflight_check_sources(project, libpaths[[1L]])
 }
 
 renv_snapshot_preflight_impl <- function(project, library) {
@@ -286,81 +285,6 @@ renv_snapshot_preflight_library_exists <- function(project, library) {
   # user tried to snapshot arbitrary but missing path
   fmt <- "library '%s' does not exist; cannot proceed"
   stopf(fmt, renv_path_aliased(library))
-
-}
-
-renv_snapshot_preflight_check_sources_infer <- function(dcf) {
-
-  # if this package appears to have a declared remote, use as-is
-  for (field in c("RemoteType", "Repository", "biocViews"))
-    if (!is.null(dcf[[field]]))
-      return(NULL)
-
-  # ok, this is a package installed from sources that "looks" like
-  # the development version of a package; try to guess its remote
-  guess <- function(pattern, field) {
-    urls <- strsplit(dcf[[field]] %||% "", "\\s*,\\s*")[[1L]]
-    for (url in urls) {
-      matches <- regmatches(url, regexec(pattern, url, perl = TRUE))[[1L]]
-      if (length(matches) == 3L)
-        return(paste(matches[[2L]], matches[[3L]], sep = "/"))
-    }
-  }
-
-  # first, check bug reports
-  remote <- guess("^https://(?:www\\.)?github\\.com/([^/]+)/([^/]+)/issues$", "BugReports")
-  if (!is.null(remote))
-    return(remote)
-
-  # next, check the URL field
-  remote <- guess("^https://(?:www\\.)?github\\.com/([^/]+)/([^/]+)", "URL")
-  if (!is.null(remote))
-    return(remote)
-
-}
-
-renv_snapshot_preflight_check_sources <- function(project, library) {
-
-  # allow user to disable snapshot validation, just in case
-  enabled <- config$snapshot.inference()
-  if (!enabled)
-    return(TRUE)
-
-  # get package description files
-  packages <- installed_packages(library, field = "Package")
-  descpaths <- file.path(library, packages, "DESCRIPTION")
-  dcfs <- lapply(descpaths, renv_description_read)
-  names(dcfs) <- packages
-
-  # try to infer sources as necessary
-  inferred <- map(dcfs, renv_snapshot_preflight_check_sources_infer)
-  inferred <- filter(inferred, Negate(is.null))
-  if (length(inferred) == 0L)
-    return(TRUE)
-
-  # ask used
-  renv_scope_options(renv.verbose = TRUE)
-  renv_pretty_print(
-    "The following package(s) were installed from sources, but may be available from the following remotes:",
-    sprintf("%s  [%s]", format(names(inferred)), inferred),
-    c(
-      "Would you like to use these remote sources for these packages?",
-      "See 'snapshot.inference' in ?renv::config for more details.",
-      "Otherwise, these packages will be recorded with an unknown source."
-    )
-  )
-
-  update <- ask("Allow renv to update the remote sources for these packages?", default = TRUE)
-  if (!update)
-    return(TRUE)
-
-  enumerate(inferred, function(package, remote) {
-    record <- renv_remotes_resolve(remote)
-    record[["RemoteSha"]] <- NULL
-    renv_package_augment(file.path(library, package), record)
-  })
-
-  TRUE
 
 }
 
@@ -437,7 +361,7 @@ renv_snapshot_validate_bioconductor <- function(project, lockfile, libpaths) {
       "Consider installing %s before snapshot.",
       ""
     )
-    writef(text, package)
+    caution(text, package)
 
     ok <- FALSE
   }
@@ -481,7 +405,7 @@ renv_snapshot_validate_bioconductor <- function(project, lockfile, libpaths) {
 
     fmt <- "%s [installed %s != latest %s]"
     msg <- sprintf(fmt, format(bad$Package), format(bad$Version), bad$Latest)
-    renv_pretty_print(
+    caution_bullets(
       "The following Bioconductor packages appear to be from a separate Bioconductor release:",
       msg,
       c(
@@ -539,7 +463,7 @@ renv_snapshot_validate_dependencies_available <- function(project, lockfile, lib
 
   })
 
-  renv_pretty_print(
+  caution_bullets(
     "The following required packages are not installed:",
     sprintf("%s  [required by %s]", format(missing), usedby),
     "Consider reinstalling these packages before snapshotting the lockfile."
@@ -603,7 +527,7 @@ renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, li
 
   fmt <- "%s requires %s, but version %s is installed"
   txt <- sprintf(fmt, format(package), format(requires), format(request))
-  renv_pretty_print(
+  caution_bullets(
     "The following package(s) have unsatisfied dependencies:",
     txt,
     "Consider updating the required dependencies as appropriate."
@@ -684,7 +608,7 @@ renv_snapshot_library <- function(library = NULL,
 
     messages <- map_chr(broken, conditionMessage)
     text <- sprintf("'%s': %s", names(broken), messages)
-    renv_pretty_print(
+    caution_bullets(
       "renv was unable to snapshot the following packages:",
       text,
       "These packages will likely need to be repaired and / or reinstalled."
@@ -716,7 +640,7 @@ renv_snapshot_library_diagnose_broken_link <- function(library, paths) {
   if (!any(broken))
     return(paths)
 
-  renv_pretty_print(
+  caution_bullets(
     "The following package(s) have broken symlinks into the cache:",
     basename(paths)[broken],
     "Use `renv::repair()` to try and reinstall these packages."
@@ -733,7 +657,7 @@ renv_snapshot_library_diagnose_tempfile <- function(library, paths) {
   if (!any(missing))
     return(paths)
 
-  renv_pretty_print(
+  caution_bullets(
     "The following folder(s) appear to be left-over temporary directories:",
     map_chr(paths[missing], renv_path_pretty),
     "Consider removing these folders from your R library."
@@ -750,7 +674,7 @@ renv_snapshot_library_diagnose_missing_description <- function(library, paths) {
   if (!any(missing))
     return(paths)
 
-  renv_pretty_print(
+  caution_bullets(
     "The following package(s) are missing their DESCRIPTION files:",
     sprintf("%s [%s]", format(basename(paths[missing])), paths[missing]),
     c(
@@ -793,7 +717,7 @@ renv_snapshot_description_impl <- function(dcf, path = NULL) {
   }
 
   # generate a hash if we can
-  dcf[["Hash"]] <- if (the$snapshot_hash) {
+  dcf[["Hash"]] <- if (the$auto_snapshot_hash) {
     if (is.null(path))
       renv_hash_description_impl(dcf)
     else
@@ -975,6 +899,10 @@ renv_snapshot_dependencies_impl <- function(project, type = NULL, dev = FALSE) {
     }
   )
 
+  # count the number of files in each directory, so we can report
+  # to the user if we scanned a folder containing many files
+  count <- integer()
+
   packages <- withCallingHandlers(
 
     renv_dependencies_impl(
@@ -996,6 +924,11 @@ renv_snapshot_dependencies_impl <- function(project, type = NULL, dev = FALSE) {
 
     },
 
+    # collect information about folders containing lots of files
+    renv.dependencies.count = function(cnd) {
+      count[[cnd$data$path]] <<- cnd$data$count
+    },
+
     # notify the user if we took a long time to discover dependencies
     renv.dependencies.elapsed_time = function(cnd) {
 
@@ -1009,16 +942,26 @@ renv_snapshot_dependencies_impl <- function(project, type = NULL, dev = FALSE) {
       if (elapsed < limit)
         return()
 
+      # tally up directories with lots of files
+      count <- count[order(count)]
+      count <- count[count >= 200]
+
       # report to user
       lines <- c(
         "",
         "NOTE: Dependency discovery took %s during snapshot.",
         "Consider using .renvignore to ignore files, or switching to explicit snapshots.",
         "See `?renv::dependencies` for more information.",
+        if (length(count)) c(
+          "",
+          sprintf("- %s: %s", format(names(count)), nplural("file", count))
+        ),
         ""
       )
 
-      writef(lines, renv_difftime_format(elapsed))
+      # force output in this scope
+      renv_scope_caution(TRUE)
+      caution(lines, renv_difftime_format(elapsed))
 
     }
 
@@ -1070,7 +1013,7 @@ renv_snapshot_report_missing <- function(missing, type) {
 
   missing <- setdiff(missing, "renv")
   if (empty(missing))
-    return(TRUE)
+    return(invisible())
 
   preamble <- "The following required packages are not installed:"
 
@@ -1082,7 +1025,7 @@ renv_snapshot_report_missing <- function(missing, type) {
       "Use `renv::dependencies()` to see where this package is used in your project."
   )
 
-  renv_pretty_print(
+  caution_bullets(
     preamble = preamble,
     values = sort(unique(missing)),
     postamble = postamble
@@ -1090,12 +1033,13 @@ renv_snapshot_report_missing <- function(missing, type) {
 
   # only prompt the user to install if a restart is available
   restart <- findRestart("renv_recompute_records")
+  if (is.null(restart))
+    return(invisible())
 
   choices <- c(
     snapshot = "Snapshot, just using the currently installed packages.",
-    install = if (isRestart(restart))
-      "Install the packages, then snapshot.",
-    cancel = "Cancel, and resolve the situation on your own."
+    install  = "Install the packages, then snapshot.",
+    cancel   = "Cancel, and resolve the situation on your own."
   )
 
   choice <- menu(choices, title = "What do you want to do?")
@@ -1109,7 +1053,8 @@ renv_snapshot_report_missing <- function(missing, type) {
     cancel()
   }
 
-  TRUE
+  invisible()
+
 }
 
 renv_snapshot_filter_custom_resolve <- function() {
@@ -1195,7 +1140,7 @@ renv_snapshot_reprex <- function(lockfile) {
 renv_snapshot_successful <- function(records, prompt, project) {
 
   # update snapshot flag
-  the$snapshot_failed <- FALSE
+  the$auto_snapshot_failed <- FALSE
 
   # perform python snapshot on success
   renv_python_snapshot(project, prompt)

@@ -266,6 +266,7 @@ update <- function(packages = NULL,
 
   project <- renv_project_resolve(project)
   renv_project_lock(project = project)
+  renv_scope_verbose_if(prompt)
 
   # resolve library path
   libpaths <- renv_libpaths_resolve(library)
@@ -295,7 +296,7 @@ update <- function(packages = NULL,
   if (!empty(missing)) {
 
     if (prompt || renv_verbose()) {
-      renv_pretty_print(
+      caution_bullets(
         "The following package(s) are not currently installed:",
         missing,
         "The latest available versions of these packages will be installed instead."
@@ -399,6 +400,7 @@ update <- function(packages = NULL,
     packages = updates,
     library  = libpaths,
     rebuild  = rebuild,
+    prompt   = prompt,
     project  = project
   )
 
@@ -444,7 +446,7 @@ renv_update_errors_emit_impl <- function(key, preamble, postamble) {
     sprintf("%s: %s", format(package), errmsg)
   })
 
-  renv_pretty_print(
+  caution_bullets(
     preamble = preamble,
     values = messages,
     postamble = postamble

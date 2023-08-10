@@ -15,9 +15,7 @@
       
       - Resolving missing dependencies ... 
       # Installing packages ---
-      
       - Installing bread ...                          OK [linked from cache in XXs]
-      
       The following package(s) will be updated in the lockfile:
       
       # CRAN ---
@@ -26,5 +24,5 @@
       The version of R recorded in the lockfile will be updated:
       - R       [* -> <r-version>]
       
-      - Lockfile written to '<wd>/renv.lock'.
+      - Lockfile written to "<wd>/renv.lock".
 

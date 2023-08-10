@@ -2,6 +2,9 @@
 # an explicitly-requested package type in a call to 'install()'
 the$install_pkg_type <- NULL
 
+# an explicitly-requested dependencies field in a call to 'install()'
+the$install_dependency_fields <- NULL
+
 # the formatted width of installation steps printed to the console
 the$install_step_width <- 48L
 
@@ -9,33 +12,18 @@ the$install_step_width <- 48L
 #'
 #' @description
 #' Install one or more \R packages, from a variety of remote sources.
-#' `install()` uses the same machinery as [restore()] for package installation.
-#' In particular, this means that the local cache of package installations is
-#' used when possible. This helps to avoid re-downloading packages that have
-#' already been downloaded before, and re-compiling packages from source when
-#' a binary copy of that package is already available.
+#' `install()` uses the same machinery as [restore()] (i.e. it uses cached
+#' packages where possible) but it does not respect the lockfile, instead
+#' installing the latest versions available from CRAN.
 #'
 #' See `vignette("package-install")` for more details.
 #'
-#' # Project `DESCRIPTION` files
+#' # `Remotes`
 #'
-#' If your project contains a `DESCRIPTION` file, then calling `install()`
-#' without any arguments will instruct renv to install the latest versions of
-#' all packages as declared within that `DESCRIPTION` file's `Depends`,
-#' `Imports` and `LinkingTo` fields; similar to how an \R package might declare
-#' its dependencies.
-#'
-#' If you have one or more packages that you'd like to install from a separate
-#' remote source, this can be accomplished by adding a `Remotes:` field to the
-#' `DESCRIPTION` file. See `vignette("dependencies", package = "devtools")`
-#' for more details. Alternatively, view the vignette online at
-#' <https://devtools.r-lib.org/articles/dependencies.html>.
-#'
-#' Note that `install()` does not use the project's `renv.lock` when determining
-#' sources for packages to be installed. If you want to install packages using
-#' the sources declared in the lockfile, consider using `restore()` instead.
-#' Otherwise, you can declare the package sources in your `DESCRIPTION`'s
-#' `Remotes:` field.
+#' `install()` (called without arguments) will respect the `Remotes` field
+#' of the `DESCRIPTION` file (if present). This allows you to specify places
+#' to install a package other than the latest version from CRAN.
+#' See <https://remotes.r-lib.org/articles/dependencies.html> for details.
 #'
 #' # Bioconductor
 #'
@@ -124,11 +112,12 @@ install <- function(packages = NULL,
 
   project <- renv_project_resolve(project)
   renv_project_lock(project = project)
+  renv_scope_verbose_if(prompt)
 
   # handle 'dependencies'
   if (!is.null(dependencies)) {
     fields <- renv_description_dependency_fields(dependencies, project = project)
-    renv_scope_options(renv.settings.package.dependency.fields = fields)
+    renv_scope_binding(the, "install_dependency_fields", fields)
   }
 
   # set up library paths
@@ -232,14 +221,11 @@ renv_install_impl <- function(records) {
   staged <- renv_config_install_staged()
 
   writef(header("Installing packages"))
-  writef("")
 
   if (staged)
     renv_install_staged(records)
   else
     renv_install_default(records)
-
-  writef("")
 
   invisible(TRUE)
 
@@ -410,7 +396,7 @@ renv_install_package <- function(record) {
   }
 
   elapsed <- difftime(after, before, units = "auto")
-  renv_install_step_ok(feedback, time = elapsed)
+  renv_install_step_ok(feedback, elapsed = elapsed)
 
   invisible()
 
@@ -453,7 +439,7 @@ renv_install_package_cache <- function(record, cache, linker) {
   )
 
   elapsed <- difftime(after, before, units = "auto")
-  renv_install_step_ok(type, time = elapsed)
+  renv_install_step_ok(type, elapsed = elapsed)
 
   return(TRUE)
 
@@ -524,7 +510,7 @@ renv_install_package_impl_prebuild <- function(record, path, quiet) {
   after <- Sys.time()
   elapsed <- difftime(after, before, units = "auto")
 
-  renv_install_step_ok("from source", time = elapsed)
+  renv_install_step_ok("from source", elapsed = elapsed)
 
   newpath
 
@@ -646,16 +632,17 @@ renv_install_test <- function(package) {
   renv_scope_envvars(R_TESTS = NULL)
 
   # the actual code we'll run in the other process
-  fmt <- heredoc("
+  # we use 'loadNamespace()' rather than 'library()' because some packages might
+  # intentionally throw an error in their .onAttach() hooks
+  # https://github.com/rstudio/renv/issues/1611
+  code <- substitute({
     options(warn = 1L)
-    library(%s)
-  ")
-
-  code <- sprintf(fmt, package)
+    loadNamespace(package)
+  }, list(package = package))
 
   # write it to a tempfile
   script <- renv_scope_tempfile("renv-install-")
-  writeLines(code, con = script)
+  writeLines(deparse(code), con = script)
 
   # check that the package can be loaded in a separate process
   renv_system_exec(
@@ -721,7 +708,7 @@ renv_install_preflight_requirements <- function(records) {
   fmt <- "Package '%s' requires '%s', but '%s' will be installed"
   text <- sprintf(fmt, format(package), format(requires), format(actual))
   if (renv_verbose()) {
-    renv_pretty_print(
+    caution_bullets(
       "The following issues were discovered while preparing for installation:",
       text,
       "Installation of these packages may not succeed."
@@ -744,7 +731,7 @@ renv_install_postamble <- function(packages) {
   installed <- map_chr(packages, renv_package_version)
   loaded <- map_chr(packages, renv_namespace_version)
 
-  renv_pretty_print(
+  caution_bullets(
     c("", "The following loaded package(s) have been updated:"),
     packages[installed != loaded],
     "Restart your R session to use the new versions."
@@ -781,7 +768,7 @@ renv_install_preflight_permissions <- function(library) {
     postamble <- sprintf(fmt, info$effective_user %||% info$user)
 
     # print it
-    renv_pretty_print(
+    caution_bullets(
       preamble = preamble,
       values = library,
       postamble = postamble
@@ -818,10 +805,9 @@ renv_install_step_start <- function(action, package) {
   printf(format(message, width = the$install_step_width))
 }
 
-renv_install_step_ok <- function(..., time = NULL) {
-  writef(
-    "OK [%s in %s]",
-    paste(..., collapse = ""),
-    renv_difftime_format_short(time)
+renv_install_step_ok <- function(..., elapsed = NULL) {
+  renv_report_ok(
+    message = paste(..., collapse = ""),
+    elapsed = elapsed
   )
 }

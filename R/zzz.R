@@ -9,6 +9,7 @@
 
 .onUnload <- function(libpath) {
 
+  renv_lock_unload()
   renv_task_unload()
   renv_watchdog_unload()
 
@@ -25,6 +26,13 @@
 
 }
 
+# NOTE: required for devtools::load_all()
+.onDetach <- function(libpath) {
+  package <- Sys.getenv("DEVTOOLS_LOAD", unset = NA)
+  if (identical(package, .packageName))
+    .onUnload(libpath)
+}
+
 renv_zzz_load <- function() {
 
   # NOTE: needs to be visible to embedded instances of renv as well
@@ -38,7 +46,6 @@ renv_zzz_load <- function() {
   renv_methods_init()
   renv_libpaths_init()
   renv_patch_init()
-  renv_lock_init()
   renv_sandbox_init()
   renv_sdkroot_init()
   renv_watchdog_init()
@@ -60,6 +67,12 @@ renv_zzz_load <- function() {
       renv_sandbox_activate(project = project)
   }
 
+  # make sure renv is unloaded on exit, so locks etc. are released
+  # we previously tried to orchestrate this via unloadNamespace(),
+  # but this fails when a package importing renv is already loaded
+  # https://github.com/rstudio/renv/issues/1621
+  reg.finalizer(renv_envir_self(), renv_unload_finalizer, onexit = TRUE)
+
 }
 
 renv_zzz_attach <- function() {
@@ -77,13 +90,8 @@ renv_zzz_run <- function() {
 
   # check if we're running as part of R CMD build
   # if so, build our local repository with a copy of ourselves
-  building <-
-    renv_envvar_exists("R_CMD") &&
-    grepl("Rbuild", basename(dirname(getwd())))
-
-  if (building) {
+  if (building())
     renv_zzz_repos()
-  }
 
 }
 
@@ -195,8 +203,7 @@ renv_zzz_repos <- function() {
   if (!is.na(installing))
     return()
 
-  Sys.setenv("RENV_INSTALLING_REPOS" = "TRUE")
-
+  renv_scope_envvars(RENV_INSTALLING_REPOS = "TRUE")
   writeLines("** installing renv to package-local repository")
 
   # get package directory
@@ -208,7 +215,7 @@ renv_zzz_repos <- function() {
   renv_scope_wd(tdir)
 
   # build renv again
-  r_cmd_build("renv", path = pkgdir)
+  r_cmd_build("renv", path = pkgdir, "--no-build-vignettes")
 
   # copy built tarball to inst folder
   src <- list.files(tdir, full.names = TRUE)

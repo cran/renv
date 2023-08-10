@@ -6,13 +6,7 @@ the$watchdog_enabled <- FALSE
 the$watchdog_process <- NULL
 
 renv_watchdog_init <- function() {
-
   the$watchdog_enabled <- renv_watchdog_enabled_impl()
-
-  reg.finalizer(renv_envir_self(), function(envir) {
-    renv_watchdog_shutdown()
-  }, onexit = TRUE)
-
 }
 
 renv_watchdog_enabled <- function() {
@@ -71,11 +65,11 @@ renv_watchdog_enabled_impl <- function() {
 
 renv_watchdog_start <- function() {
 
-  tryCatch(
+  the$watchdog_enabled <- tryCatch(
     renv_watchdog_start_impl(),
     error = function(e) {
-      the$watchdog_enabled <- FALSE
-      NULL
+      warning(conditionMessage(e))
+      FALSE
     }
   )
 
@@ -92,12 +86,30 @@ renv_watchdog_start_impl <- function() {
 
   # generate script to invoke watchdog
   script <- renv_scope_tempfile("renv-watchdog-", fileext = ".R")
-  code <- substitute({
+
+  # figure out library path -- need to dodge devtools::load_all()
+  library <- dirname(renv_namespace_path(.packageName))
+  if (!file.exists(file.path(library, "Meta/package.rds")))
+    library <- renv_libpaths_default()
+
+  # for R CMD check
+  name <- .packageName
+  pid <- Sys.getpid()
+
+  env <- list(
+    name    = name,
+    library = library,
+    pid     = pid,
+    port    = port
+  )
+
+  code <- substitute(env = env, {
     client <- list(pid = pid, port = port)
-    host <- asNamespace(.packageName)
+    host <- loadNamespace(name, lib.loc = library)
     renv <- if (!is.null(host$renv)) host$renv else host
     renv$renv_watchdog_server_start(client)
-  }, list(pid = Sys.getpid(), port = port, .packageName = .packageName))
+  })
+
   writeLines(deparse(code), con = script)
 
   # debug logging
@@ -135,7 +147,7 @@ renv_watchdog_notify <- function(method, data = list()) {
 
   tryCatch(
     renv_watchdog_notify_impl(method, data),
-    error = warning
+    error = warnify
   )
 
 }
@@ -165,7 +177,7 @@ renv_watchdog_notify_impl <- function(method, data = list()) {
 renv_watchdog_request <- function(method, data = list()) {
   tryCatch(
     renv_watchdog_request_impl(method, data),
-    error = warning
+    error = warnify
   )
 }
 
@@ -211,14 +223,12 @@ renv_watchdog_running <- function() {
 }
 
 renv_watchdog_unload <- function() {
-  renv_watchdog_terminate()
+  renv_watchdog_shutdown()
 }
 
 renv_watchdog_terminate <- function() {
-  if (renv_watchdog_running()) {
-    pid <- renv_watchdog_pid()
-    renv_process_kill(pid)
-  }
+  pid <- renv_watchdog_pid()
+  renv_process_kill(pid)
 }
 
 renv_watchdog_shutdown <- function() {

@@ -26,7 +26,7 @@ renv_abi_check <- function(packages = NULL,
   map(packages, function(package) {
     tryCatch(
       renv_abi_check_impl(package, problems),
-      error = warning
+      error = warnify
     )
   })
 
@@ -45,7 +45,7 @@ renv_abi_check <- function(packages = NULL,
   reasons <- unique(tbl$reason)
   if ("Rcpp_precious_list" %in% reasons) {
     packages <- sort(unique(tbl$package[tbl$reason == "Rcpp_precious_list"]))
-    renv_pretty_print(
+    caution_bullets(
       "The following packages were built against a newer version of Rcpp than is currently available:",
       packages,
       c(

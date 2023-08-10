@@ -1,4 +1,5 @@
 
+the$restore_running <- FALSE
 the$restore_state <- NULL
 
 #' Restore project library from a lockfile
@@ -48,8 +49,11 @@ restore <- function(project  = NULL,
   renv_scope_error_handler()
   renv_dots_check(...)
 
+  renv_scope_binding(the, "restore_running", TRUE)
+
   project <- renv_project_resolve(project)
   renv_project_lock(project = project)
+  renv_scope_verbose_if(prompt)
 
   # resolve library, lockfile arguments
   libpaths <- renv_libpaths_resolve(library)
@@ -257,7 +261,10 @@ renv_restore_begin <- function(project = NULL,
 
     # a collection of the requirements imposed on dependent packages
     # as they are discovered
-    requirements = new.env(parent = emptyenv())
+    requirements = new.env(parent = emptyenv()),
+
+    # the number of packages that were downloaded
+    downloaded = 0L
 
   )
 

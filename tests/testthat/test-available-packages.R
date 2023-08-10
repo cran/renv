@@ -19,18 +19,6 @@ test_that("available_packages() returns NULL when no repos set", {
 
 })
 
-test_that("available_packages() errs on incorrect repository", {
-  skip_on_cran()
-
-  renv_scope_options(
-    renv.config.connect.timeout = 1L,
-    renv.config.connect.retry   = 0L,
-    repos = c(CRAN = "https://www.example.com/no/such/repository")
-  )
-
-  expect_error(available_packages(type = "source"))
-})
-
 test_that("renv handles multiple available source packages", {
   skip_on_cran()
 
@@ -193,4 +181,16 @@ test_that("we can query the R universe", {
   # otherwise, check they're identical
   expect_identical(lhs, rhs)
 
+})
+
+test_that("available_packages() tolerates missing repositories", {
+  renv_tests_scope()
+
+  repos <- getOption("repos")
+  repos[["NARC"]] <- file.path(repos[["CRAN"]], "missing")
+  renv_scope_options(repos = repos)
+
+  dbs <- available_packages(type = "source")
+  expect_false(is.null(dbs[["CRAN"]]))
+  expect_true(is.null(dbs[["NARC"]]))
 })

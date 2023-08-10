@@ -21,6 +21,10 @@
 #' @param library The \R library to be hydrated. When `NULL`, the active
 #'   library as reported by `.libPaths()` is used.
 #'
+#' @param repos The \R repositories to be used. If the project depends on any
+#'   \R packages which cannot be found within the user library paths, then
+#'   those packages will be installed from these repositories instead.
+#'
 #' @param update Boolean; should `hydrate()` attempt to update already-installed
 #'   packages if the requested package is already installed in the project
 #'   library? Set this to `"all"` if you'd like _all_ packages to be refreshed
@@ -57,6 +61,7 @@
 hydrate <- function(packages = NULL,
                     ...,
                     library = NULL,
+                    repos   = getOption("repos"),
                     update  = FALSE,
                     sources = NULL,
                     prompt  = interactive(),
@@ -68,9 +73,11 @@ hydrate <- function(packages = NULL,
 
   project <- renv_project_resolve(project)
   renv_project_lock(project = project)
+  renv_scope_verbose_if(prompt)
 
   renv_activate_prompt("hydrate", library, prompt, project)
 
+  renv_scope_options(repos = repos)
   library <- renv_path_normalize(library %||% renv_libpaths_active())
   packages <- packages %||% renv_hydrate_packages(project)
 
@@ -339,7 +346,7 @@ renv_hydrate_resolve_missing <- function(project, library, na) {
       sprintf("[%s]: %s", package, short)
     })
 
-    renv_pretty_print(
+    caution_bullets(
       "The following package(s) were not installed successfully:",
       text,
       "You may need to manually download and install these packages."
@@ -389,7 +396,7 @@ renv_hydrate_report <- function(packages, na, linkable) {
   }
 
   if (length(na)) {
-    renv_pretty_print(
+    caution_bullets(
       "The following packages are used in this project, but not available locally:",
       csort(names(na)),
       "renv will attempt to download and install these packages."

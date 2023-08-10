@@ -64,6 +64,7 @@ activate <- function(project = NULL, profile = NULL) {
 renv_activate_impl <- function(project,
                                profile,
                                version = NULL,
+                               load    = TRUE,
                                restart = TRUE)
 {
   # prepare renv infrastructure
@@ -78,15 +79,19 @@ renv_activate_impl <- function(project,
     renv_imbue_self(project)
 
   # restart session if requested
-  if (restart && !is_testing())
+  if (restart && !renv_tests_running())
     return(renv_restart_request(project, reason = "renv activated"))
 
   if (renv_rstudio_available())
     renv_rstudio_initialize(project)
 
   # try to load the project
-  setwd(project)
-  load(project)
+  if (load) {
+    setwd(project)
+    load(project)
+  }
+
+  invisible(project)
 
 }
 
@@ -180,7 +185,7 @@ renv_activate_prompt <- function(action, library, prompt, project) {
 renv_activate_prompt_impl <- function(action, project = NULL) {
   title <- c(
     sprintf(
-      "It looks like you've called renv::%s() in a project that hasn't been activated yet",
+      "It looks like you've called renv::%s() in a project that hasn't been activated yet.",
       action
     ),
     "How would you like to proceed?"

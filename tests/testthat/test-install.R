@@ -490,7 +490,6 @@ test_that("custom dependency fields in install are supported", {
 
   install("breakfast", dependencies = c("strong", "Config/Needs/protein"))
   expect_true(renv_package_installed("egg"))
-
 })
 
 test_that("install has user-friendly output", {
@@ -596,4 +595,44 @@ test_that("install() reports failure when a 'bad' binary is installed", {
   expect_error(renv_namespace_load(bread))
   remove("bread")
 
+})
+
+test_that("install() respects dependencies argument", {
+  skip_on_cran()
+  project <- renv_tests_scope()
+  init()
+
+  contents <- heredoc("
+    Type: Project
+    Depends: coffee
+    Imports: bread
+    Suggests: muffin
+  ")
+
+  writeLines(contents, con = "DESCRIPTION")
+  install(dependencies = "Imports")
+
+  expect_true(renv_package_installed("bread"))
+  expect_false(renv_package_installed("coffee"))
+  expect_false(renv_package_installed("muffin"))
+})
+
+test_that("install() succeeds even some repositories cannot be queried", {
+  renv_tests_scope()
+
+  repos <- getOption("repos")
+  repos[["NARC"]] <- file.path(repos[["CRAN"]], "missing")
+  renv_scope_options(repos = repos)
+
+  init()
+  install("bread")
+  expect_true(renv_package_installed("bread"))
+})
+
+test_that("install() doesn't duplicate authentication headers", {
+  renv_scope_envvars(RENV_DOWNLOAD_METHOD = "libcurl")
+  project <- renv_tests_scope()
+  init()
+  install("kevinushey/skeleton")
+  expect_true(renv_package_installed("skeleton"))
 })

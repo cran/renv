@@ -12,6 +12,9 @@ renv_tests_setup <- function(scope = parent.frame()) {
   if (!once())
     return()
 
+  # force gitcreds to initialize early
+  renv_download_auth_github()
+
   # remove automatic tasks so we can capture explicitly in tests
   renv_task_unload()
 
@@ -24,6 +27,9 @@ renv_tests_setup <- function(scope = parent.frame()) {
 
   # fix up the library paths if needed for testing
   renv_tests_setup_libpaths(scope = scope)
+
+  # make sure we clean up sandbox on exit
+  renv_tests_setup_sandbox(scope = scope)
 
   # initialize test repositories
   renv_tests_setup_repos(scope = scope)
@@ -43,6 +49,7 @@ renv_tests_setup_envvars <- function(scope = parent.frame()) {
   renv_scope_envvars(
     RENV_AUTOLOAD_ENABLED = FALSE,
     RENV_CONFIG_LOCKING_ENABLED = FALSE,
+    RENV_DOWNLOAD_METHOD = NULL,
     RENV_PATHS_ROOT = root,
     RENV_PATHS_LIBRARY = NULL,
     RENV_PATHS_LIBRARY_ROOT = NULL,
@@ -126,10 +133,6 @@ renv_tests_setup_packages <- function() {
 
 }
 
-renv_tests_repopath <- function() {
-  getOption("renv.tests.repopath")
-}
-
 renv_tests_setup_libpaths <- function(scope = parent.frame()) {
 
   # remove the sandbox from the library paths, just in case we tried
@@ -140,18 +143,19 @@ renv_tests_setup_libpaths <- function(scope = parent.frame()) {
 
 }
 
+renv_tests_setup_sandbox <- function(scope = parent.frame()) {
+  renv_scope_options(renv.sandbox.locking_enabled = FALSE)
+  defer(renv_sandbox_unlock(), scope = scope)
+}
+
 renv_tests_setup_repos <- function(scope = parent.frame()) {
 
   # generate our dummy repository
-  repopath <- getOption("renv.tests.repopath")
-  if (!is.null(repopath)) {
-    return()
-  }
-
-  repopath <- renv_scope_tempfile("renv-repos-", scope = scope)
-  renv_scope_options(renv.tests.repopath = repopath, scope = scope)
-
   repopath <- renv_tests_repopath()
+  if (file.exists(repopath))
+    return()
+
+  # create repository source directory
   contrib <- file.path(repopath, "src/contrib")
   ensure_directory(contrib)
 

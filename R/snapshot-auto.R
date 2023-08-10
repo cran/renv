@@ -1,21 +1,37 @@
 
+# information about the project library; used to detect whether
+# the library appears to have been modified or updated
 the$library_info <- NULL
 
-the$snapshot_failed <- FALSE
-the$snapshot_running <- FALSE
-the$snapshot_suppressed <- FALSE
+# are we forcing automatic snapshots?
+the$auto_snapshot_forced <- FALSE
+
+# did the last attempt at an automatic snapshot fail?
+the$auto_snapshot_failed <- FALSE
+
+# are we currently running an automatic snapshot?
+the$auto_snapshot_running <- FALSE
+
+# is the next automatic snapshot suppressed?
+the$auto_snapshot_suppressed <- FALSE
 
 # nocov start
 renv_snapshot_auto <- function(project) {
 
   # set some state so we know we're running
-  the$snapshot_running <- TRUE
-  defer(the$snapshot_running <- FALSE)
+  the$auto_snapshot_running <- TRUE
+  defer(the$auto_snapshot_running <- FALSE)
 
   # passed pre-flight checks; snapshot the library
-  updated <- tryCatch(
-    renv_snapshot_auto_impl(project),
-    error = function(err) FALSE
+  updated <- withCallingHandlers(
+
+    tryCatch(
+      renv_snapshot_auto_impl(project),
+      error = function(err) FALSE
+    ),
+
+    cancel = function() FALSE
+
   )
 
   if (updated) {
@@ -35,24 +51,29 @@ renv_snapshot_auto_impl <- function(project) {
     renv.verbose = FALSE
   )
 
+  # get current lockfile state
   lockfile <- renv_paths_lockfile(project)
-  old <- file.info(lockfile)$mtime
+  old <- file.info(lockfile, extra_cols = FALSE)$mtime
 
   # perform snapshot without prompting
   snapshot(project = project, prompt = FALSE)
 
-  new <- file.info(lockfile)$mtime
-
+  # check for change in lockfile
+  new <- file.info(lockfile, extra_cols = FALSE)$mtime
   old != new
 
 }
 
 renv_snapshot_auto_enabled <- function(project = renv_project_get()) {
 
+  # respect override
+  if (the$auto_snapshot_forced)
+    return(TRUE)
+
   # respect config setting
-  config <- config$auto.snapshot(default = NULL)
-  if (!is.null(config))
-    return(config)
+  enabled <- config$auto.snapshot(project = project)
+  if (!enabled)
+    return(FALSE)
 
   # only snapshot interactively
   if (!interactive())
@@ -102,8 +123,8 @@ renv_snapshot_auto_update <- function(project = renv_project_get() ) {
   the$library_info <- new
 
   # if we've suppressed the next automatic snapshot, bail here
-  if (the$snapshot_suppressed) {
-    the$snapshot_suppressed <- FALSE
+  if (the$auto_snapshot_suppressed) {
+    the$auto_snapshot_suppressed <- FALSE
     return(FALSE)
   }
 
@@ -115,7 +136,7 @@ renv_snapshot_auto_update <- function(project = renv_project_get() ) {
 renv_snapshot_task <- function() {
 
   # if the previous snapshot attempt failed, do nothing
-  if (the$snapshot_failed)
+  if (the$auto_snapshot_failed)
     return(FALSE)
 
   # treat warnings as errors in this scope
@@ -125,9 +146,9 @@ renv_snapshot_task <- function() {
   tryCatch(
     renv_snapshot_task_impl(),
     error = function(cnd) {
-      writef("Error generating automatic snapshot: %s", conditionMessage(cnd))
-      writef("Automatic snapshots will be disabled. Use `renv::snapshot()` to manually update the lockfile.")
-      the$snapshot_failed <- TRUE
+      caution("Error generating automatic snapshot: %s", conditionMessage(cnd))
+      caution("Automatic snapshots will be disabled. Use `renv::snapshot()` to manually update the lockfile.")
+      the$auto_snapshot_failed <- TRUE
     }
   )
 
@@ -153,11 +174,11 @@ renv_snapshot_task_impl <- function() {
 renv_snapshot_auto_suppress_next <- function() {
 
   # if we're currently running an automatic snapshot, then nothing to do
-  if (the$snapshot_running)
+  if (the$auto_snapshot_running)
     return()
 
   # otherwise, set the suppressed flag
-  the$snapshot_suppressed <- TRUE
+  the$auto_snapshot_suppressed <- TRUE
 
 }
 

@@ -1,4 +1,7 @@
 
+# whether or not we're already trying to restart the session
+the$restarting <- FALSE
+
 renv_restart_request <- function(project = NULL, reason = "", ...) {
 
   project <- renv_project_resolve(project)
@@ -19,7 +22,7 @@ renv_restart_request_default <- function(project, reason, ...) {
   # use 'restart' helper defined by front-end (if any)
   restart <- getOption("restart")
   if (is.function(restart))
-    return(invisible(restart()))
+    return(renv_restart_invoke(restart))
 
   # otherwise, ask the user to restart
   if (interactive()) {
@@ -49,15 +52,32 @@ renv_restart_request_rstudio <- function(project, reason, ...) {
     return(renv_restart_request_default(project, reason, ...))
 
   # if the requested project matches the current project, just
-  # restart the R session
+  # restart the R session -- but note that we cannot respect
+  # the 'restart' option here as the version RStudio uses
+  # tries to preserve session state that we need to change.
+  #
+  # https://github.com/rstudio/renv/issues/1530
   projdir <- tools$.rs.getProjectDirectory() %||% ""
   if (renv_file_same(projdir, project)) {
-    restart <- getOption("restart")
-    if (is.function(restart))
-      return(restart())
+    restart <- getOption("renv.restart.function", default = function() {
+      tools$.rs.api.executeCommand("restartR", quiet = TRUE)
+    })
+    return(renv_restart_invoke(restart))
   }
 
   # otherwise, explicitly open the new project
-  tools$.rs.api.openProject(project, newSession = FALSE)
+  renv_restart_invoke(function() {
+    invisible(tools$.rs.api.openProject(project, newSession = FALSE))
+  })
+
+}
+
+renv_restart_invoke <- function(callback) {
+
+  # avoid multiple attempts to restart in a single call, just in case
+  if (!the$restarting) {
+    the$restarting <- TRUE
+    callback()
+  }
 
 }

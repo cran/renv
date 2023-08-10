@@ -1,3 +1,4 @@
+
 renv_scoped_sandbox <- function(scope = parent.frame()) {
   renv_scope_options(renv.config.sandbox.enabled = TRUE, scope = scope)
 
@@ -6,16 +7,16 @@ renv_scoped_sandbox <- function(scope = parent.frame()) {
 
   old <- list(.Library.site, .Library, .libPaths())
   defer(scope = scope, {
-    renv_binding_replace(base, ".Library.site", old[[1]])
-    renv_binding_replace(base, ".Library", old[[2]])
+    unlink(sandbox, recursive = TRUE, force = TRUE)
+    renv_binding_replace(base, ".Library.site", old[[1L]])
+    renv_binding_replace(base, ".Library", old[[2L]])
     .libPaths(old[[3]])
   })
 }
 
 test_that("the sandbox can be activated and deactivated", {
 
-  renv_scope_options(renv.config.sandbox.enabled = TRUE)
-  renv_scope_envvars(RENV_PATHS_SANDBOX = tempdir())
+  renv_scoped_sandbox()
 
   # save current library paths
   libpaths <- .libPaths()
@@ -36,8 +37,7 @@ test_that("the sandbox can be activated and deactivated", {
 
 test_that("multiple attempts to activate sandbox are handled", {
 
-  renv_scope_options(renv.config.sandbox.enabled = TRUE)
-  renv_scope_envvars(RENV_PATHS_SANDBOX = tempdir())
+  renv_scoped_sandbox()
 
   libpaths <- .libPaths()
   syslib <- renv_libpaths_system()
@@ -60,7 +60,9 @@ test_that(".Library.site isn't used even when sandbox is disabled", {
   skip_if(renv_platform_windows() || empty(.Library.site))
 
   renv_scope_options(renv.config.sandbox.enabled = FALSE)
-  renv_scope_envvars(RENV_PATHS_SANDBOX = tempdir())
+
+  sandbox <- renv_scope_tempfile("renv-sandbox-")
+  renv_scope_envvars(RENV_PATHS_SANDBOX = sandbox)
 
   sitelib <- setdiff(.Library.site, .Library)
   renv_sandbox_activate()
@@ -69,10 +71,52 @@ test_that(".Library.site isn't used even when sandbox is disabled", {
 
 })
 
+test_that("renv repairs library paths on load if sandbox is active", {
+
+  renv_scoped_sandbox()
+
+  libpaths <- .libPaths()
+  syslib <- renv_libpaths_system()
+
+  # initialize the sandbox
+  renv_sandbox_activate()
+  expect_false(identical(syslib, .Library))
+
+  # check for sandbox marker file
+  marker <- file.path(.Library, ".renv-sandbox")
+  expect_true(file.exists(marker))
+
+  # set up R_LIBS, and then run a child process that reports
+  # the library paths after loading renv
+  script <- renv_test_code({
+    renv:::summon()
+    writeLines(.libPaths())
+  })
+
+  output <- local({
+    renv_scope_envvars(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep))
+    renv_system_exec(
+      command = R(),
+      args    = c("--vanilla", "-s", "-f", renv_shell_path(script)),
+      action  = "testing sandbox"
+    )
+  })
+
+  expect_equal(output, .libPaths())
+
+  # deactivate the sandbox and assert we've restored state
+  renv_sandbox_deactivate()
+  expect_equal(syslib, .Library)
+  expect_equal(libpaths, .libPaths())
+
+})
+
 test_that("multiple processes can attempt to acquire the sandbox", {
 
   skip_on_cran()
   skip_on_ci()
+
+  renv_scoped_sandbox()
 
   # number of processes
   n <- 20

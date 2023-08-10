@@ -28,13 +28,19 @@ retrieve <- function(packages) {
   }
   renv_scope_options(HTTPUserAgent = agent)
 
+  before <- Sys.time()
   handler <- state$handler
   for (package in packages)
     handler(package, renv_retrieve_impl(package))
+  after <- Sys.time()
 
   state <- renv_restore_state()
-  if (identical(state$downloaded, TRUE))
+  count <- state$downloaded
+  if (count) {
+    elapsed <- difftime(after, before, units = "secs")
+    writef("Successfully downloaded %s in %s.", nplural("package", count), renv_difftime_format(elapsed))
     writef("")
+  }
 
   data <- state$install$data()
   names(data) <- extract_chr(data, "Package")
@@ -207,10 +213,9 @@ renv_retrieve_impl <- function(package) {
 
   }
 
-  if (!identical(state$downloaded, TRUE)) {
+  state$downloaded <- state$downloaded + 1L
+  if (state$downloaded == 1L)
     writef(header("Downloading packages"))
-    state$downloaded <- TRUE
-  }
 
   # time to retrieve -- delegate based on previously-determined source
   switch(source,
@@ -665,7 +670,7 @@ renv_retrieve_repos_error_report <- function(record, errors) {
   fmt <- "The following error(s) occurred while retrieving '%s':"
   preamble <- sprintf(fmt, record$Package)
 
-  renv_pretty_print(
+  caution_bullets(
     preamble = preamble,
     values   = paste("-", messages)
   )
@@ -920,12 +925,6 @@ renv_retrieve_repos_impl <- function(record,
 
 renv_retrieve_package <- function(record, url, path) {
 
-  state <- renv_restore_state()
-  count <- state$retrieve_package_count %||% 0L
-  state$retrieve_package_count <- count + 1L
-  if (count == 0L)
-    writef("")
-
   ensure_parent_directory(path)
   type <- renv_record_source(record)
   status <- local({
@@ -1028,11 +1027,12 @@ renv_retrieve_successful <- function(record, path, install = TRUE) {
   # record this package's requirements
   state <- renv_restore_state()
   requirements <- state$requirements
-  deps <- renv_dependencies_discover_description(
-    path,
-    subdir = subdir,
-    fields = if (!record$Package %in% state$packages) "strong"
-  )
+
+  # figure out the dependency fields to use -- if the user explicitly requested
+  # this package be installed, but also provided a 'dependencies' argument in
+  # the call to 'install()', then we want to use those
+  fields <- if (record$Package %in% state$packages) the$install_dependency_fields else "strong"
+  deps <- renv_dependencies_discover_description(path, subdir = subdir, fields = fields)
   if (length(deps$Source))
     deps$Source <- record$Package
 
@@ -1265,7 +1265,7 @@ renv_retrieve_incompatible_report <- function(package, record, replacement, comp
   postamble <- with(replacement, sprintf(fmt, Package, Version))
 
   if (!renv_tests_running()) {
-    renv_pretty_print(
+    caution_bullets(
       preamble = preamble,
       values = values,
       postamble = postamble

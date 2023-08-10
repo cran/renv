@@ -48,7 +48,8 @@ download <- function(url,
   printf(preamble)
 
   # add custom headers as appropriate for the URL
-  headers <- c(headers, renv_download_custom_headers(url))
+  custom <- renv_download_custom_headers(url)
+  headers[names(custom)] <- custom
 
   # handle local files by just copying the file
   if (renv_download_local(url, destfile, headers))
@@ -173,7 +174,8 @@ renv_download_default <- function(url, destfile, type, request, headers) {
     stopf("the default downloader does not support %s requests", request)
 
   # try and ensure headers are set for older versions of R
-  headers <- c(headers, renv_download_auth(url, type))
+  auth <- renv_download_auth(url, type)
+  headers[names(auth)] <- auth
   renv_download_default_agent_scope(headers)
 
   # on Windows, prefer 'wininet' as most users will have already configured
@@ -307,6 +309,11 @@ renv_download_curl <- function(url, destfile, type, request, headers) {
     if (length(extra))
       args$push(extra)
   }
+
+  # honor R_LIBCURL_SSL_REVOKE_BEST_EFFORT
+  # https://github.com/wch/r-source/commit/f1ec503e986593bced6720a5e9099df58a4162e7
+  if (Sys.getenv("R_LIBCURL_SSL_REVOKE_BEST_EFFORT") %in% c("T", "t", "TRUE", "true"))
+    args$push("--ssl-revoke-best-effort")
 
   # add in any user configuration files
   userconfig <- getOption(
@@ -508,18 +515,23 @@ renv_download_auth_bitbucket <- function() {
 
 renv_download_auth_github <- function() {
 
-  if (renv_envvar_exists("GITHUB_PAT")) {
-    pat <- Sys.getenv("GITHUB_PAT")
-  } else {
-    token <- tryCatch(gitcreds::gitcreds_get(), error = function(e) NULL)
-    if (is.null(token)) {
-      return(character())
-    }
-
-    pat <- token$password
-  }
+  pat <- renv_download_auth_github_pat()
+  if (is.null(pat))
+    return(character())
 
   c("Authorization" = paste("token", pat))
+
+}
+
+renv_download_auth_github_pat <- function() {
+
+  pat <- Sys.getenv("GITHUB_PAT", unset = NA)
+  if (!is.na(pat))
+    return(pat)
+
+  token <- tryCatch(gitcreds::gitcreds_get(), error = function(e) NULL)
+  if (!is.null(token))
+    return(token$password)
 
 }
 
@@ -660,8 +672,10 @@ renv_download_report <- function(elapsed, file) {
   else
     structure(info$size, class = "object_size")
 
-  fmt <- "OK [%s in %s]"
-  writef(fmt, format(size, units = "auto"), renv_difftime_format_short(elapsed))
+  renv_report_ok(
+    message = format(size, units = "auto"),
+    elapsed = elapsed
+  )
 
 }
 
@@ -882,7 +896,7 @@ renv_download_trace_begin <- function(url, type) {
   msg <- sprintf(fmt, url, type)
 
   title <- header(msg, n = 78L)
-  writef(c(title, ""))
+  writef(c("", title, ""))
 
 }
 

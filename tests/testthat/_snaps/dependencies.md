@@ -25,8 +25,22 @@
       Finding R package dependencies ... Done!
       WARNING: One or more problems were discovered while enumerating dependencies.
       
-      # <project-dir> ---
+      # <wd-name> ---
       Error: directory contains 12 files; consider ignoring this directory
       
       Please see `?renv::dependencies` for more information.
+      
+
+# dependencies() notifies the user if directories contain lots of files
+
+    Code
+      . <- renv_snapshot_dependencies(project)
+    Output
+      
+      NOTE: Dependency discovery took XXXX seconds during snapshot.
+      Consider using .renvignore to ignore files, or switching to explicit snapshots.
+      See `?renv::dependencies` for more information.
+      
+      - <wd>/data: 200 files
+      
 

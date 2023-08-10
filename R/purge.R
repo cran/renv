@@ -43,6 +43,7 @@ purge <- function(package,
 {
   renv_scope_error_handler()
   renv_dots_check(...)
+  renv_scope_verbose_if(prompt)
   invisible(renv_purge_impl(package, version, hash, prompt))
 }
 
@@ -87,7 +88,7 @@ renv_purge_impl <- function(package,
   missing <- !file.exists(paths)
   if (any(missing)) {
 
-    renv_pretty_print(
+    caution_bullets(
       "The following entries were not found in the cache:",
       paths[missing],
       "They will be ignored."
@@ -100,7 +101,7 @@ renv_purge_impl <- function(package,
   # nocov start
   if (prompt || renv_verbose()) {
 
-    renv_pretty_print(
+    caution_bullets(
       "The following packages will be purged from the cache:",
       renv_cache_format_path(paths)
     )

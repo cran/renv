@@ -165,7 +165,7 @@ renv_libpaths_user <- function() {
 
 }
 
-renv_libpaths_activate <- function(project) {
+renv_init_libpaths <- function(project) {
 
   projlib <- renv_paths_library(project = project)
   extlib <- renv_libpaths_external(project = project)
@@ -173,11 +173,9 @@ renv_libpaths_activate <- function(project) {
     renv_libpaths_user()
 
   libpaths <- c(projlib, extlib, userlib)
-
   lapply(libpaths, ensure_directory)
-  renv_libpaths_set(libpaths)
 
-  .libPaths()
+  libpaths
 
 }
 
@@ -186,6 +184,16 @@ renv_libpaths_restore <- function() {
   renv_libpaths_set(libpaths)
 }
 
-renv_libpaths_resolve <- function(library) {
-  library %||% renv_libpaths_all()
+# We need to ensure the system library is included, for cases where users have
+# provided an explicit 'library' argument in calls to functions like
+# 'renv::restore(library = <...>)')
+#
+# https://github.com/rstudio/renv/issues/1544
+renv_libpaths_resolve <- function(library = NULL) {
+
+  if (is.null(library))
+    return(renv_libpaths_all())
+
+  unique(c(library, .Library))
+
 }

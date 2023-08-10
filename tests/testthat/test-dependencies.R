@@ -101,11 +101,10 @@ test_that("renv warns when large number of files found in total", {
 test_that("renv warns when large number of files found in one directory", {
 
   renv_scope_options(renv.config.dependencies.limit = 5L)
-  strip_dir <- function(x) gsub(basename(getwd()), "<project-dir>", x)
 
   renv_tests_scope()
   file.create(sprintf("%.3i.R", 1:10))
-  expect_snapshot(. <- dependencies(), transform = function(x) strip_dirs(strip_dir(x)))
+  expect_snapshot(. <- dependencies())
 
 })
 
@@ -437,7 +436,45 @@ test_that("captures dependencies from Jupyter notebooks", {
 
   path <- test_path("resources/notebook.ipynb")
   deps <- dependencies(path)
-  expect_setequal(deps$Package, c("IRKernel", "MASS", "stats"))
+  expect_setequal(deps$Package, c("IRkernel", "MASS", "stats"))
   expect_equal(deps$Source, rep(renv_path_normalize(path), 3))
+
+})
+
+test_that("we tolerate calls when parsing dependencies", {
+
+  document <- heredoc('
+    ```{r, renv.ignore=TRUE || TRUE}
+    library(A)
+    ```
+
+    ```{r, renv.ignore=FALSE && TRUE}
+    library(B)
+    ```
+  ')
+
+  file <- renv_scope_tempfile("renv-test-", fileext = ".Rmd")
+  writeLines(document, con = file)
+
+  deps <- dependencies(file)
+  expect_false("A" %in% deps$Package)
+  expect_true("B" %in% deps$Package)
+
+})
+
+test_that("dependencies() notifies the user if directories contain lots of files", {
+  project <- renv_tests_scope()
+  init()
+
+  # create data directory with 'lots' of files
+  dir.create("data")
+  setwd("data")
+  files <- sprintf("%03i.R", 1:200)
+  file.create(files)
+  setwd("..")
+
+  # try to collect snapshot dependencies
+  renv_scope_options(renv.dependencies.elapsed_time_threshold = 0)
+  expect_snapshot(. <- renv_snapshot_dependencies(project))
 
 })
