@@ -1,4 +1,4 @@
-## ---- include = FALSE---------------------------------------------------------
+## ----include = FALSE----------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
@@ -7,7 +7,7 @@ knitr::opts_chunk$set(
 ## ----setup--------------------------------------------------------------------
 library(renv)
 
-## ---- eval = FALSE------------------------------------------------------------
+## ----eval = FALSE-------------------------------------------------------------
 #  # restore packages from the lockfile, bypassing the cache
 #  renv::restore(rebuild = TRUE)
 #  
@@ -17,19 +17,19 @@ library(renv)
 #  # rebuild all packages in the project
 #  renv::rebuild()
 
-## ---- eval = FALSE------------------------------------------------------------
+## ----eval = FALSE-------------------------------------------------------------
 #  # installation of RNetCDF may require us to set include paths for netcdf
 #  configure.args = c(RNetCDF = "--with-netcdf-include=/usr/include/udunits2"))
 #  options(configure.args = configure.args)
 #  renv::install("RNetCDF")
 
-## ---- eval = FALSE------------------------------------------------------------
+## ----eval = FALSE-------------------------------------------------------------
 #  options(
 #    configure.args.RNetCDF = "--with-netcdf-include=/usr/include/udunits2"
 #  )
 #  renv::install("RNetCDF")
 
-## ---- eval = FALSE------------------------------------------------------------
+## ----eval = FALSE-------------------------------------------------------------
 #  # installation of R packages using the Windows Subsystem for Linux
 #  # may require the `--no-lock` flag to be set during install
 #  options(install.opts = "--no-lock")

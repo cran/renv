@@ -49,7 +49,7 @@ overflow: visible;
 </style>
 <style type="text/css" data-origin="pandoc">
 pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span { line-height: 1.25; }
 pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
@@ -341,7 +341,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 <p>When building, deploying, or testing an renv-using project with
-continuous integration (CI) systems (e.g. <a href="https://github.com/features/actions">GitHub Actions</a>, <a href="https://about.gitlab.com/features/continuous-integration/">GitLab
+continuous integration (CI) systems (e.g. <a href="https://github.com/features/actions">GitHub Actions</a>, <a href="https://about.gitlab.com/solutions/continuous-integration/">GitLab
 CI</a>, and others) you need some way to tell the CI system to use renv
 to restore the same packages that you’re using locally.</p>
 <p>The general idea is:</p>
@@ -423,7 +423,7 @@ on GitHub actions.</p>
 </div>
 <div id="gitlab-ci" class="section level2">
 <h2>GitLab CI</h2>
-<p>The following template can be used as a base when using renv with <a href="https://about.gitlab.com/features/continuous-integration/">GitLab
+<p>The following template can be used as a base when using renv with <a href="https://about.gitlab.com/solutions/continuous-integration/">GitLab
 CI</a>:</p>
 <pre><code>variables:
   RENV_CONFIG_REPOS_OVERRIDE: &quot;http://cran.r-project.org&quot;

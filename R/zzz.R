@@ -13,6 +13,10 @@
   renv_task_unload()
   renv_watchdog_unload()
 
+  # do some extra cleanup when running R CMD check
+  if (renv_platform_unix() && checking() && !ci())
+    cleanse()
+
   # flush the help db to avoid errors on reload
   # https://github.com/rstudio/renv/issues/1294
   helpdb <- system.file(package = "renv", "help/renv.rdb")
@@ -41,8 +45,21 @@ renv_zzz_load <- function() {
   # make sure renv (and packages using renv!!!) use tempdir for storage
   # when running tests, or R CMD check
   if (checking() || testing()) {
-    Sys.setenv(RENV_PATHS_ROOT = tempfile("renv-root-"))
+
+    # set root directory
+    root <- Sys.getenv("RENV_PATHS_ROOT", unset = tempfile("renv-root-"))
+    Sys.setenv(RENV_PATHS_ROOT = root)
+
+    # set up sandbox -- only done on non-Windows due to strange intermittent
+    # test failures that seemed to occur there?
+    if (renv_platform_unix()) {
+      sandbox <- Sys.getenv("RENV_PATHS_SANDBOX", unset = tempfile("renv-sandbox-"))
+      Sys.setenv(RENV_PATHS_SANDBOX = sandbox)
+    }
+
+    # don't lock sandbox while testing / checking
     options(renv.sandbox.locking_enabled = FALSE)
+
   }
 
   renv_metadata_init()

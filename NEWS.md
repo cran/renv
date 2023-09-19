@@ -1,3 +1,29 @@
+
+# renv 1.0.3
+
+* Fixed an issue where `renv` could warn the project appeared to be out-of-sync
+  when using packages installed without an explicit source recorded. (#1683)
+
+* `renv::install()` gains the `exclude` argument, which can be useful when
+  installing a subset of project dependencies.
+
+* Fixed an issue where PPM repositories were not appropriately transformed
+  into the correct binary repository in `renv::restore()` when using pak.
+
+* `renv::init()` no longer prompts the user for the intended action for
+  projects containing a library with only renv installed. (#1668)
+
+* Fixed an issue where non-interactive usages of `renv::init()` could fail
+  with projects containing a DESCRIPTION file. (#1663)
+
+* Fixed an issue that could cause code within a project `.Rprofile` to execute
+  before the project had been loaded in RStudio. (#1650)
+
+* `renv::snapshot()` and `renv::status()` gain the `dev` argument. This
+  can be used when you'd like to capture package dependencies from
+  the *Suggests* field of your package's DESCRIPTION file. (#1019)
+
+
 # renv 1.0.2
 
 * renv now parses package `NAMESPACE` files for imported dependencies. (#1637)

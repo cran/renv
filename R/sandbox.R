@@ -8,6 +8,11 @@ renv_sandbox_init <- function() {
     options(renv.sandbox.locking_enabled = enabled)
   }
 
+  # don't use sandbox in watchdog process
+  type <- Sys.getenv("RENV_PROCESS_TYPE")
+  if (type == "watchdog-server")
+    return()
+
   # if renv was launched with a sandbox path on the library paths,
   # then immediately try to activate the sandbox
   # https://github.com/rstudio/renv/issues/1565
@@ -166,8 +171,12 @@ renv_sandbox_generate <- function(sandbox) {
   })
 
   # create marker indicating this is a sandbox
+  # (or, if it already exists, re-create it and update its ctime / mtime)
   marker <- file.path(sandbox, ".renv-sandbox")
   file.create(marker)
+
+  # update mtime on the sandbox itself as well
+  Sys.setFileTime(sandbox, time = Sys.time())
 
   # make the library unwritable again
   if (lock) {
@@ -205,17 +214,23 @@ renv_sandbox_task <- function(...) {
   if (!renv_sandbox_activated())
     return()
 
+  # allow opt-out if necessary
   enabled <- getOption("renv.sandbox.task", default = TRUE)
   if (!enabled)
     return()
 
-  # make sure the sandbox exists
+  # get sandbox path
   sandbox <- tail(.libPaths(), n = 1L)
+
+  # make sure it exists
   if (!file.exists(sandbox)) {
     warning("the renv sandbox was deleted; it will be re-generated", call. = FALSE)
     ensure_directory(sandbox)
     renv_sandbox_generate(sandbox)
   }
+
+  # update the sandbox write time / mtime
+  Sys.setFileTime(sandbox, time = Sys.time())
 
 }
 

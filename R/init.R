@@ -10,8 +10,8 @@ the$init_running <- FALSE
 #'    the project library and the `.Rprofile` that ensures renv will be
 #'    used in all future sessions.
 #'
-#' 1. Discover the packages that you currently and install them into an
-#'    project library (as described in [hydrate()]).
+#' 1. Discover the packages that are currently being used in your project and
+#'    install them into the project library (as described in [hydrate()]).
 #'
 #' 1. Create a lockfile that records the state of the project library so it
 #'    can be restored by others (as described in [snapshot()]).
@@ -219,6 +219,13 @@ renv_init_action_conflict_library <- function(project, library, lockfile) {
 
   if (!interactive())
     return("nothing")
+
+  # if the project library exists, but it's empty, or only renv is installed,
+  # treat this as a request to initialize the project
+  # https://github.com/rstudio/renv/issues/1668
+  db <- installed_packages(lib.loc = library, priority = NA_character_)
+  if (nrow(db) == 0L || identical(db$Package, "renv"))
+    return("init")
 
   title <- "This project already has a private library. What would you like to do?"
   choices <- c(
