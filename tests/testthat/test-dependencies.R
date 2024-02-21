@@ -298,6 +298,12 @@ test_that("renv.ignore=FALSE, eval=TRUE is handled", {
   expect_false("a" %in% deps$Package)
 })
 
+test_that("eval=<expr> is treated as truthy", {
+  deps <- dependencies("resources/chunk-eval.Rmd", quiet = TRUE)
+  expect_true("A" %in% deps$Package)
+  expect_false("a" %in% deps$Package)
+})
+
 test_that("piped expressions can be parsed for dependencies", {
   deps <- dependencies("resources/magrittr.R")
   expect_setequal(deps$Package, c("A", "B", "C"))
@@ -498,5 +504,49 @@ test_that("dependencies() can parse NAMESPACE files", {
 
   deps <- dependencies()
   expect_setequal(deps$Package, c("graphics", "tools", "utils"))
+
+})
+
+test_that("dependencies() handles upper-case engine names", {
+
+  document <- heredoc("
+    ```{R}
+    library(A)
+    ```
+  ")
+
+  file <- renv_scope_tempfile(fileext = ".Rmd")
+  writeLines(document, con = file)
+  deps <- dependencies(file, quiet = TRUE)
+  expect_true("A" %in% deps$Package)
+
+})
+
+test_that("dependencies() ignores R when specified in a DESCRIPTION file", {
+
+  project <- renv_tests_scope()
+  desc <- heredoc("
+    Type: Package
+    Package: test
+    Version: 0.1.0
+    Depends: R (>= 4.0.0)
+  ")
+  writeLines(desc, con = "DESCRIPTION")
+
+  deps <- dependencies(quiet = TRUE)
+  expect_false("R" %in% deps$Package)
+
+})
+
+test_that("dependencies() with different extensions", {
+
+  project <- renv_tests_scope()
+
+  writeLines("library(A)", con = "a.R")
+  writeLines("```{r}\nlibrary(B)\n```", con = "a.Rmd")
+
+  deps <- dependencies(quiet = TRUE)
+  expect_true("A" %in% deps$Package)
+  expect_true("B" %in% deps$Package)
 
 })

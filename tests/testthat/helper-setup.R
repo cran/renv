@@ -13,7 +13,7 @@ renv_tests_setup <- function(scope = parent.frame()) {
     return()
 
   # force gitcreds to initialize early
-  renv_download_auth_github()
+  renv_download_auth_github(url = "https://github.com")
 
   # remove automatic tasks so we can capture explicitly in tests
   renv_task_unload()
@@ -44,7 +44,8 @@ renv_tests_setup <- function(scope = parent.frame()) {
 renv_tests_setup_envvars <- function(scope = parent.frame()) {
 
   # set up root directory
-  root <- ensure_directory(renv_scope_tempfile(scope = scope))
+  root <- renv_scope_tempfile("renv-root-", scope = scope)
+  ensure_directory(root)
 
   renv_scope_envvars(
     RENV_AUTOLOAD_ENABLED = FALSE,
@@ -164,6 +165,12 @@ renv_tests_setup_repos <- function(scope = parent.frame()) {
   target <- renv_scope_tempfile("renv-packages-", scope = scope)
   renv_file_copy(source, target)
   renv_scope_wd(target)
+
+  # update the local packrat package version
+  record <- renv_available_packages_latest(package = "packrat")
+  dcf <- renv_dcf_read(file = "packrat/DESCRIPTION")
+  dcf$Version <- record$Version
+  renv_dcf_write(dcf, file = "packrat/DESCRIPTION")
 
   # helper function for 'uploading' a package to our test repo
   upload <- function(path, root, subdir = FALSE) {

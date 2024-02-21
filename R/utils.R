@@ -102,8 +102,13 @@ catch <- function(expr) {
 
 catchall <- function(expr) {
   tryCatch(
-    withCallingHandlers(expr, condition = renv_error_capture),
-    condition = renv_error_tag
+    withCallingHandlers(
+      expr = expr,
+      error = renv_error_capture,
+      warning = renv_error_capture
+    ),
+    error = renv_error_tag,
+    warning = renv_error_tag
   )
 }
 
@@ -203,7 +208,7 @@ menu <- function(choices, title, default = 1L) {
 
 # nocov end
 
-inject <- function(contents,
+insert <- function(contents,
                    pattern,
                    replacement,
                    anchor = NULL,
@@ -241,7 +246,9 @@ read <- function(file) {
 }
 
 plural <- function(word, n) {
-  if (n == 1) word else paste(word, "s", sep = "")
+  suffixes <- c("", "s")
+  indices <- as.integer(n != 1L) + 1L
+  paste0(word, suffixes[indices])
 }
 
 nplural <- function(word, n) {
@@ -323,12 +330,29 @@ keep <- function(x, keys) {
   x[intersect(keys, names(x))]
 }
 
-exclude <- function(x, keys) {
+keep_if <- function(x, f) {
+  x[f(x)]
+}
+
+omit <- function(x, keys) {
   x[setdiff(names(x), keys)]
+}
+
+omit_if <- function(x, f) {
+  x[!f(x)]
 }
 
 invoke <- function(callback, ...) {
   callback(...)
+}
+
+resolve <- function(object) {
+
+  while (is.function(object))
+    object <- object()
+
+  object
+
 }
 
 dequote <- function(strings) {
@@ -572,4 +596,20 @@ topfun <- function() {
 warnify <- function(cnd) {
   class(cnd) <- c("warning", "condition")
   warning(cnd)
+}
+
+# a friendlier version of substitute, which handles promises
+inject <- function(expr, envir = parent.frame()) {
+
+  # replace promises in environments with their evaluated equivalents
+  if (is.environment(envir)) {
+    keys <- ls(envir = envir, all.names = TRUE)
+    for (key in keys)
+      envir[[key]] <- envir[[key]]
+  }
+
+  # now, perform the substitution
+  expr <- call("substitute", substitute(expr))
+  eval(expr, envir = envir)
+
 }

@@ -711,6 +711,32 @@ remote, it can be supplied with a prefix of the form
 at <a href="https://github.com/igraph/rigraph" class="uri">https://github.com/igraph/rigraph</a> could be installed
 with:</p>
 <pre><code>renv::install(&quot;igraph=igraph/rigraph&quot;)</code></pre>
+<div id="azure-devops" class="section level4">
+<h4>Azure DevOps</h4>
+<p>Authentication with Azure DevOps may require credentials to be set in
+a slightly different way. In particular, you can use:</p>
+<pre><code>GITHUB_USER = &lt;username&gt;
+GITHUB_PASS = &lt;password&gt;</code></pre>
+<p>replacing <code>&lt;username&gt;</code> and
+<code>&lt;password&gt;</code> as appropriate – for example, your
+password may just be a PAT. See <a href="https://github.com/rstudio/renv/issues/1751" class="uri">https://github.com/rstudio/renv/issues/1751</a> for more
+details.</p>
+</div>
+<div id="git-and-personal-access-tokens" class="section level4">
+<h4>Git and Personal Access Tokens</h4>
+<p>Rather than username + password, some remote Git repositories might
+require Personal Access Tokens (PATs) for authentication. Typically,
+such servers expect authentication credentials where:</p>
+<ul>
+<li>Your PAT is supplied as the username,</li>
+<li>Either an empty response, or the string <code>x-oauth-basic</code>,
+is provided as the password.</li>
+</ul>
+<p>To help facilitate this, you can set:</p>
+<pre><code>GIT_USER = &lt;pat&gt;
+GIT_PASS = x-oauth-basic</code></pre>
+<p>in an appropriate startup R file.</p>
+</div>
 </div>
 <div id="custom-headers" class="section level3">
 <h3>Custom headers</h3>
@@ -724,10 +750,10 @@ accessing that URL.</p>
 access that repository are stored in the <code>AUTH_HEADER</code>
 environment variable. You could define
 <code>renv.download.headers</code> like so:</p>
-<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.download.headers =</span> <span class="cf">function</span>(url) {</span>
-<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">grepl</span>(<span class="st">&quot;^https://my/repository&quot;</span>, url))</span>
-<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">c</span>(<span class="at">Authorization =</span> <span class="fu">Sys.getenv</span>(<span class="st">&quot;AUTH_HEADER&quot;</span>)))</span>
-<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a>})</span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.download.headers =</span> <span class="cf">function</span>(url) {</span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">grepl</span>(<span class="st">&quot;^https://my/repository&quot;</span>, url))</span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">c</span>(<span class="at">Authorization =</span> <span class="fu">Sys.getenv</span>(<span class="st">&quot;AUTH_HEADER&quot;</span>)))</span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>})</span></code></pre></div>
 <p>With the above, renv will set the <code>Authorization</code> header
 whenever it attempts to download files from the repository at URL
 <code>https://my/repository</code>.</p>
@@ -736,7 +762,7 @@ whenever it attempts to download files from the repository at URL
 <h3>Debugging</h3>
 <p>If having problems with downloads, you can get more debugging
 information (including raw requests and responses) by setting:</p>
-<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.download.trace =</span> <span class="cn">TRUE</span>) </span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.download.trace =</span> <span class="cn">TRUE</span>) </span></code></pre></div>
 </div>
 </div>
 <div class="footnotes footnotes-end-of-document">

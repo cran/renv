@@ -146,8 +146,16 @@ renv_download_impl <- function(url, destfile, type = NULL, request = "GET", head
     renv_download_default
   )
 
-  # run downloader, catching errors and warnings
-  catchall(downloader(url, destfile, type, request, headers))
+  # disable warnings in this scope; it is not safe to try and catch
+  # warnings as R will try to clean up open sockets after emitting
+  # warnings, and catching a warning would hence prevent that
+  # https://bugs.r-project.org/show_bug.cgi?id=18634
+  catch(
+    withCallingHandlers(
+      downloader(url, destfile, type, request, headers),
+      warning = function(cnd) invokeRestart("muffleWarning")
+    )
+  )
 
 }
 
@@ -310,10 +318,12 @@ renv_download_curl <- function(url, destfile, type, request, headers) {
       args$push(extra)
   }
 
-  # honor R_LIBCURL_SSL_REVOKE_BEST_EFFORT
-  # https://github.com/wch/r-source/commit/f1ec503e986593bced6720a5e9099df58a4162e7
-  if (Sys.getenv("R_LIBCURL_SSL_REVOKE_BEST_EFFORT") %in% c("T", "t", "TRUE", "true"))
-    args$push("--ssl-revoke-best-effort")
+  # https://github.com/rstudio/renv/issues/1739
+  if (renv_platform_windows()) {
+    enabled <- Sys.getenv("R_LIBCURL_SSL_REVOKE_BEST_EFFORT", unset = "TRUE")
+    if (truthy(enabled))
+      args$push("--ssl-revoke-best-effort")
+  }
 
   # add in any user configuration files
   userconfig <- getOption(
@@ -488,7 +498,7 @@ renv_download_auth <- function(url, type) {
   switch(
     type,
     bitbucket = renv_download_auth_bitbucket(),
-    github = renv_download_auth_github(),
+    github = renv_download_auth_github(url),
     gitlab = renv_download_auth_gitlab(),
     character()
   )
@@ -513,9 +523,9 @@ renv_download_auth_bitbucket <- function() {
 
 }
 
-renv_download_auth_github <- function() {
+renv_download_auth_github <- function(url) {
 
-  pat <- renv_download_auth_github_pat()
+  pat <- renv_download_auth_github_pat(url)
   if (is.null(pat))
     return(character())
 
@@ -523,15 +533,47 @@ renv_download_auth_github <- function() {
 
 }
 
-renv_download_auth_github_pat <- function() {
+renv_download_auth_github_pat <- function(url) {
 
+  # check for an existing PAT
   pat <- Sys.getenv("GITHUB_PAT", unset = NA)
   if (!is.na(pat))
     return(pat)
 
-  token <- tryCatch(gitcreds::gitcreds_get(), error = function(e) NULL)
-  if (!is.null(token))
-    return(token$password)
+  # if gitcreds is available, try to use it
+  gitcreds <-
+    getOption("renv.gitcreds.enabled", default = TRUE) &&
+    requireNamespace("gitcreds", quietly = TRUE)
+
+  if (gitcreds) {
+
+    # ensure URL has protocol pre-pended
+    url <- renv_retrieve_origin(url)
+
+    # request token
+    dlog("download", "requesting git credentials for url '%s'", url)
+    token <- tryCatch(
+      gitcreds::gitcreds_get(url),
+      error = function(cnd) {
+        warning(conditionMessage(cnd))
+        NULL
+      }
+    )
+
+    # use if available
+    if (!is.null(token))
+      return(token$password)
+
+  }
+
+  # ask the user to set a GITHUB_PAT
+  if (once()) {
+    writeLines(c(
+      "- GitHub authentication credentials are not available.",
+      "- Please set GITHUB_PAT, or ensure the 'gitcreds' package is installed.",
+      "- See https://usethis.r-lib.org/articles/git-credentials.html for more details."
+    ))
+  }
 
 }
 

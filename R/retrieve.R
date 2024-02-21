@@ -42,9 +42,7 @@ retrieve <- function(packages) {
     writef("")
   }
 
-  data <- state$install$data()
-  names(data) <- extract_chr(data, "Package")
-  data
+  state$install$data()
 
 }
 
@@ -56,12 +54,22 @@ renv_retrieve_impl <- function(package) {
 
   # if we've already attempted retrieval of this package, skip
   state <- renv_restore_state()
-  if (visited(package, envir = state$retrieved))
+  if (!is.null(state$retrieved[[package]]))
     return()
+
+  # insert a dummy value just to avoid infinite recursions
+  # (this will get updated on a successful installation later)
+  state$retrieved[[package]] <- NA
 
   # extract record for package
   records <- state$records
   record <- records[[package]] %||% renv_retrieve_resolve(package)
+
+  # resolve lazy records
+  if (is.function(record)) {
+    state$records[[package]] <- resolve(record)
+    record <- state$records[[package]]
+  }
 
   # normalize the record source
   source <- renv_record_source(record, normalize = TRUE)
@@ -566,16 +574,19 @@ renv_retrieve_repos <- function(record) {
 
   # if this record is tagged with a type + url, we can
   # use that directly for retrieval
-  if (all(c("type", "url") %in% names(attributes(record))))
+  if (renv_record_tagged(record))
     return(renv_retrieve_repos_impl(record))
 
   # figure out what package sources are okay to use here
   pkgtype <- getOption("pkgType", default = "source")
 
-  srcok <- pkgtype %in% c("both", "source") ||
+  srcok <-
+    pkgtype %in% c("both", "source") ||
     getOption("install.packages.check.source", default = "yes") %in% "yes"
 
-  binok <- pkgtype %in% c("both") || grepl("binary", pkgtype, fixed = TRUE)
+  binok <-
+    pkgtype %in% c("both", "binary") ||
+    grepl("binary", pkgtype, fixed = TRUE)
 
   # collect list of 'methods' for retrieval
   methods <- stack(mode = "list")
@@ -590,8 +601,8 @@ renv_retrieve_repos <- function(record) {
     methods$push(renv_retrieve_repos_binary_fallback)
 
     # if MRAN is enabled, check those binaries as well
-    if (renv_mran_enabled())
-      methods$push(renv_retrieve_repos_mran)
+    if (renv_p3m_enabled())
+      methods$push(renv_retrieve_repos_p3m)
 
   }
 
@@ -645,7 +656,7 @@ renv_retrieve_repos <- function(record) {
 
   # if we couldn't download the package, report the errors we saw
   local({
-    renv_scope_options(warn = 1)
+    renv_scope_options(warn = 1L)
     for (error in errors$data())
       warning(error)
   })
@@ -703,22 +714,22 @@ renv_retrieve_repos_archive_name <- function(record, type = "source") {
 
 }
 
-renv_retrieve_repos_mran <- function(record) {
+renv_retrieve_repos_p3m <- function(record) {
 
   # MRAN does not make binaries available on Linux
   if (renv_platform_linux())
     return(FALSE)
 
   # ensure local MRAN database is up-to-date
-  renv_mran_database_refresh(explicit = FALSE)
+  renv_p3m_database_refresh(explicit = FALSE)
 
   # check that we have an available database
-  path <- renv_mran_database_path()
+  path <- renv_p3m_database_path()
   if (!file.exists(path))
     return(FALSE)
 
   # attempt to read it
-  database <- catch(renv_mran_database_load())
+  database <- catch(renv_p3m_database_load())
   if (inherits(database, "error")) {
     warning(database)
     return(FALSE)
@@ -740,12 +751,18 @@ renv_retrieve_repos_mran <- function(record) {
   date <- as.Date(idate, origin = "1970-01-01")
 
   # form url to binary package
-  base <- renv_mran_url(date, suffix)
+  base <- renv_p3m_url(date, suffix)
   name <- renv_retrieve_name(record, type = "binary")
   url <- file.path(base, name)
 
   # form path to saved file
   path <- renv_retrieve_path(record, "binary")
+
+  # tag record with repository name
+  record <- overlay(record, list(
+    Source = "Repository",
+    Repository = "P3M"
+  ))
 
   # attempt to retrieve
   renv_retrieve_package(record, url, path)
@@ -1018,26 +1035,29 @@ renv_retrieve_successful <- function(record, path, install = TRUE) {
 
   # update the record's package name, version
   # TODO: should we warn if they didn't match for some reason?
-  record$Package <- desc$Package
+  package <- record$Package <- desc$Package
   record$Version <- desc$Version
 
   # add in path information to record (used later during install)
   record$Path <- path
 
-  # record this package's requirements
+  # add information on the retrieved record
   state <- renv_restore_state()
+  state$retrieved[[package]] <- record
+
+  # record this package's requirements
   requirements <- state$requirements
 
   # figure out the dependency fields to use -- if the user explicitly requested
   # this package be installed, but also provided a 'dependencies' argument in
   # the call to 'install()', then we want to use those
-  fields <- if (record$Package %in% state$packages) the$install_dependency_fields else "strong"
+  fields <- if (package %in% state$packages) the$install_dependency_fields else "strong"
   deps <- renv_dependencies_discover_description(path, subdir = subdir, fields = fields)
   if (length(deps$Source))
     deps$Source <- record$Package
 
   rowapply(deps, function(dep) {
-    package <- dep$Package
+    package <- dep[["Package"]]
     requirements[[package]] <- requirements[[package]] %||% stack()
     requirements[[package]]$push(dep)
   })
@@ -1055,24 +1075,56 @@ renv_retrieve_successful <- function(record, path, install = TRUE) {
   })
 
   # mark package as requiring install if needed
-  if (install)
-    state$install$push(record)
+  if (install && !state$install$contains(package))
+    state$install$insert(package, record)
 
   TRUE
 
 }
 
 renv_retrieve_successful_recurse <- function(deps) {
-  remotes <- unique(deps$Package)
+  remotes <- setdiff(unique(deps$Package), renv_packages_base())
   for (remote in remotes)
     renv_retrieve_successful_recurse_impl(remote)
 }
 
+renv_retrieve_successful_recurse_impl_check <- function(remote) {
+
+  # only done for package names
+  if (!grepl(renv_regexps_package_name(), remote))
+    return(FALSE)
+
+  # check whether this package has been retrieved yet
+  state <- renv_restore_state()
+  record <- state$retrieved[[remote]]
+  if (is.null(record))
+    return(FALSE)
+
+  # check the current requirements for this package
+  incompat <- renv_retrieve_incompatible(remote, record)
+  if (NROW(incompat) == 0L)
+    return(FALSE)
+
+  # we have an incompatible record; ensure it gets retrieved
+  state$retrieved[[remote]] <- NULL
+  TRUE
+
+}
+
 renv_retrieve_successful_recurse_impl <- function(remote) {
+
+  # if remote is a plain package name that we've already retrieved,
+  # we may need to retrieve it again if the version of that package
+  # required is greater than the previously-obtained version
+  #
+  # TODO: implement a proper solver so we can stop doing these hacks...
+  # if this is a 'plain' package remote, retrieve it
+  force <- renv_retrieve_successful_recurse_impl_check(remote)
 
   dynamic(
     key   = list(remote = remote),
-    value = renv_retrieve_successful_recurse_impl_one(remote)
+    value = renv_retrieve_successful_recurse_impl_one(remote),
+    force = force
   )
 
 }
@@ -1163,7 +1215,7 @@ renv_retrieve_remotes_impl_one <- function(remote) {
   state$records[[package]] <- resolved
 
   # mark the record as needing retrieval
-  state$retrieved[[package]] <- FALSE
+  state$retrieved[[package]] <- NULL
 
   # return new record
   invisible(resolved)

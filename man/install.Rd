@@ -14,6 +14,8 @@ install(
   repos = NULL,
   prompt = interactive(),
   dependencies = NULL,
+  verbose = NULL,
+  lock = FALSE,
   project = NULL
 )
 }
@@ -60,7 +62,7 @@ from CRAN or a CRAN-like repository. By default, the repositories recorded
 in the lockfile will be, ensuring that (e.g.) CRAN packages are
 re-installed from the same CRAN mirror.
 
-Use \code{repos = getOptions(repos)} to override with the repositories set
+Use \code{repos = getOption("repos")} to override with the repositories set
 in the current session, or see the \code{repos.override} option in \link{config} for
 an alternate way override.}
 
@@ -72,6 +74,14 @@ for package dependency resolution. When \code{NULL} (the default), the value
 of \code{renv::settings$package.dependency.fields} is used. The aliases
 "strong", "most", and "all" are also supported.
 See \code{\link[tools:package_dependencies]{tools::package_dependencies()}} for more details.}
+
+\item{verbose}{Boolean; report output from \verb{R CMD build} and \verb{R CMD INSTALL}
+during installation? When \code{NULL} (the default), the value of \code{config$install.verbose()}
+will be used. When \code{FALSE}, installation output will be emitted only if
+a package fails to install.}
+
+\item{lock}{Boolean; update the \code{renv.lock} lockfile after the successful
+installation of the requested packages?}
 
 \item{project}{The project directory. If \code{NULL}, then the active project will
 be used. If no project is currently active, then the current working

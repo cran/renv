@@ -32,15 +32,15 @@ test_that("versions are compared as expected", {
 
 })
 
-test_that("inject inserts text at expected anchor point", {
+test_that("insert inserts text at expected anchor point", {
 
   text <- c("alpha", "beta", "gamma")
 
-  injected <- inject(text, "beta", "BETA")
-  expect_equal(injected, c("alpha", "BETA", "gamma"))
+  inserted <- insert(text, "beta", "BETA")
+  expect_equal(inserted, c("alpha", "BETA", "gamma"))
 
-  injected <- inject(text, "BETA", "BETA", "beta")
-  expect_equal(injected, c("alpha", "beta", "BETA", "gamma"))
+  inserted <- insert(text, "BETA", "BETA", "beta")
+  expect_equal(inserted, c("alpha", "beta", "BETA", "gamma"))
 
 })
 
@@ -197,11 +197,11 @@ test_that("ensure_directory() works even under contention", {
   file.create(waitfile)
 
   responses <- stack()
-  for (i in 1:n) {
+  for (i in 1:n) local({
     conn <- renv_socket_accept(server$socket, open = "rb", timeout = 3)
+    defer(close(conn))
     responses$push(unserialize(conn))
-    close(conn)
-  }
+  })
 
   expect_true(all(unlist(responses$data())))
 
@@ -227,4 +227,16 @@ test_that("warnify() propagates errors as warnings", {
 
   expect_equal(result, "warning")
 
+})
+
+# https://github.com/rstudio/renv/issues/1733
+test_that("plural() and nplural() handle non-scalar counts", {
+
+  actual <- plural("file", 0:3)
+  expected <- c("files", "file", "files", "files")
+  expect_equal(actual, expected)
+
+  actual <- nplural("file", 0:3)
+  expected <- c("0 files", "1 file", "2 files", "3 files")
+  expect_equal(actual, expected)
 })

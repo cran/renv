@@ -81,7 +81,7 @@ renv_record_normalize <- function(record) {
 
   # normalize source
   source <- record$Source %||% "unknown"
-  if (source %in% c("CRAN", "PPM", "RSPM"))
+  if (source %in% c("CRAN", "P3M", "PPM", "RSPM"))
     record$Source <- "Repository"
 
   # drop remotes from records with a repository source
@@ -97,4 +97,25 @@ renv_record_normalize <- function(record) {
   # return normalized record
   record
 
+}
+
+renv_record_tag <- function(record, type, url, name) {
+
+  attr(record, "url")  <- url
+  attr(record, "type") <- type
+  attr(record, "name") <- name
+
+  record
+
+}
+
+renv_record_tagged <- function(record) {
+  attrs <- attributes(record)
+  all(c("url", "type") %in% names(attrs))
+}
+
+# abstracted out in case we want to use a different sigil in the future,
+# like `_`, `<NA>`, or something else
+renv_record_placeholder <- function() {
+  "*"
 }

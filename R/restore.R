@@ -71,7 +71,7 @@ restore <- function(project  = NULL,
   if (is.character(lockfile))
     lockfile <- renv_lockfile_read(lockfile)
 
-  # inject overrides (if any)
+  # insert overrides (if any)
   lockfile <- renv_lockfile_override(lockfile)
 
   # repair potential issues in the lockfile
@@ -89,13 +89,17 @@ restore <- function(project  = NULL,
 
   # if users have requested the use of pak, delegate there
   if (config$pak.enabled() && !recursing()) {
+
     renv_pak_init()
-    renv_pak_restore(
+    records <- renv_pak_restore(
       lockfile = lockfile,
       packages = packages,
       exclude  = exclude,
       project  = project
     )
+
+    return(renv_restore_successful(records, prompt, project))
+
   }
 
   # set up Bioconductor version + repositories
@@ -262,7 +266,7 @@ renv_restore_begin <- function(project = NULL,
     retrieved = new.env(parent = emptyenv()),
 
     # packages which need to be installed
-    install = stack(),
+    install = mapping(),
 
     # a collection of the requirements imposed on dependent packages
     # as they are discovered

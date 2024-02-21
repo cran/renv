@@ -6,7 +6,7 @@ renv_json_read <- function(file = NULL, text = NULL) {
   # if jsonlite is loaded, use that instead
   if ("jsonlite" %in% loadedNamespaces()) {
 
-    json <- catch(renv_json_read_jsonlite(file, text))
+    json <- tryCatch(renv_json_read_jsonlite(file, text), error = identity)
     if (!inherits(json, "error"))
       return(json)
 
@@ -15,7 +15,7 @@ renv_json_read <- function(file = NULL, text = NULL) {
   }
 
   # otherwise, fall back to the default JSON reader
-  json <- catch(renv_json_read_default(file, text))
+  json <- tryCatch(renv_json_read_default(file, text), error = identity)
   if (!inherits(json, "error"))
     return(json)
 
@@ -28,14 +28,14 @@ renv_json_read <- function(file = NULL, text = NULL) {
 }
 
 renv_json_read_jsonlite <- function(file = NULL, text = NULL) {
-  text <- paste(text %||% read(file), collapse = "\n")
+  text <- paste(text %||% readLines(file, warn = FALSE), collapse = "\n")
   jsonlite::fromJSON(txt = text, simplifyVector = FALSE)
 }
 
 renv_json_read_default <- function(file = NULL, text = NULL) {
 
   # find strings in the JSON
-  text <- paste(text %||% read(file), collapse = "\n")
+  text <- paste(text %||% readLines(file, warn = FALSE), collapse = "\n")
   pattern <- '["](?:(?:\\\\.)|(?:[^"\\\\]))*?["]'
   locs <- gregexpr(pattern, text, perl = TRUE)[[1]]
 
@@ -83,14 +83,14 @@ renv_json_read_default <- function(file = NULL, text = NULL) {
   map <- as.list(map)
 
   # remap strings in object
-  remapped <- renv_json_remap(json, map)
+  remapped <- renv_json_read_remap(json, map)
 
   # evaluate
   eval(remapped, envir = baseenv())
 
 }
 
-renv_json_remap <- function(json, map) {
+renv_json_read_remap <- function(json, map) {
 
   # fix names
   if (!is.null(names(json))) {
@@ -117,7 +117,7 @@ renv_json_remap <- function(json, map) {
   # recurse
   if (is.recursive(json)) {
     for (i in seq_along(json)) {
-      json[i] <- list(renv_json_remap(json[[i]], map))
+      json[i] <- list(renv_json_read_remap(json[[i]], map))
     }
   }
 

@@ -172,7 +172,7 @@ test_that("a project with unnamed repositories can be initialized", {
   init()
 
   repos <- getOption("repos")
-  expect_equal(names(repos), c("CRAN", "V1"))
+  expect_equal(names(repos), c("CRAN", "https://cloud.r-project.org"))
 
 })
 
@@ -261,4 +261,11 @@ test_that("init() respects user-requested snapshot type", {
   expect_true(renv_package_installed("bread"))
   expect_false(renv_package_installed("toast"))
   expect_equal(settings$snapshot.type(), "explicit")
+})
+
+test_that("init() respects Remotes in a project DESCRIPTION file", {
+  project <- renv_tests_scope("skeleton")
+  writeLines("Depends: skeleton\nRemotes: kevinushey/skeleton", con = "DESCRIPTION")
+  init()
+  expect_true(renv_package_installed("skeleton"))
 })

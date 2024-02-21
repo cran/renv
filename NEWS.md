@@ -1,4 +1,92 @@
 
+# renv 1.0.4
+
+* `renv::install()` gains the `lock` argument. When `TRUE`, the project
+  lockfile will be updated after the requested packages have been
+  successfully installed. (#1811)
+  
+* `renv` now supports the use of GitHub Enterprise servers with the
+  `gitcreds` package for authentication credentials. (#1814)
+
+* `renv::dependencies()` now treats `#| eval: !expr <...>` chunk options
+  as truthy by default, implying that such chunks are scanned for their
+  R package dependencies. (#1816)
+  
+* `renv::dependencies()` now requires usages of the [import](https://cran.r-project.org/package=import)
+  package to be namespace-qualified in order to be handled via static
+  analysis; that is, `import::from(<pkg>)` is parsed for dependencies,
+  but `from(pkg)` is not. (#1815)
+  
+* `renv::load()` gains the `profile` argument, allowing one to
+  explicitly load a specific profile associated with an `renv` project.
+  See `vignette("profiles", package = "renv")` or
+  https://rstudio.github.io/renv/articles/profiles.html
+  for more details.
+  
+* `renv::dependencies()` no longer includes `R` dependency versions
+  declared from a `DESCRIPTION` file in its output. (#1806)
+
+* Fixed an issue where `renv` could fail to infer dependencies from
+  R Markdown code chunks using engine 'R' (upper-case) rather than
+  'r' (lower-case). (#1803)
+
+* Fixed an issue where `renv` did not report out-of-sync packages when
+  one or more packages used in the project were not installed. (#1788)
+
+* Fixed an issue where `renv` could over-aggressively activate P3M
+  repositories when initializing a project. (#1782)
+
+* `renv::status()` now notifies the user if the version of R recorded in
+  the lockfile does not match the version of R currently in use. (#1779)
+
+* Fixed an issue where packages could appear multiple times in the lockfile,
+  if that package was installed into multiple library paths. (#1781)
+
+* Installation of historical binaries of packages is once again enabled,
+  now using the [Posit Public Package Manager (P3M)](https://packagemanager.posit.co)
+  service instead of Microsoft's (now defunct) MRAN service.
+
+* `renv::init()` now respects the `Remotes:` field declared in a project's
+  `DESCRIPTION` file, if any. (#1522)
+
+* `renv::embed()` now supports Quarto Markdown (`.qmd`) files. (#1700)
+
+* renv now sets the `R_INSTALL_TAR` environment variable to match the default
+  `tar` executable (if any) when installing packages. (#1724)
+
+* renv now uses `--ssl-revoke-best-effort` by default when downloading files
+  using `curl` on Windows. (#1739)
+
+* Fixed an issue where `renv::install()` could fail to detect incompatible
+  recursive package dependencies. (#1671)
+
+* `renv::install()` now records remote information for packages installed from
+  CRAN-like repositories, and uses that information when generating a lockfile
+  and restoring those packages. This helps ensure that packages installed within
+  an renv project via calls like `renv::install("<pkg>", repos = "<repos>")` can
+  still be successfully restored in future sessions. (#1765)
+
+* `renv::install()` now lazily resolves project remotes. (#1755)
+
+* `renv::init()` now respects Remotes declared within a project's `DESCRIPTION`
+  file, if any.
+
+* Calling `renv::activate()` without explicitly providing the `profile` argument
+  now preserves the current profile, if any. Use `renv::activate(profile = "default")`
+  if you'd like to re-activate a project using the default profile. (#1217)
+
+* Fixed an issue where `renv` would try to prompt for the installation of
+  `BiocManager` when activating a project using Bioconductor. (#1754)
+
+* Fixed an issue where directories containing a large number of files could
+  cause `renv` to fail to activate a project. (#1733)
+
+* Expanded the set of Linux distributions detected for automatic transformation
+  of Posit Package Manager URLs to install binary packages. `renv` now correctly
+  detects Red Hat Enterprise Linux 9, Rocky Linux 8 and 9, SLES 15 SP4 and SP5,
+  Debian 11 and 12, AlmaLinux 8 and 9, and Amazon Linux 2. (#1720, #1721)
+
+
 # renv 1.0.3
 
 * Fixed an issue where `renv` could warn the project appeared to be out-of-sync

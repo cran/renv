@@ -127,7 +127,7 @@ init <- function(project = NULL,
   }
 
   # compute and cache dependencies to (a) reveal problems early and (b) compute once
-  deps <- renv_snapshot_dependencies(project, type = type, dev = TRUE)
+  renv_snapshot_dependencies(project, type = type, dev = TRUE)
 
   # determine appropriate action
   action <- renv_init_action(project, library, lockfile, bioconductor)
@@ -141,9 +141,10 @@ init <- function(project = NULL,
     renv_scope_options(renv.config.dependency.errors = "ignored")
     renv_imbue_impl(project, library = library)
     hydrate(library = library, repos = repos, prompt = FALSE, report = FALSE, project = project)
-    snapshot(library = libpaths, repos = repos, prompt = FALSE, project = project)
+    snapshot(library = libpaths, repos = repos, prompt = FALSE, project = project, force = TRUE)
   } else if (action == "restore") {
     ensure_directory(library)
+    renv_sandbox_activate(project = project)
     restore(project = project, library = libpaths, repos = repos, prompt = FALSE)
   }
 
@@ -220,11 +221,20 @@ renv_init_action_conflict_library <- function(project, library, lockfile) {
   if (!interactive())
     return("nothing")
 
-  # if the project library exists, but it's empty, or only renv is installed,
+  # if the project library exists, but it's empty,
   # treat this as a request to initialize the project
   # https://github.com/rstudio/renv/issues/1668
   db <- installed_packages(lib.loc = library, priority = NA_character_)
-  if (nrow(db) == 0L || identical(db$Package, "renv"))
+  if (nrow(db) == 0L)
+    return("init")
+
+  # if only renv is installed, but it matches the version of renv being used
+  renvonly <-
+    NROW(db) == 1L &&
+    db[["Package"]] == "renv" &&
+    db[["Version"]] == renv_package_version("renv")
+
+  if (renvonly)
     return("init")
 
   title <- "This project already has a private library. What would you like to do?"
@@ -296,40 +306,36 @@ renv_init_bioconductor <- function(bioconductor, project) {
 
 }
 
-renv_init_repos <- function() {
+renv_init_repos <- function(repos = getOption("repos")) {
 
   # if PPM is disabled, just use default repositories
-  repos <- convert(getOption("repos"), "list")
+  repos <- convert(repos, "list")
   if (!renv_ppm_enabled())
     return(repos)
 
+  # check whether the user has opted into using PPM by default
   enabled <- config$ppm.default()
   if (!enabled)
     return(repos)
 
-  # if we're using the global CDN from RStudio, use PPM instead
-  rstudio <- attr(repos, "RStudio", exact = TRUE)
-  if (identical(rstudio, TRUE)) {
+  # check for default repositories
+  #
+  # note that if the user is using RStudio, we only want to override
+  # the repositories if they haven't explicitly set their own repo URL
+  #
+  # https://github.com/rstudio/renv/issues/1782
+  rstudio <- structure(
+    list(CRAN = "https://cran.rstudio.com/"),
+    RStudio = TRUE
+  )
+
+  isdefault <-
+    identical(repos, list(CRAN = "@CRAN@")) ||
+    identical(repos, rstudio)
+
+  if (isdefault) {
     repos[["CRAN"]] <- config$ppm.url()
     return(repos)
-  }
-
-  # otherwise, check for some common 'default' CRAN settings
-  cran <- repos[["CRAN"]]
-  if (is.character(cran) && length(cran) == 1L) {
-    cran <- sub("/*$", "", cran)
-    defaults <- c(
-      "@CRAN@",
-      "https://cloud.R-project.org",
-      "https://cran.rstudio.com",
-      "https://cran.rstudio.org"
-    )
-
-    if (tolower(cran) %in% tolower(defaults)) {
-      repos[["CRAN"]] <- config$ppm.url()
-      return(repos)
-    }
-
   }
 
   # repos appears to have been configured separately; just use it

@@ -645,6 +645,14 @@ renv_dependencies_discover_description_impl <- function(dcf, field, path) {
   if (empty(matches))
     return(list())
 
+  # drop R (https://github.com/rstudio/renv/issues/1806)
+  matches <- filter(matches, function(match) {
+    !identical(match[[2L]], "R")
+  })
+
+  if (empty(matches))
+    return(list())
+
   # create dependency list
   renv_dependencies_list(
     path,
@@ -751,7 +759,7 @@ renv_dependencies_discover_rmd_yaml_header <- function(path, mode) {
     values <- c(names(node), if (pstring(node)) node)
     for (value in values) {
       call <- tryCatch(parse(text = value)[[1]], error = function(err) NULL)
-      if (renv_call_matches(call, name = c("::", ":::"), n_args = 2)) {
+      if (renv_call_matches(call, name = c("::", ":::"), nargs = 2L)) {
         deps$push(as.character(call[[2L]]))
       }
     }
@@ -814,7 +822,7 @@ renv_dependencies_discover_chunks_ignore <- function(chunk) {
 
   # skip non-R chunks
   engine <- chunk$params[["engine"]]
-  ok <- is.character(engine) && engine %in% c("r", "rscript")
+  ok <- is.character(engine) && tolower(engine) %in% c("r", "rscript")
   if (!ok)
     return(TRUE)
 
@@ -905,7 +913,7 @@ renv_dependencies_discover_chunks <- function(path, mode) {
   if (mode %in% "qmd") {
     for (chunk in chunks) {
       engine <- chunk$params[["engine"]]
-      if (is.character(engine) && engine %in% c("r", "rscript")) {
+      if (is.character(engine) && tolower(engine) %in% c("r", "rscript")) {
         qdeps <- renv_dependencies_list(path, "rmarkdown")
         break
       }
@@ -1172,8 +1180,7 @@ renv_dependencies_discover_r_require_namespace <- function(node, stack, envir) {
 
 renv_dependencies_discover_r_colon <- function(node, stack, envir) {
 
-  ok <- renv_call_matches(node, name = c("::", ":::"), n_args = 2)
-
+  ok <- renv_call_matches(node, name = c("::", ":::"), nargs = 2L)
   if (!ok)
     return(FALSE)
 
@@ -1244,7 +1251,7 @@ renv_dependencies_discover_r_pacman <- function(node, stack, envir) {
 renv_dependencies_discover_r_modules <- function(node, stack, envir) {
 
   # check for call of the form 'pkg::foo(a, b, c)'
-  colon <- renv_call_matches(node[[1]], name = c("::", ":::"), n_args = 2)
+  colon <- renv_call_matches(node[[1L]], name = c("::", ":::"), nargs = 2L)
 
   node <- renv_call_expect(node, "modules", c("import"))
   if (is.null(node))
@@ -1289,6 +1296,11 @@ renv_dependencies_discover_r_modules <- function(node, stack, envir) {
 
 renv_dependencies_discover_r_import <- function(node, stack, envir) {
 
+  # require that usages are colon-prefixed
+  colon <- renv_call_matches(node[[1L]], name = c("::", ":::"), nargs = 2L)
+  if (!colon)
+    return(FALSE)
+
   node <- renv_call_expect(node, "import", c("from", "here", "into"))
   if (is.null(node))
     return(FALSE)
@@ -1306,14 +1318,20 @@ renv_dependencies_discover_r_import <- function(node, stack, envir) {
 
   # the '.from' argument is the package name, either a character vector of length one or a symbol
   from <- matched$.from
-  if (is.symbol(from))
-    from <- as.character(from)
+  if (is.symbol(from)) {
+    co <- node[[".character_only"]]
+    if (!identical(co, TRUE))
+      from <- as.character(from)
+  }
 
-  ok <-
-    is.character(from) &&
-    length(from) == 1
-
+  ok <- is.character(from) && length(from) == 1L
   if (!ok)
+    return(FALSE)
+
+  # '.from' can also be an R script; if it appears to be a path, then ignore it
+  # https://github.com/rstudio/renv/issues/1743
+  if (grepl("\\.[rR]$", from, perl = TRUE) &&
+      grepl("[/\\]", from))
     return(FALSE)
 
   envir[[from]] <- TRUE

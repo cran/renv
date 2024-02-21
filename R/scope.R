@@ -160,15 +160,22 @@ renv_scope_install_macos <- function(scope = parent.frame()) {
   # R CMD config, as this might fail otherwise
   if (once()) {
     if (!renv_xcode_available()) {
+      message("")
       message("- macOS is reporting that command line tools (CLT) are not installed.")
       message("- Run 'xcode-select --install' to install command line tools.")
       message("- Without CLT, attempts to install packages from sources may fail.")
+      message("")
     }
   }
 
   # get the current compiler
   args <- c("CMD", "config", "CC")
-  cc <- system2(R(), args, stdout = TRUE, stderr = TRUE)
+  cc <- renv_system_exec(command = R(), args = args, action = "executing R CMD config CC")
+
+  # just in case
+  cc <- tail(cc, n = 1L)
+  if (is.null(cc) || !nzchar(cc))
+    cc <- "clang"
 
   # check to see if we're using the system toolchain
   # (need to be careful since users might put e.g. ccache or other flags
@@ -344,6 +351,7 @@ renv_scope_tempfile <- function(pattern = "renv-tempfile-",
                                 fileext = "",
                                 scope  = parent.frame())
 {
+  tmpdir <- normalizePath(tmpdir, winslash = "/", mustWork = TRUE)
   path <- renv_path_normalize(tempfile(pattern, tmpdir, fileext))
   defer(unlink(path, recursive = TRUE, force = TRUE), scope = scope)
   invisible(path)

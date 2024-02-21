@@ -165,6 +165,10 @@ renv_available_packages_query_impl <- function(url, type, errors) {
 
 renv_available_packages_success <- function(db, url, type) {
 
+  # https://github.com/rstudio/renv/issues/1706
+  if (empty(db))
+    return(data.frame())
+
   # convert to data.frame
   db <- as_data_frame(db)
   if (nrow(db) == 0L)
@@ -234,6 +238,21 @@ renv_available_packages_entry <- function(package,
     entries[ordered[[1]], ]
   }
 
+  # if 'prefer' was supplied as a repository URL, include it
+  repos <- repos %||% as.list(getOption("repos"))
+  if (is.character(prefer)) {
+
+    # ensure repositories are named
+    nms <- names(prefer) %||% rep.int("", length(prefer))
+    nms[!nzchar(nms)] <- prefer[!nzchar(nms)]
+    names(prefer) <- nms
+
+    # include any 'prefer' repositories that were supplied as URLs
+    isurl <- grep("^\\w+://", prefer)
+    repos <- c(prefer[isurl], repos)
+
+  }
+
   # read available packages
   dbs <- available_packages(
     type  = type,
@@ -242,8 +261,8 @@ renv_available_packages_entry <- function(package,
   )
 
   # if a preferred repository is marked and available, prefer using that
-  if (length(prefer) == 1L && prefer %in% names(dbs)) {
-    idx <- match(prefer, names(dbs))
+  if (is.character(prefer)) {
+    idx <- omit_if(match(names(prefer), names(dbs)), is.na)
     ord <- c(idx, setdiff(seq_along(dbs), idx))
     dbs <- dbs[ord]
   }
@@ -280,10 +299,8 @@ renv_available_packages_entry <- function(package,
 
 renv_available_packages_record <- function(entry, type) {
 
-  # check to see if this is already a proper record
-  attrs <- attributes(entry)
-  keys <- c("type", "url")
-  if (all(keys %in% names(attrs)))
+  # check if this record was already tagged
+  if (renv_record_tagged(entry))
     return(entry)
 
   # otherwise, construct it
@@ -302,13 +319,19 @@ renv_available_packages_record <- function(entry, type) {
   # form url
   url <- entry$Repository
   path <- entry$Path
+  name <- entry$Name
+
+  # if path was supplied, it should be used relative
+  # to the repository URL
   if (length(path) && !is.na(path))
     url <- paste(url, path, sep = "/")
 
-  attr(record, "type") <- type
-  attr(record, "url")  <- url
-
-  record
+  renv_record_tag(
+    record = record,
+    type   = type,
+    url    = url,
+    name   = name
+  )
 
 }
 
@@ -366,8 +389,8 @@ renv_available_packages_latest <- function(package,
 {
   methods <- list(
     renv_available_packages_latest_repos,
-    if (renv_mran_enabled())
-      renv_available_packages_latest_mran
+    if (renv_p3m_enabled())
+      renv_available_packages_latest_p3m
   )
 
   errors <- stack()
@@ -425,22 +448,19 @@ renv_available_packages_latest <- function(package,
 
 }
 
-renv_available_packages_latest_mran <- function(package,
-                                                type = NULL,
-                                                repos = NULL)
+renv_available_packages_latest_p3m <- function(package,
+                                               type = NULL,
+                                               repos = NULL)
 {
-  if (!config$mran.enabled())
-    stop("MRAN is not enabled")
-
   type <- type %||% getOption("pkgType")
   if (identical(type, "source"))
-    stop("MRAN database requires binary packages to be available")
+    stop("binary packages are not available")
 
   # ensure local MRAN database is up-to-date
-  renv_mran_database_refresh(explicit = FALSE)
+  renv_p3m_database_refresh(explicit = FALSE)
 
   # attempt to read it
-  database <- catch(renv_mran_database_load())
+  database <- catch(renv_p3m_database_load())
   if (inherits(database, "error"))
     return(database)
 
@@ -448,14 +468,14 @@ renv_available_packages_latest_mran <- function(package,
   suffix <- contrib.url("", type = "binary")
   entry <- database[[suffix]]
   if (is.null(entry))
-    stopf("no MRAN records available from repository URL '%s'", suffix)
+    stopf("no records available from repository URL '%s'", suffix)
 
   # find all available packages
   keys <- attr(entry, "keys")
   pattern <- paste0("^", package, " ")
   matching <- grep(pattern, keys, perl = TRUE, value = TRUE)
   if (empty(matching))
-    stopf("package '%s' is not available from MRAN", package)
+    stopf("package '%s' is not available", package)
 
   # take the latest-available package
   entries <- unlist(mget(matching, envir = entry))
@@ -472,22 +492,24 @@ renv_available_packages_latest_mran <- function(package,
     Package    = package,
     Version    = version,
     Source     = "Repository",
-    Repository = "MRAN"
+    Repository = "P3M"
   )
 
   # convert from integer to date
   date <- as.Date(idate, origin = "1970-01-01")
 
   # form url to binary package
-  base <- renv_mran_url(date, suffix)
+  base <- renv_p3m_url(date, suffix)
   name <- renv_retrieve_name(record, type = "binary")
   url <- file.path(base, name)
 
   # tag record with url + type
-  attr(record, "url")  <- dirname(url)
-  attr(record, "type") <- "binary"
-
-  record
+  renv_record_tag(
+    record = record,
+    type   = type,
+    url    = dirname(url),
+    name   = "P3M"
+  )
 }
 
 renv_available_packages_latest_repos <- function(package,

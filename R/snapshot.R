@@ -334,6 +334,12 @@ renv_snapshot_validate_report <- function(valid, prompt, force) {
     return(TRUE)
   }
 
+  # if we were called during init, ignore failures
+  if (the$init_running) {
+    dlog("snapshot", "called during init; ignoring error in pre-flight validation checks")
+    return(TRUE)
+  }
+
   # in interactive sessions, if 'prompt' is set, then ask the user
   # if they would like to proceed
   if (interactive() && !testing() && prompt) {
@@ -594,7 +600,7 @@ renv_snapshot_library <- function(library = NULL,
   paths <- paths[grep(pattern, basename(paths))]
 
   # validate the remaining set of packages
-  valid <- renv_snapshot_library_diagnose(library, paths)
+  valid <- renv_snapshot_check(paths)
 
   # remove duplicates (so only first package entry discovered in library wins)
   duplicated <- duplicated(basename(valid))
@@ -631,17 +637,17 @@ renv_snapshot_library <- function(library = NULL,
 
 }
 
-renv_snapshot_library_diagnose <- function(library, paths) {
+renv_snapshot_check <- function(paths) {
 
   paths <- grep("00LOCK", paths, invert = TRUE, value = TRUE)
-  paths <- renv_snapshot_library_diagnose_broken_link(library, paths)
-  paths <- renv_snapshot_library_diagnose_tempfile(library, paths)
-  paths <- renv_snapshot_library_diagnose_missing_description(library, paths)
+  paths <- renv_snapshot_check_broken_link(paths)
+  paths <- renv_snapshot_check_tempfile(paths)
+  paths <- renv_snapshot_check_missing_description(paths)
   paths
 
 }
 
-renv_snapshot_library_diagnose_broken_link <- function(library, paths) {
+renv_snapshot_check_broken_link <- function(paths) {
 
   broken <- !file.exists(paths)
   if (!any(broken))
@@ -657,7 +663,7 @@ renv_snapshot_library_diagnose_broken_link <- function(library, paths) {
 
 }
 
-renv_snapshot_library_diagnose_tempfile <- function(library, paths) {
+renv_snapshot_check_tempfile <- function(paths) {
 
   names <- basename(paths)
   missing <- grepl("^file(?:\\w){12}", names)
@@ -674,7 +680,7 @@ renv_snapshot_library_diagnose_tempfile <- function(library, paths) {
 
 }
 
-renv_snapshot_library_diagnose_missing_description <- function(library, paths) {
+renv_snapshot_check_missing_description <- function(paths) {
 
   desc <- file.path(paths, "DESCRIPTION")
   missing <- !file.exists(desc)
@@ -697,11 +703,9 @@ renv_snapshot_library_diagnose_missing_description <- function(library, paths) {
 renv_snapshot_description <- function(path = NULL, package = NULL) {
 
   # resolve path
-  path <- path %||% {
-    path <- renv_package_find(package)
-    if (!nzchar(path))
-      stopf("package '%s' is not installed", package)
-  }
+  path <- path %||% renv_package_find(package, lib.loc = renv_libpaths_all())
+  if (!nzchar(path))
+    stopf("package '%s' is not installed", package)
 
   # read and snapshot DESCRIPTION file
   dcf <- renv_description_read(path, package)
@@ -741,7 +745,7 @@ renv_snapshot_description_impl <- function(dcf, path = NULL) {
   git <- grep("^git", names(dcf), value = TRUE)
   remotes <- grep("^Remote", names(dcf), value = TRUE)
 
-  is_repo <-
+  cranlike <-
     is.null(dcf[["RemoteType"]]) ||
     identical(dcf[["RemoteType"]], "standard")
 
@@ -749,7 +753,7 @@ renv_snapshot_description_impl <- function(dcf, path = NULL) {
   extra <- c("Repository", "OS_type")
   all <- c(
     required, extra,
-    if (!is_repo) c(remotes, git),
+    if (!cranlike) c(remotes, git),
     "Requirements", "Hash"
   )
   keep <- renv_vector_intersect(all, names(dcf))
@@ -759,17 +763,66 @@ renv_snapshot_description_impl <- function(dcf, path = NULL) {
 
 }
 
+renv_snapshot_description_source_custom <- function(dcf) {
+
+  # check for 'standard' remote type
+  type  <- dcf[["RemoteType"]]
+  if (!identical(type, "standard"))
+    return(NULL)
+
+  # check for a declared repository URL
+  remoterepos <- dcf[["RemoteRepos"]]
+  if (is.null(remoterepos))
+    return(NULL)
+
+  # if this package appears to have been installed from a
+  # repository which we have knowledge of, skip
+  repos <- as.list(getOption("repos"))
+  repository <- dcf[["Repository"]]
+  if (!is.null(repository) && repository %in% names(repos))
+    return(NULL)
+
+  # check whether this repository is already in use;
+  # if so, we can skip declaring it
+  name <- dcf[["RemoteReposName"]]
+  isset <- if (is.null(name))
+    remoterepos %in% repos
+  else
+    name %in% names(repos)
+
+  if (isset)
+    return(NULL)
+
+  list(Source = "Repository", Repository = remoterepos)
+
+}
+
 renv_snapshot_description_source <- function(dcf) {
 
-  # first, check for a declared remote type
+  # check for packages installed from a repository not currently
+  # encoded as part of the user's repository option, and include if required
+  source <- renv_snapshot_description_source_custom(dcf)
+  if (!is.null(source))
+    return(source)
+
+  # check for a declared remote type
   # treat 'standard' remotes as packages installed from a repository
   # https://github.com/rstudio/renv/issues/998
   type <- dcf[["RemoteType"]]
-  repository <- dcf[["Repository"]]
-  if (identical(type, "standard") && !is.null(repository))
-    return(list(Source = "Repository", Repository = repository))
-  else if (!is.null(type))
+  if (identical(type, "standard")) {
+
+    # if this is a 'standard' Bioconductor remote, then encode it as such
+    if (!is.null(dcf[["biocViews"]]))
+      return(list(Source = "Bioconductor"))
+
+    # otherwise, check for custom repository information
+    repository <- dcf[["RemoteReposName"]] %||% dcf[["Repository"]]
+    if (!is.null(repository))
+      return(list(Source = "Repository", Repository = repository))
+
+  } else if (!is.null(type)) {
     return(list(Source = alias(type)))
+  }
 
   # packages from Bioconductor are normally tagged with a 'biocViews' entry;
   # use that to infer a Bioconductor source
@@ -777,6 +830,7 @@ renv_snapshot_description_source <- function(dcf) {
     return(list(Source = "Bioconductor"))
 
   # check for a declared repository
+  repository <- dcf[["Repository"]]
   if (!is.null(repository))
     return(list(Source = "Repository", Repository = repository))
 
@@ -857,7 +911,8 @@ renv_snapshot_report_actions <- function(actions, old, new) {
   if (rdiff != 0L) {
     n <- max(nchar(names(actions)), 0)
     fmt <- paste("-", format("R", width = n), " ", "[%s -> %s]")
-    msg <- sprintf(fmt, oldr %||% "*", newr %||% "*")
+    placeholder <- renv_record_placeholder()
+    msg <- sprintf(fmt, oldr %||% placeholder, newr %||% placeholder)
     writef(
       c("The version of R recorded in the lockfile will be updated:", msg, "")
     )
@@ -1002,17 +1057,13 @@ renv_snapshot_packages <- function(packages, libpaths, project) {
   )
 
   # keep only packages with known locations
-  paths <- convert(filter(paths, is.character), "character")
+  paths <- paths %>% filter(is.character) %>% filter(nzchar)
 
   # diagnose issues with the scanned packages
-  paths <- uapply(libpaths, function(library) {
-    renv_snapshot_library_diagnose(
-      library = library,
-      paths   = filter(paths, startswith, prefix = library))
-  })
+  paths <- renv_snapshot_check(paths)
 
   # now, snapshot the remaining packages
-  records <- map(paths, renv_snapshot_description)
+  map(paths, renv_snapshot_description)
 
 }
 

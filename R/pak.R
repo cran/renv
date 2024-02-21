@@ -1,6 +1,6 @@
 
 # the minimum-required version of 'pak' for renv integration
-the$pak_minver <- numeric_version("0.5.1")
+the$pak_minver <- numeric_version("0.7.0")
 
 renv_pak_init <- function(stream = NULL, force = FALSE) {
 
@@ -138,5 +138,9 @@ renv_pak_restore <- function(lockfile,
 
   # perform installation
   pak$pkg_install(remotes)
+
+  # return installed records
+  records
+
 }
 

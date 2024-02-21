@@ -51,6 +51,9 @@ renv_snapshot_auto_impl <- function(project) {
     renv.verbose = FALSE
   )
 
+  # file.info() can warn in some cases; silence those
+  renv_scope_options(warn = -1L)
+
   # get current lockfile state
   lockfile <- renv_paths_lockfile(project)
   old <- file.info(lockfile, extra_cols = FALSE)$mtime
@@ -60,7 +63,7 @@ renv_snapshot_auto_impl <- function(project) {
 
   # check for change in lockfile
   new <- file.info(lockfile, extra_cols = FALSE)$mtime
-  old != new
+  !identical(old, new)
 
 }
 
@@ -139,8 +142,8 @@ renv_snapshot_task <- function() {
   if (the$auto_snapshot_failed)
     return(FALSE)
 
-  # treat warnings as errors in this scope
-  renv_scope_options(warn = 2L)
+  # silence warnings in this scope
+  renv_scope_options(warn = -1L)
 
   # attempt automatic snapshot, but disable on failure
   tryCatch(
@@ -167,7 +170,11 @@ renv_snapshot_task_impl <- function() {
     return(invisible(FALSE))
 
   # library has updated; perform auto snapshot
-  renv_snapshot_auto(project = project)
+  status <- renv_snapshot_auto(project = project)
+  ok <- identical(status, TRUE)
+
+  # return invisibly for snapshot tests
+  invisible(ok)
 
 }
 

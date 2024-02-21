@@ -1,6 +1,9 @@
 
 renv_watchdog_server_start <- function(client) {
 
+  # silence warnings
+  renv_scope_options(warn = -1L)
+
   # initialize logging
   renv_log_init()
 
@@ -12,8 +15,8 @@ renv_watchdog_server_start <- function(client) {
   dlog("watchdog-server", "Waiting for client...")
   metadata <- list(port = server$port, pid = server$pid)
   conn <- renv_socket_connect(port = client$port, open = "wb")
+  defer(close(conn))
   serialize(metadata, connection = conn)
-  close(conn)
   dlog("watchdog-server", "Synchronized with client.")
 
   # initialize locks
@@ -55,13 +58,19 @@ renv_watchdog_server_run <- function(server, client, lockenv) {
   str(request)
 
   # handle the request
+  renv_watchdog_server_run_impl(server, client, lockenv, request)
+
+}
+
+renv_watchdog_server_run_impl <- function(server, client, lockenv, request) {
+
   switch(
 
     request$method %||% "<missing>",
 
     ListLocks = {
       dlog("watchdog-server", "Executing 'ListLocks' request.")
-      conn <- renv_socket_connect(port = request$port, open = "watchdog-server", "b")
+      conn <- renv_socket_connect(port = request$port, open = "wb")
       defer(close(conn))
       locks <- ls(envir = lockenv, all.names = TRUE)
       serialize(locks, connection = conn)

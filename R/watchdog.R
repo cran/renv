@@ -31,7 +31,7 @@ renv_watchdog_enabled_impl <- function() {
   if (getRversion() < "4.0.0")
     return(FALSE)
 
-  # skip if explicitly disabled via envvar
+  # allow override via environment variable
   enabled <- Sys.getenv("RENV_WATCHDOG_ENABLED", unset = NA)
   if (!is.na(enabled))
     return(truthy(enabled))
@@ -98,14 +98,7 @@ renv_watchdog_start_impl <- function() {
   name <- .packageName
   pid <- Sys.getpid()
 
-  env <- list(
-    name    = name,
-    library = library,
-    pid     = pid,
-    port    = port
-  )
-
-  code <- substitute(env = env, {
+  code <- inject({
     client <- list(pid = pid, port = port)
     host <- loadNamespace(name, lib.loc = library)
     renv <- if (!is.null(host$renv)) host$renv else host
@@ -139,8 +132,8 @@ renv_watchdog_start_impl <- function() {
   }
 
   # store information about the running process
+  defer(close(conn))
   the$watchdog_process <- unserialize(conn)
-  close(conn)
 
   # return TRUE to indicate process was started
   dlog("watchdog", "watchdog message received [pid == %i]", the$watchdog_process$pid)

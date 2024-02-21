@@ -51,7 +51,7 @@ the$load_running <- FALSE
 #' renv::load()
 #'
 #' }
-load <- function(project = NULL, quiet = FALSE) {
+load <- function(project = NULL, quiet = FALSE, profile = NULL) {
 
   renv_scope_error_handler()
 
@@ -59,6 +59,9 @@ load <- function(project = NULL, quiet = FALSE) {
     project %||% renv_project_find(project),
     mustWork = TRUE
   )
+
+  if (!is.null(profile))
+    renv_profile_set(profile)
 
   action <- renv_load_action(project)
   if (action[[1L]] == "cancel") {
@@ -150,9 +153,8 @@ renv_load_action <- function(project) {
   # https://github.com/rstudio/renv/issues/1650
   autoloading <- getOption("renv.autoloader.running", default = FALSE)
   if (autoloading && renv_rstudio_available()) {
-    setHook("rstudio.sessionInit", function() {
-      renv::load(project)
-    })
+    setHook("rstudio.sessionInit", function() { renv::load(project) })
+    return("cancel")
   }
 
   # check and see if we're being called within a sub-directory
@@ -480,8 +482,30 @@ renv_load_python <- function(project, fields) {
   )
 
   # place python + relevant utilities on the PATH
-  bindir <- normalizePath(dirname(python), mustWork = FALSE)
-  renv_envvar_path_add("PATH", bindir)
+  bindir <- dirname(python)
+  if (bindir %in% c("/usr/bin", "/usr/local/bin", "/opt/local/bin")) {
+
+    # create a temporary directory to host symlinks
+    toolspath <- tempfile("python-tools")
+    ensure_directory(toolspath)
+
+    # symlink common python binaries into that directory
+    for (binary in c("python", "python3", "pip", "pip3")) {
+      src <- file.path(bindir, binary)
+      if (file.exists(src)) {
+        tgt <- file.path(toolspath, binary)
+        renv_file_link(src, tgt)
+      }
+    }
+
+    # put it on the PATH
+    renv_envvar_path_add("PATH", normalizePath(toolspath))
+
+  } else {
+    bindir <- normalizePath(bindir, mustWork = FALSE)
+    renv_envvar_path_add("PATH", bindir)
+  }
+
 
   # on Windows, for conda environments, we may also have a Scripts directory
   # which will need to be pre-pended to the PATH
