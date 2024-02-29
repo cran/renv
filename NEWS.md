@@ -1,4 +1,16 @@
 
+# renv 1.0.5
+
+* `renv` now only writes a `.renvignore` file into the cache directory
+  if the cache appears to be part of the current project.
+
+* `renv` now reports missing system libraries as part of its ABI
+  checks in `renv::diagnostics()`.
+
+* Fixed an issue where `renv::install(lock = TRUE)` produced lockfiles
+  containing records with extraneous data. (#1828)
+
+
 # renv 1.0.4
 
 * `renv::install()` gains the `lock` argument. When `TRUE`, the project
