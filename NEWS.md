@@ -1,4 +1,10 @@
 
+# renv 1.0.7
+
+* Fixed an issue where `renv`'s activate script failed to report version
+  conflict errors when starting up. (#1874)
+
+
 # renv 1.0.6
 
 * Fixed an issue where downloads could fail with curl >= 8.7.1. (#1869)

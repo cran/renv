@@ -1,7 +1,7 @@
-f06182f1157afc025ae937443686311f *DESCRIPTION
+7df7b40478eee2b1db5a97329d756f41 *DESCRIPTION
 c5fa171ab25021dc922e3537a07732a9 *LICENSE
 75c79751be1de50ae2ac700a0b0696fe *NAMESPACE
-8a98ceb92eb98523d5b85304e4fe920e *NEWS.md
+669bcb7929362edbebc66a917caecd19 *NEWS.md
 17a73ea6109d5d3111e22d997d2a28ba *R/aaa.R
 5d91f88060d66ca59b00ddccfcbd542f *R/abi.R
 fbd5779f1ba597caed25184243a17f6e *R/abort.R
@@ -18,7 +18,7 @@ c3e125747248e98837156a2fa4b4b946 *R/backports.R
 6c2cbb5b3f73155e1736d61c16f2429d *R/bind.R
 0722a531cd5f2e29c2dbf9e761c66f97 *R/binding.R
 36a8eeb33b80c0816d13df7c6a1a5fe8 *R/bioconductor.R
-5b72631ccdf4418c55dda6a5e596daf9 *R/bootstrap.R
+2d0a147f8114037f57951ab3a4e6762c *R/bootstrap.R
 24c6669a16f40b9ca0d991fd19b176f3 *R/cache.R
 1cc758f0de0d5b9e96cc0bd861a50a4f *R/call.R
 d8d91f53155798ffa6ac64088bcbb0ad *R/caution.R
@@ -186,7 +186,7 @@ ba6921b6ee1e02687cfc6887c8108dd3 *R/use.R
 eaf0dcb7e59a5c5ec607455ad95f5de5 *R/utils-connections.R
 a980c9a47353b0d8df574455aeb8b0d8 *R/utils-format.R
 22d711844b16b95b0c2dccabac4b8974 *R/utils-map.R
-3f0ff4fca743d05980fb799c16b9b360 *R/utils.R
+7fa9cca9367ee9326879e79ed6ffd645 *R/utils.R
 56fdd203295601551779ba9153b9492a *R/vector.R
 fe3290bfc8763b050ca3eb2c99effaeb *R/vendor.R
 eaa4f6964c74b5c19c9c9b8149f7a0e0 *R/verbose.R
@@ -236,12 +236,12 @@ e28c856039e640fa3e6e5e3cefe57b35 *inst/doc/renv.html
 5e270ae6034b339c2a13d20a5f7d2dec *inst/doc/rsconnect.R
 bd9cf6dbccd0d23949d8614f47b0a311 *inst/doc/rsconnect.Rmd
 cf275db2d13e9aecb383ac1f5e78dd42 *inst/doc/rsconnect.html
-50151c0fe0f9e300b722fbcea1d55e1c *inst/repos/src/contrib/PACKAGES
-12a97c67e459fd8020e6ac515215d3d3 *inst/repos/src/contrib/PACKAGES.gz
-dd198dc07533cd096c76fafa6e96474c *inst/repos/src/contrib/PACKAGES.rds
-3510520af5c8884a9fb108053f8dbe00 *inst/repos/src/contrib/renv_1.0.6.tar.gz
+1eecf58662e0ac3e0588bf5127bb9b0b *inst/repos/src/contrib/PACKAGES
+ba4a992210c9f09653951376cfe8a46b *inst/repos/src/contrib/PACKAGES.gz
+a96df0b74d55f9235fc993558c7d441d *inst/repos/src/contrib/PACKAGES.rds
+af4f94fe2dac5f0d5750770445c41a2f *inst/repos/src/contrib/renv_1.0.7.tar.gz
 c852598faf15e9a614eee1ae5933ad09 *inst/resources/WELCOME
-4d365b304cd981d38fc31cae6057a5ad *inst/resources/activate.R
+959a29b588dc0e35384a516fe3a36377 *inst/resources/activate.R
 38ebcc4778f15ad0c0e1cf144f17bf4e *inst/resources/scripts-git-askpass.cmd
 0f28660d57f2dd9dad52380e812e83d5 *inst/resources/scripts-git-askpass.sh
 029040fde5b82a2216a8aa195043701a *inst/resources/vendor/renv.R
