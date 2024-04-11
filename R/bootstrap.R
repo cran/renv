@@ -534,6 +534,9 @@ renv_bootstrap_platform_prefix_impl <- function() {
 
   # if the user has requested an automatic prefix, generate it
   auto <- Sys.getenv("RENV_PATHS_PREFIX_AUTO", unset = NA)
+  if (is.na(auto) && getRversion() >= "4.4.0")
+    auto <- "TRUE"
+
   if (auto %in% c("TRUE", "True", "true", "1"))
     return(renv_bootstrap_platform_prefix_auto())
 
@@ -725,24 +728,23 @@ renv_bootstrap_validate_version <- function(version, description = NULL) {
 
   # the loaded version of renv doesn't match the requested version;
   # give the user instructions on how to proceed
-  remote <- if (!is.null(description[["RemoteSha"]])) {
+  dev <- identical(description[["RemoteType"]], "github")
+  remote <- if (dev)
     paste("rstudio/renv", description[["RemoteSha"]], sep = "@")
-  } else {
+  else
     paste("renv", description[["Version"]], sep = "@")
-  }
 
   # display both loaded version + sha if available
   friendly <- renv_bootstrap_version_friendly(
     version = description[["Version"]],
-    sha     = description[["RemoteSha"]]
+    sha     = if (dev) description[["RemoteSha"]]
   )
 
-  fmt <- paste(
-    "renv %1$s was loaded from project library, but this project is configured to use renv %2$s.",
-    "- Use `renv::record(\"%3$s\")` to record renv %1$s in the lockfile.",
-    "- Use `renv::restore(packages = \"renv\")` to install renv %2$s into the project library.",
-    sep = "\n"
-  )
+  fmt <- heredoc("
+    renv %1$s was loaded from project library, but this project is configured to use renv %2$s.
+    - Use `renv::record(\"%3$s\")` to record renv %1$s in the lockfile.
+    - Use `renv::restore(packages = \"renv\")` to install renv %2$s into the project library.
+  ")
   catf(fmt, friendly, renv_bootstrap_version_friendly(version), remote)
 
   FALSE

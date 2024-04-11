@@ -1,4 +1,36 @@
 
+# renv 1.0.6
+
+* Fixed an issue where downloads could fail with curl >= 8.7.1. (#1869)
+
+* Fixed an issue where `renv::snapshot()` did not properly normalize
+  package records generated from packages installed using the `pak`
+  package, e.g. via `pak::pkg_install("cran::<package>")`.
+
+* Fixed an issue where `renv` could incorrectly prompt the user to record
+  a version of `renv` installed from GitHub in some cases. (#1857)
+
+* `renv::load()` now delegates to `base::load()` when it detects that the
+  call was likely intended for `base::load()`, but `renv::load()` was used
+  instead (e.g. because `base::load()` was masked by `renv::load()`).
+  
+* `renv::update()` gains the `lock` argument, which can be used to
+  instruct `renv` to automatically update the lockfile after the requested
+  packages have been updated. (#1849)
+
+* Fixed an issue where `renv` could fail to update the project autoloader
+  after calling `renv::upgrade()`. (#1837)
+
+* Fixed an issue where attempts to install binary packages from older
+  PPM snapshots could fail. (#1839)
+
+* `renv` now uses a platform-specific prefix on Linux for library and
+  cache paths by default with R (>= 4.4.0). This is equivalent to setting
+  `RENV_PATHS_PREFIX_AUTO = TRUE`. If necessary, this behavior can be
+  disabled by setting `RENV_PATHS_PREFIX_AUTO = FALSE` in an appropriate
+  R startup file. (#1211)
+
+
 # renv 1.0.5
 
 * `renv` now only writes a `.renvignore` file into the cache directory

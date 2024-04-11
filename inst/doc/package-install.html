@@ -60,7 +60,7 @@ div.sourceCode { overflow: auto; }
 }
 @media print {
 pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
 }
 pre.numberSource code
 { counter-reset: source-line 0; }
@@ -620,9 +620,8 @@ environment variable to point to a custom ‘home’ folder to be used by
 Windows, you can also place your <code>_curlrc</code> in the same
 directory where the <code>curl.exe</code> binary is located.</p></li>
 </ol>
-<p>See the curl documentation on <a href="https://everything.curl.dev/usingcurl/proxies.html">proxies</a>
-and <a href="https://everything.curl.dev/cmdline/configfile.html">config
-files</a> for more details.</p>
+<p>See the curl documentation on <a href="https://ec.haxx.se/usingcurl/proxies/">proxies</a> and <a href="https://ec.haxx.se/cmdline/configfile.html">config files</a> for
+more details.</p>
 <p>As an <a href="https://github.com/rstudio/renv/issues/146">example</a>, the
 following <code>_curlrc</code> works when using authentication with NTLM
 and SSPI on Windows:</p>
