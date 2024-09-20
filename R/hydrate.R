@@ -90,8 +90,14 @@ hydrate <- function(packages = NULL,
   # figure out required packages which aren't installed
   missing <- deps[!nzchar(deps)]
 
-  # also consider remotes; treat these as 'missing' so we always try to install them
-  remotes <- renv_project_remotes(project = project, resolve = TRUE)
+  # also consider remotes; if a package is listed within Remotes,
+  # then choose to install that package instead of linking it
+  filter <- function(specs, remotes) {
+    packages <- map_chr(remotes, `[[`, "Package")
+    keep(specs, packages)
+  }
+
+  remotes <- renv_project_remotes(project, filter = filter, resolve = TRUE)
   missing[map_chr(remotes, `[[`, "Package")] <- ""
 
   # remove base + missing packages
@@ -312,6 +318,9 @@ renv_hydrate_resolve_missing <- function(project, library, remotes, missing) {
   renv_scope_libpaths(library)
 
   packages <- names(missing)
+  if (empty(packages))
+    return()
+
   writef("- Resolving missing dependencies ... ")
 
   # define a custom error handler for packages which we cannot retrieve
@@ -331,7 +340,7 @@ renv_hydrate_resolve_missing <- function(project, library, remotes, missing) {
     handler  = handler
   )
 
-  records <- retrieve(packages)
+  records <- renv_retrieve_impl(packages)
   renv_install_impl(records)
 
   # if we failed to restore anything, warn the user

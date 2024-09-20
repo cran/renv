@@ -105,6 +105,9 @@ init <- function(project = NULL,
   biocver <- renv_init_bioconductor(bioconductor, project)
   if (!is.null(biocver)) {
 
+    # validate that this version of bioconductor is appropriate
+    renv_bioconductor_validate(version = biocver)
+
     # make sure a Bioconductor package manager is installed
     renv_bioconductor_init(library = library)
 
@@ -336,10 +339,8 @@ renv_init_repos <- function(repos = getOption("repos")) {
 
   if (isdefault) {
     repos[["CRAN"]] <- config$ppm.url()
-    return(repos)
   }
 
-  # repos appears to have been configured separately; just use it
   repos
 
 }

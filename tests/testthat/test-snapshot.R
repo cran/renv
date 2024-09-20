@@ -554,7 +554,63 @@ test_that("snapshot() reports missing packages even if renv.verbose is FALSE", {
   expect_snapshot(. <- snapshot(force = TRUE))
 })
 
-test_that("snapshot() doesn't duplicate packages", {
+test_that("packages installed from r-universe preserve remote metadata", {
 
+  text <- heredoc("
+    Package: skeleton
+    Type: Package
+    Version: 1.1.0
+    Remotes: kevinushey/skeleton
+    Repository: https://kevinushey.r-universe.dev
+    RemoteUrl: https://github.com/kevinushey/skeleton
+    RemoteSha: e4aafb92b86ba7eba3b7036d9d96fdfb6c32761a
+  ")
+
+  path <- renv_scope_tempfile()
+  writeLines(text, con = path)
+
+  record <- renv_snapshot_description(path = path)
+  expect_identical(record[["RemoteSha"]], "e4aafb92b86ba7eba3b7036d9d96fdfb6c32761a")
+
+})
+
+test_that("standard remotes preserve RemoteSha if it's a hash", {
+
+  text <- heredoc("
+    Package: skeleton
+    Type: Package
+    Version: 1.1.0
+    Remotes: kevinushey/skeleton
+    Repository: https://kevinushey.r-universe.dev
+    RemoteType: standard
+    RemoteUrl: https://github.com/kevinushey/skeleton
+    RemoteSha: e4aafb92b86ba7eba3b7036d9d96fdfb6c32761a
+  ")
+
+  path <- renv_scope_tempfile()
+  writeLines(text, con = path)
+
+  record <- renv_snapshot_description(path = path)
+  expect_identical(record[["RemoteSha"]], "e4aafb92b86ba7eba3b7036d9d96fdfb6c32761a")
+
+})
+
+test_that("standard remotes drop RemoteSha if it's a version", {
+
+  text <- heredoc("
+    Package: skeleton
+    Type: Package
+    Version: 1.1.0
+    Remotes: kevinushey/skeleton
+    Repository: https://kevinushey.r-universe.dev
+    RemoteType: standard
+    RemoteSha: 1.1.0
+  ")
+
+  path <- renv_scope_tempfile()
+  writeLines(text, con = path)
+
+  record <- renv_snapshot_description(path = path)
+  expect_null(record[["RemoteSha"]])
 
 })

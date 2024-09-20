@@ -550,3 +550,67 @@ test_that("dependencies() with different extensions", {
   expect_true("B" %in% deps$Package)
 
 })
+
+test_that("dependencies() can infer an svglite dependency from ggsave", {
+
+  document <- heredoc('
+    library(ggplot2)
+    ggsave(filename = "test.svg")
+  ')
+
+  file <- renv_scope_tempfile("renv-test-", fileext = ".R")
+  writeLines(document, con = file)
+
+  deps <- dependencies(file, quiet = TRUE)
+  expect_contains(deps$Package, "svglite")
+
+})
+
+test_that("dependencies() can handle calls", {
+
+  document <- heredoc('
+    ```{r}
+    #| eval = c(1, 2)
+    ```
+  ')
+
+  file <- renv_scope_tempfile("renv-test-", fileext = ".Rmd")
+  writeLines(document, con = file)
+
+  expect_no_warning(
+    dependencies(file, quiet = TRUE)
+  )
+
+})
+
+test_that("dependencies() detects usages of Junit test reporters", {
+
+  check <- function(document) {
+    file <- renv_scope_tempfile("renv-test-", fileext = ".R")
+    writeLines(document, con = file)
+    deps <- dependencies(file, quiet = TRUE)
+    expect_contains(deps$Package, "xml2")
+  }
+
+  check("JunitReporterMock <- R6::R6Class(\"JunitReporterMock\", inherit = JunitReporter)")
+  check("JunitReporter$new()")
+  check("testthat::test_dir(reporter = JunitReporter)")
+  check("testthat::test_dir(reporter = \"junit\")")
+
+})
+
+test_that("dependencies() detects usage of ragg_png device", {
+  
+  check <- function(document) {
+    
+    file <- renv_scope_tempfile("renv-test-", fileext = ".R")
+    writeLines(document, con = file)
+    
+    deps <- dependencies(file, quiet = TRUE)
+    expect_contains(deps$Package, "ragg")
+  }
+  
+  check("opts_chunk$set(dev = \"ragg_png\")")
+  check("knitr::opts_chunk$set(dev = \"ragg_png\")")
+  
+})

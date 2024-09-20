@@ -59,8 +59,13 @@ renv_pak_init_impl <- function(stream) {
 
 }
 
-renv_pak_install <- function(packages, library, project) {
-
+renv_pak_install <- function(packages,
+                             library,
+                             type,
+                             rebuild,
+                             prompt,
+                             project)
+{
   pak <- renv_namespace_load("pak")
   lib <- library[[1L]]
 
@@ -82,20 +87,45 @@ renv_pak_install <- function(packages, library, project) {
   else
     as.character(packages)
 
-  if (length(packages) == 0L)
-    return(pak$local_install_dev_deps(root = project, lib = lib))
+  if (length(packages) == 0L) {
+
+    result <- pak$local_install_dev_deps(
+      root = project,
+      lib  = lib,
+      ask  = prompt
+    )
+
+    return(result)
+
+  }
+
+  # build parameters
+  packages <- map_chr(packages, function(package) {
+
+    params <- c(
+      if (identical(type, "source")) "source",
+      if (identical(rebuild, TRUE) || package %in% rebuild) "reinstall"
+    )
+
+    if (length(params))
+      paste(package, paste(params, collapse = "&"), sep = "?")
+    else
+      package
+
+  })
 
   pak$pkg_install(
     pkg     = packages,
     lib     = lib,
+    ask     = prompt,
     upgrade = TRUE
   )
-
 }
 
 renv_pak_restore <- function(lockfile,
                              packages = NULL,
                              exclude = NULL,
+                             prompt = FALSE,
                              project = NULL)
 {
   pak <- renv_namespace_load("pak")
@@ -117,14 +147,8 @@ renv_pak_restore <- function(lockfile,
   packages <- setdiff(packages %||% names(records), c(exclude, "pak", "renv"))
   records <- records[packages]
 
-  # attempt to link packages that have cache entries
-  if (renv_cache_config_enabled(project = project)) {
-    linked <- map_lgl(records, renv_cache_synchronize)
-    records <- records[!linked]
-  }
-
   # convert into specs compatible with pak, and install
-  remotes <- map_chr(records, renv_record_format_remote)
+  remotes <- map_chr(records, renv_record_format_remote, pak = TRUE)
 
   # TODO: We previously tried converting version-ed remotes into "plain" remotes
   # if the package version happened to be current, but then 'pak' would choose
@@ -137,7 +161,10 @@ renv_pak_restore <- function(lockfile,
   }
 
   # perform installation
-  pak$pkg_install(remotes)
+  pak$pkg_install(
+    pkg = remotes,
+    ask = prompt,
+  )
 
   # return installed records
   records

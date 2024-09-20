@@ -372,7 +372,17 @@ test_that("packages embedded in the project use a project-local RemoteURL", {
   skip_if(is.null(usethis$create_package))
   renv_scope_options(usethis.quiet = TRUE)
   unlink("example", recursive = TRUE)
-  usethis$create_package("example", rstudio = FALSE, open = FALSE)
+  
+  fields <- list(
+    "Authors@R" = utils::person(
+      "Kevin", "Ushey",
+      email = "kevinushey@gmail.com",
+      role = c("aut", "cre"),
+      comment = c(ORCID = "0000-0003-2880-7407")
+    )
+  )
+  
+  usethis$create_package("example", fields = fields, rstudio = FALSE, open = FALSE)
 
   install("./example")
   lockfile <- snapshot(lockfile = NULL)
@@ -729,4 +739,32 @@ test_that("install(lock = TRUE) updates lockfile", {
     renv_lockfile_records(expected)
   )
 
+})
+
+test_that("installation of package from local sources works", {
+
+  project <- renv_tests_scope()
+
+  # test the shim
+  repopath <- renv_tests_repopath()
+  setwd(file.path(repopath, "src/contrib"))
+  renv_shim_install_packages("bread_1.0.0.tar.gz", repos = NULL, type = "source")
+  expect_true(renv_package_installed("bread"))
+
+  # test a regular invocation of install
+  remove.packages("bread")
+  info <- download.packages("bread", destdir = tempdir())
+  install(info[, 2], repos = NULL, type = "source")
+  expect_true(renv_package_installed("bread"))
+
+})
+
+test_that("packages installed from r-universe preserve their remote metadata", {
+  skip_on_cran()
+  skip_on_ci()
+
+  project <- renv_tests_scope(packages = "rlang")
+  install("rlang", repos = "https://r-lib.r-universe.dev")
+  record <- renv_snapshot_description(package = "rlang")
+  expect_true(is.character(record[["RemoteSha"]]))
 })

@@ -80,7 +80,7 @@ the$auto_snapshot_hash <- TRUE
 #'   directly instead.
 #'
 #' @param type The type of snapshot to perform:
-#'   * `"implict"`, (the default), uses all packages captured by [dependencies()].
+#'   * `"implicit"`, (the default), uses all packages captured by [dependencies()].
 #'   * `"explicit"` uses packages recorded in `DESCRIPTION`.
 #'   * `"all"` uses all packages in the project library.
 #'   * `"custom"` uses a custom filter.
@@ -149,6 +149,9 @@ snapshot <- function(project  = NULL,
 
   repos <- renv_repos_validate(repos)
   renv_scope_options(repos = repos)
+
+  # set up .renvignore defensively
+  renv_load_cache_renvignore(project = project)
 
   if (!is.null(lockfile))
     renv_activate_prompt("snapshot", library, prompt, project)
@@ -727,6 +730,17 @@ renv_snapshot_description_impl <- function(dcf, path = NULL) {
     stopf(fmt, paste(shQuote(missing), collapse = ", "), path %||% "<unknown>")
   }
 
+  # if this is a standard remote for a bioconductor package,
+  # remove the other remote fields
+  bioc <-
+    !is.null(dcf[["biocViews"]]) &&
+    identical(dcf[["RemoteType"]], "standard")
+
+  if (bioc) {
+    fields <- grep("^Remote(?!s)", names(dcf), perl = TRUE, invert = TRUE)
+    dcf <- dcf[fields]
+  }
+
   # generate a hash if we can
   dcf[["Hash"]] <- if (the$auto_snapshot_hash) {
     if (is.null(path))
@@ -742,21 +756,39 @@ renv_snapshot_description_impl <- function(dcf, path = NULL) {
   dcf[["Requirements"]] <- all
 
   # get remotes fields
-  git <- grep("^git", names(dcf), value = TRUE)
-  remotes <- grep("^Remote", names(dcf), value = TRUE)
-  cranlike <- renv_record_cranlike(dcf)
+  remotes <- renv_snapshot_description_impl_remotes(dcf)
 
   # only keep relevant fields
   extra <- c("Repository", "OS_type")
-  all <- c(
-    required, extra,
-    if (!cranlike) c(remotes, git),
-    "Requirements", "Hash"
-  )
+  all <- c(required, extra, remotes, "Requirements", "Hash")
   keep <- renv_vector_intersect(all, names(dcf))
 
   # return as list
   as.list(dcf[keep])
+
+}
+
+renv_snapshot_description_impl_remotes <- function(dcf) {
+
+  # if this seems to be a cran-like record, only keep remotes
+  # when RemoteSha appears to be a hash (e.g. for r-universe)
+  # note that RemoteSha may be a package version when installed
+  # by e.g. pak
+  if (renv_record_cranlike(dcf)) {
+    sha <- dcf[["RemoteSha"]]
+    if (is.null(sha) || nchar(sha) < 40)
+      return(character())
+  }
+
+  # grab the relevant remotes
+  git <- grep("^git", names(dcf), value = TRUE)
+  remotes <- grep("^Remote(?!s)", names(dcf), perl = TRUE, value = TRUE)
+
+  # don't include 'RemoteRef' if it's a non-informative remote
+  if (identical(dcf[["RemoteRef"]], "HEAD"))
+    remotes <- setdiff(remotes, "RemoteRef")
+
+  c(git, remotes)
 
 }
 
@@ -769,6 +801,11 @@ renv_snapshot_description_source_custom <- function(dcf) {
   # check for a declared repository URL
   remoterepos <- dcf[["RemoteRepos"]]
   if (is.null(remoterepos))
+    return(NULL)
+
+  # if this package appears to be installed from Bioconductor, skip
+  biocviews <- dcf[["biocViews"]]
+  if (!is.null(biocviews))
     return(NULL)
 
   # if this package appears to have been installed from a
@@ -826,6 +863,23 @@ renv_snapshot_description_source <- function(dcf) {
   # https://github.com/rstudio/renv/issues/812
   if (the$project_synchronized_check_running)
     return(list(Source = "unknown"))
+
+  # check to see if this is a base / recommended package; if so, assume that
+  # the package was installed from CRAN at this point
+  #
+  # normally these would be caught by the 'Repository' check above, but it
+  # seems like, in some cases, base / recommended packages might be installed
+  # without those available
+  #
+  # https://github.com/rstudio/renv/issues/1948#issuecomment-2245134768
+  pkgs <- installed_packages(
+    lib.loc = c(.Library, .Library.site),
+    priority = c("base", "recommended"),
+    field = "Package"
+  )
+
+  if (package %in% pkgs)
+    return(list(Source = "Repository", Repository = "CRAN"))
 
   # NOTE: this is sort of a hack that allows renv to declare packages which
   # appear to be installed from sources, but are actually available on the
@@ -943,6 +997,13 @@ renv_snapshot_dependencies_impl <- function(project, type = NULL, dev = FALSE) {
       stopf(fmt, type, stringify(sys.call()))
     }
   )
+
+  # avoid errors when the project directory, or DESCRIPTION file,
+  # does not exist (imply no dependencies)
+  #
+  # https://github.com/rstudio/renv/issues/1949
+  if (!file.exists(path))
+    return(character())
 
   # count the number of files in each directory, so we can report
   # to the user if we scanned a folder containing many files

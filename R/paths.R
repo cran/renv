@@ -66,7 +66,7 @@ renv_paths_lockfile <- function(project = NULL) {
     return(override)
   }
 
-  # otherwise, use default location (location location relative to renv folder)
+  # otherwise, use default location (location relative to renv folder)
   project <- renv_project_resolve(project)
   renv <- renv_paths_renv(project = project)
   file.path(dirname(renv), "renv.lock")
@@ -346,7 +346,7 @@ renv_paths_root_default_tempdir <- function() {
 #'
 #' # Package cellar
 #'
-#' If your project depends on one or \R packages that are not available in any
+#' If your project depends on one or more \R packages that are not available in any
 #' remote location, you can still provide a locally-available tarball for renv
 #' to use during restore. By default, these packages should be made available in
 #' the folder as specified by the `RENV_PATHS_CELLAR` environment variable. The

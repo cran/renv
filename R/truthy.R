@@ -12,9 +12,20 @@ truthy <- function(value, default = FALSE) {
   if (length(value) == 0L)
     return(default)
 
-  # coerce symbols
+  # handle symbols
   if (is.symbol(value))
     value <- as.character(value)
+
+  # only look at first element in vector
+  value <- value[[1L]]
+
+  # handle some non-character types up-front
+  if (is.call(value))
+    return(default)
+  else if (is.na(value))
+    return(default)
+  else if (!is.character(value))
+    return(as.logical(value))
 
   # check for known truthy / falsy values
   if (value %in% c("TRUE", "True", "true", "T", "1"))
