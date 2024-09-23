@@ -1,4 +1,13 @@
 
+# renv 1.0.9
+
+* Fixed an issue where repository URLs were inappropriately transformed into
+  binary repository URLs on Linux. (#1991)
+
+* Fixed an issue where code following `source("renv/activate.R")` in the project
+  `.Rprofile` was not invoked for projects using RStudio. (#1990)
+
+
 # renv 1.0.8
 
 * `renv` now infers a dependency on the `ragg` package when the `ragg_png` device
