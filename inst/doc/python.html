@@ -27,15 +27,31 @@ document.addEventListener('DOMContentLoaded', function(e) {
   }
 });
 </script>
+<script>// Hide empty <a> tag within highlighted CodeBlock for screen reader accessibility (see https://github.com/jgm/pandoc/issues/6352#issuecomment-626106786) -->
+// v0.0.1
+// Written by JooYoung Seo (jooyoung@psu.edu) and Atsushi Yasumoto on June 1st, 2020.
+
+document.addEventListener('DOMContentLoaded', function() {
+  const codeList = document.getElementsByClassName("sourceCode");
+  for (var i = 0; i < codeList.length; i++) {
+    var linkList = codeList[i].getElementsByTagName('a');
+    for (var j = 0; j < linkList.length; j++) {
+      if (linkList[j].innerHTML === "") {
+        linkList[j].setAttribute('aria-hidden', 'true');
+      }
+    }
+  }
+});
+</script>
 
 <style type="text/css">
-code{white-space: pre-wrap;}
-span.smallcaps{font-variant: small-caps;}
-span.underline{text-decoration: underline;}
-div.column{display: inline-block; vertical-align: top; width: 50%;}
-div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
-ul.task-list{list-style: none;}
-</style>
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
 
 
 
@@ -239,60 +255,29 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<p>If you’re using renv with an R project that also depends on some
-Python packages (say, through the <a href="https://rstudio.github.io/reticulate/">reticulate</a> package),
-then you may find renv’s Python integration useful.</p>
+<p>If you’re using renv with an R project that also depends on some Python packages (say, through the <a href="https://rstudio.github.io/reticulate/">reticulate</a> package), then you may find renv’s Python integration useful.</p>
 <div id="activating-python-integration" class="section level2">
 <h2>Activating Python integration</h2>
-<p>Python integration can be activated on a project-by-project basis.
-Use <code>renv::use_python()</code> to tell renv to create and use a
-project-local Python environment with your project. If the reticulate
-package is installed and active, then renv will use the same version of
-Python that reticulate normally would when generating the virtual
-environment. Alternatively, you can set the
-<code>RETICULATE_PYTHON</code> environment variable to instruct renv to
-use a different version of Python.</p>
-<p>If you’d rather tell renv to use an existing Python virtual
-environment, you can do so by passing the path of that virtual
-environment instead – use
-<code>renv::use_python(python = &quot;/path/to/python&quot;)</code> and renv will
-record and use that Python interpreter with your project. This can also
-be used with pre-existing virtual environments and Conda
-environments.</p>
+<p>Python integration can be activated on a project-by-project basis. Use <code>renv::use_python()</code> to tell renv to create and use a project-local Python environment with your project. If the reticulate package is installed and active, then renv will use the same version of Python that reticulate normally would when generating the virtual environment. Alternatively, you can set the <code>RETICULATE_PYTHON</code> environment variable to instruct renv to use a different version of Python.</p>
+<p>If you’d rather tell renv to use an existing Python virtual environment, you can do so by passing the path of that virtual environment instead – use <code>renv::use_python(python = &quot;/path/to/python&quot;)</code> and renv will record and use that Python interpreter with your project. This can also be used with pre-existing virtual environments and Conda environments.</p>
 </div>
 <div id="understanding-python-integration" class="section level2">
 <h2>Understanding Python integration</h2>
-<p>Once Python integration is active, renv will attempt to manage the
-state of your Python virtual environment when <code>snapshot()</code> /
-<code>restore()</code> is called. With this, projects that use renv and
-Python can ensure that Python dependencies are tracked in addition to R
-package dependencies. Note that future restores will require both
-<code>renv.lock</code> (for R package dependencies) and
-<code>requirements.txt</code> (for Python package dependencies).</p>
+<p>Once Python integration is active, renv will attempt to manage the state of your Python virtual environment when <code>snapshot()</code> / <code>restore()</code> is called. With this, projects that use renv and Python can ensure that Python dependencies are tracked in addition to R package dependencies. Note that future restores will require both <code>renv.lock</code> (for R package dependencies) and <code>requirements.txt</code> (for Python package dependencies).</p>
 <div id="virtual-environments" class="section level3">
 <h3>Virtual environments</h3>
-<p>When using virtual environments, the following extensions are
-provided:</p>
+<p>When using virtual environments, the following extensions are provided:</p>
 <ul>
-<li><p><code>renv::snapshot()</code> calls
-<code>pip freeze &gt; requirements.txt</code> to save the set of
-installed Python packages;</p></li>
-<li><p><code>renv::restore()</code> calls
-<code>pip install -r requirements.txt</code> to install the
-previously-recorded set of Python packages.</p></li>
+<li><p><code>renv::snapshot()</code> calls <code>pip freeze &gt; requirements.txt</code> to save the set of installed Python packages;</p></li>
+<li><p><code>renv::restore()</code> calls <code>pip install -r requirements.txt</code> to install the previously-recorded set of Python packages.</p></li>
 </ul>
 </div>
 <div id="conda-environments" class="section level3">
 <h3>Conda environments</h3>
-<p>When using Conda environments, the following extensions are
-provided:</p>
+<p>When using Conda environments, the following extensions are provided:</p>
 <ul>
-<li><p><code>renv::snapshot()</code> calls
-<code>conda env export &gt; environment.yml</code> to save the set of
-installed Python packages;</p></li>
-<li><p><code>renv::restore()</code> calls
-<code>conda env [create/update] --file environment.yml</code> to install
-the previously-recorded set of Python packages.</p></li>
+<li><p><code>renv::snapshot()</code> calls <code>conda env export &gt; environment.yml</code> to save the set of installed Python packages;</p></li>
+<li><p><code>renv::restore()</code> calls <code>conda env [create/update] --file environment.yml</code> to install the previously-recorded set of Python packages.</p></li>
 </ul>
 </div>
 </div>

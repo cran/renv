@@ -27,15 +27,31 @@ document.addEventListener('DOMContentLoaded', function(e) {
   }
 });
 </script>
+<script>// Hide empty <a> tag within highlighted CodeBlock for screen reader accessibility (see https://github.com/jgm/pandoc/issues/6352#issuecomment-626106786) -->
+// v0.0.1
+// Written by JooYoung Seo (jooyoung@psu.edu) and Atsushi Yasumoto on June 1st, 2020.
+
+document.addEventListener('DOMContentLoaded', function() {
+  const codeList = document.getElementsByClassName("sourceCode");
+  for (var i = 0; i < codeList.length; i++) {
+    var linkList = codeList[i].getElementsByTagName('a');
+    for (var j = 0; j < linkList.length; j++) {
+      if (linkList[j].innerHTML === "") {
+        linkList[j].setAttribute('aria-hidden', 'true');
+      }
+    }
+  }
+});
+</script>
 
 <style type="text/css">
-code{white-space: pre-wrap;}
-span.smallcaps{font-variant: small-caps;}
-span.underline{text-decoration: underline;}
-div.column{display: inline-block; vertical-align: top; width: 50%;}
-div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
-ul.task-list{list-style: none;}
-</style>
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
 
 
 
@@ -241,96 +257,45 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <div id="development" class="section level2">
 <h2>Development</h2>
-<p>Often, R packages will have other R packages as dependencies. For
-this, one must declare their R package dependencies within the package
-<code>DESCRIPTION</code> file. If you want to prepare your environment
-for package development, you can use:</p>
+<p>Often, R packages will have other R packages as dependencies. For this, one must declare their R package dependencies within the package <code>DESCRIPTION</code> file. If you want to prepare your environment for package development, you can use:</p>
 <pre><code>renv::install()</code></pre>
-<p>to install the packages as declared in the package’s
-<code>DESCRIPTION</code> file. This action is roughly analogous to
-<code>remotes::install_deps()</code>.</p>
-<p>If you’re developing a package that you intend to release to CRAN,
-then you likely want to build and test your package against the latest
-versions of your dependencies as available on CRAN. For this, you should
-consider using:</p>
+<p>to install the packages as declared in the package’s <code>DESCRIPTION</code> file. This action is roughly analogous to <code>remotes::install_deps()</code>.</p>
+<p>If you’re developing a package that you intend to release to CRAN, then you likely want to build and test your package against the latest versions of your dependencies as available on CRAN. For this, you should consider using:</p>
 <pre><code>renv::update()</code></pre>
-<p>to ensure your package dependencies are up-to-date, as
-appropriate.</p>
+<p>to ensure your package dependencies are up-to-date, as appropriate.</p>
 </div>
 <div id="isolation" class="section level2">
 <h2>Isolation</h2>
-<p>Normally, a package under development should be tested against the
-latest-available versions of its dependencies on CRAN. However, in some
-cases, you may need to ensure your package is compatible with other
-packages also currently under development.</p>
-<p>In these cases, the renv project library can be useful – you can
-install the development version(s) of your dependencies into the project
-library, without worrying about clobbering any packages already
-installed in your system library.</p>
-<p>In these cases, you can declare your development dependencies using
-the <code>Remotes</code> field of the <code>DESCRIPTION</code> file;
-e.g.</p>
+<p>Normally, a package under development should be tested against the latest-available versions of its dependencies on CRAN. However, in some cases, you may need to ensure your package is compatible with other packages also currently under development.</p>
+<p>In these cases, the renv project library can be useful – you can install the development version(s) of your dependencies into the project library, without worrying about clobbering any packages already installed in your system library.</p>
+<p>In these cases, you can declare your development dependencies using the <code>Remotes</code> field of the <code>DESCRIPTION</code> file; e.g.</p>
 <pre><code>Remotes:
   r-lib/ggplot2</code></pre>
-<p>and <code>renv::install()</code> will parse that remotes declaration
-and retrieve the requested package. See the remotes vignette, <a href="https://remotes.r-lib.org/articles/dependencies.html">Dependency
-resolution for R package development</a>, for more details.</p>
+<p>and <code>renv::install()</code> will parse that remotes declaration and retrieve the requested package. See the remotes vignette, <a href="https://remotes.r-lib.org/articles/dependencies.html">Dependency resolution for R package development</a>, for more details.</p>
 </div>
 <div id="library-paths" class="section level2">
 <h2>Library Paths</h2>
-<p>For package projects using renv, a library path outside of the
-project directory will be used instead. As an example, on macOS, this
-might look like:</p>
+<p>For package projects using renv, a library path outside of the project directory will be used instead. As an example, on macOS, this might look like:</p>
 <pre><code>&gt; .libPaths()
 [1] &quot;/Users/kevin/Library/Caches/org.R-project.R/R/renv/library/example-552f6e80/R-4.3/aarch64-apple-darwin20&quot;
 [2] &quot;/Users/kevin/Library/Caches/org.R-project.R/R/renv/sandbox/R-4.3/aarch64-apple-darwin20/ac5c2659&quot;</code></pre>
-<p>This is done to avoid issues with <code>R CMD build</code>, which can
-become very slow if your project contains a large number of files – as
-can happen if the project library is located in
-<code>renv/library</code> (the typical location). Note that even though
-the library is located outside of the project, the library path
-generated will still be unique to that project, and so the project is
-still effectively isolated in the same way as other renv projects
-normally are.</p>
-<p>If you want to customize the location where <code>renv</code> places
-project libraries in this scenario, you can use the
-<code>RENV_PATHS_LIBRARY_ROOT</code> environment variable. For
-example:</p>
+<p>This is done to avoid issues with <code>R CMD build</code>, which can become very slow if your project contains a large number of files – as can happen if the project library is located in <code>renv/library</code> (the typical location). Note that even though the library is located outside of the project, the library path generated will still be unique to that project, and so the project is still effectively isolated in the same way as other renv projects normally are.</p>
+<p>If you want to customize the location where <code>renv</code> places project libraries in this scenario, you can use the <code>RENV_PATHS_LIBRARY_ROOT</code> environment variable. For example:</p>
 <pre><code>RENV_PATHS_LIBRARY_ROOT = ~/.renv/library</code></pre>
-<p>If you’d still prefer to keep your project library within the project
-directory, you can set:</p>
+<p>If you’d still prefer to keep your project library within the project directory, you can set:</p>
 <pre><code>RENV_PATHS_LIBRARY = renv/library</code></pre>
-<p>within an appropriate <code>.Renviron</code> start-up profile – but
-please be aware of the caveats to doing this, as the performance of
-<code>R CMD build</code> will be affected.</p>
+<p>within an appropriate <code>.Renviron</code> start-up profile – but please be aware of the caveats to doing this, as the performance of <code>R CMD build</code> will be affected.</p>
 </div>
 <div id="testing" class="section level2">
 <h2>Testing</h2>
-<p>While developing your package, you may want to use a continuous
-integration service (such as <a href="https://www.travis-ci.com">Travis
-CI</a>) to build and test your package remotely. You can use renv to
-help facilitate this testing – see the <a href="ci.html">Continuous
-Integration</a> vignette for more information. In particular, clever use
-of the renv cache can help save time that might normally be spent on
-package installation. See <a href="https://github.com/rstudio/renv/blob/main/.github/workflows/R-CMD-check.yaml" class="uri">https://github.com/rstudio/renv/blob/main/.github/workflows/R-CMD-check.yaml</a>
-for an example of how renv uses itself for package management in its own
-CI tests.</p>
+<p>While developing your package, you may want to use a continuous integration service (such as <a href="https://www.travis-ci.com">Travis CI</a>) to build and test your package remotely. You can use renv to help facilitate this testing – see the <a href="ci.html">Continuous Integration</a> vignette for more information. In particular, clever use of the renv cache can help save time that might normally be spent on package installation. See <a href="https://github.com/rstudio/renv/blob/main/.github/workflows/R-CMD-check.yaml" class="uri">https://github.com/rstudio/renv/blob/main/.github/workflows/R-CMD-check.yaml</a> for an example of how renv uses itself for package management in its own CI tests.</p>
 </div>
 <div id="submitting-to-cran" class="section level2">
 <h2>Submitting to CRAN</h2>
-<p>Note that packages submitted to CRAN should be designed to work with
-the other R packages currently available on CRAN. For that reason, when
-preparing your package for submission, you’ll need to ensure your source
-package tarball does not include any <code>renv</code> infrastructure.
-<code>renv</code> makes this easy by automatically including</p>
+<p>Note that packages submitted to CRAN should be designed to work with the other R packages currently available on CRAN. For that reason, when preparing your package for submission, you’ll need to ensure your source package tarball does not include any <code>renv</code> infrastructure. <code>renv</code> makes this easy by automatically including</p>
 <pre><code>^renv$
 ^renv\.lock$</code></pre>
-<p>in your package’s <code>.Rbuildignore</code> file. This instructs
-<code>R CMD build</code> to not include these files and folders in the
-generated package tarball. Through this, even if <code>renv</code> is
-used during package development, it’s still easy to build and publish
-your package to CRAN as you would when developing packages without
-<code>renv</code>.</p>
+<p>in your package’s <code>.Rbuildignore</code> file. This instructs <code>R CMD build</code> to not include these files and folders in the generated package tarball. Through this, even if <code>renv</code> is used during package development, it’s still easy to build and publish your package to CRAN as you would when developing packages without <code>renv</code>.</p>
 </div>
 
 
