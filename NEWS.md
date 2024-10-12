@@ -1,4 +1,26 @@
 
+# renv 1.0.11
+
+* Fixed an issue where headers were not properly passed to `available.packages()`
+  during `renv` bootstrap. (#1942)
+  
+* `renv` now assumes that Artifactory package repositories will use a CRAN-like
+  layout of packages for packages in the archive. (#1996)
+
+* `renv` now includes compiled extensions on Linux + macOS. These
+  extensions are primarily used to improve the performance of
+  `renv::dependencies()` and other static analysis code.
+  Support for Windows may come in a future release.
+
+* Fixed an issue where `renv::snapshot()` could fail if the project
+  contained a call to `module()` with no arguments. (#2007)
+
+* On Linux, `renv` now emits a message on load if the R temporary directory
+  is within a folder that has been mounted as 'noexec'. This message can be
+  suppressed by setting the `RENV_TEMPDIR_NOEXEC_CHECK=FALSE` environment
+  variable.
+  
+
 # renv 1.0.10
 
 * Fixed a performance regression in `renv::dependencies()`. (#1999)
@@ -1855,3 +1877,4 @@
 # renv 0.8.0
 
 * Initial CRAN release.
+

@@ -943,7 +943,7 @@ renv_retrieve_repos_archive_root <- function(url, record) {
   
 }
 
-renv_retrieve_repos_archive_formatter <- function(url, record) {
+renv_retrieve_repos_archive_formatter <- function(url) {
 
   # list of known formatters
   formatters <- list(
@@ -953,8 +953,9 @@ renv_retrieve_repos_archive_formatter <- function(url, record) {
       with(record, file.path(repo, "src/contrib/Archive", Package))
     },
     
-    # format used by Artifactory
+    # format used by older releases of Artifactory
     # https://github.com/rstudio/renv/issues/602
+    # https://github.com/rstudio/renv/issues/1996
     artifactory = function(repo, record) {
       with(record, file.path(repo, "src/contrib/Archive", Package, Version))
     },
@@ -981,7 +982,7 @@ renv_retrieve_repos_archive_formatter <- function(url, record) {
   
   # use the headers to infer the repository type
   if ("x-artifactory-id" %in% names(headers)) {
-    formatters[["artifactory"]]
+    formatters[["cran"]]
   } else if (grepl("Nexus", headers[["server"]] %||% "")) {
     formatters[["nexus"]]
   } else {
