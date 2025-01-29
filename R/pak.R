@@ -4,9 +4,10 @@ the$pak_minver <- numeric_version("0.7.0")
 
 renv_pak_init <- function(stream = NULL, force = FALSE) {
 
-  stream <- stream %||% renv_pak_stream()
-  if (force || !renv_pak_available())
+  if (force || !renv_pak_available()) {
+    stream <- stream %||% renv_pak_stream()
     renv_pak_init_impl(stream)
+  }
 
   renv_namespace_load("pak")
 
@@ -62,6 +63,43 @@ renv_pak_init_impl <- function(stream) {
 
 }
 
+renv_pak_update <- function(project, library, prompt) {
+  
+  pak <- renv_namespace_load("pak")
+
+  # if this project contains a DESCRIPTION file, use it when
+  # determining which packages to update
+  if (file.exists(file.path(project, "DESCRIPTION"))) {
+    
+    result <- pak$local_install_dev_deps(
+      root = project,
+      lib  = library[[1L]],
+      ask  = prompt
+    )
+    
+    return(result)
+  }
+  
+  # read description files for all installed packages
+  # TODO: do we want to also update packages in other library paths,
+  # or just packages installed in the project library?
+  records <- renv_snapshot_libpaths(library[[1L]], project = project)
+  remotes <- map_chr(records, renv_record_format_remote, versioned = FALSE, pak = TRUE)
+  if (length(remotes) == 0L) {
+    caution("- There are no packages to update.")
+    return(invisible(NULL))
+  }
+  
+  # update those packages
+  pak$pkg_install(
+    pkg = unname(remotes),
+    lib = library[[1L]],
+    upgrade = TRUE,
+    ask = prompt
+  )
+
+}
+
 renv_pak_install <- function(packages,
                              library,
                              type,
@@ -70,7 +108,6 @@ renv_pak_install <- function(packages,
                              project)
 {
   pak <- renv_namespace_load("pak")
-  lib <- library[[1L]]
 
   # transform repositories
   if (renv_ppm_enabled()) {
@@ -90,18 +127,17 @@ renv_pak_install <- function(packages,
   else
     as.character(packages)
 
-  if (length(packages) == 0L) {
-
-    result <- pak$local_install_dev_deps(
-      root = project,
-      lib  = lib,
-      ask  = prompt
-    )
-
-    return(result)
-
-  }
-
+  # if no packages were specified, treat this as a request to
+  # install / update packages used in the project
+  if (length(packages) == 0L)
+    return(renv_pak_update(project, library, prompt))
+  
+  # pak doesn't support ':' as a sub-directory separator, so try to
+  # repair that here
+  # https://github.com/rstudio/renv/issues/2011
+  pattern <- "(?<!:):([^/#@:]+)"
+  packages <- gsub(pattern, "/\\1", packages, perl = TRUE)
+  
   # build parameters
   packages <- map_chr(packages, function(package) {
 
@@ -119,7 +155,7 @@ renv_pak_install <- function(packages,
 
   pak$pkg_install(
     pkg     = packages,
-    lib     = lib,
+    lib     = library[[1L]],
     ask     = prompt,
     upgrade = TRUE
   )

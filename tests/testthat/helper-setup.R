@@ -47,6 +47,10 @@ renv_tests_setup_envvars <- function(scope = parent.frame()) {
   root <- renv_scope_tempfile("renv-root-", scope = scope)
   ensure_directory(root)
 
+  # set up sandbox directory
+  sandbox <- file.path(root, "sandbox")
+  ensure_directory(sandbox)
+
   renv_scope_envvars(
     RENV_AUTOLOAD_ENABLED = FALSE,
     RENV_CONFIG_LOCKING_ENABLED = FALSE,
@@ -57,6 +61,7 @@ renv_tests_setup_envvars <- function(scope = parent.frame()) {
     RENV_PATHS_LOCAL = NULL,
     RENV_PATHS_LOCKFILE = NULL,
     RENV_PATHS_RENV = NULL,
+    RENV_PATHS_SANDBOX = sandbox,
     RENV_WATCHDOG_ENABLED = FALSE,
     RENV_WATCHDOG_DEBUG = FALSE,
     scope = scope
@@ -217,6 +222,7 @@ renv_tests_setup_repos <- function(scope = parent.frame()) {
     descpath <- file.path(path, "DESCRIPTION")
     desc <- renv_description_read(descpath)
     desc$Version <- "0.1.0"
+    desc$Depends <- gsub("99.99.99", "1.0.0", desc$Depends %||% "", fixed = TRUE)
     write.dcf(desc, file = descpath)
 
     # place these packages into the archive

@@ -311,7 +311,7 @@ test_that("eval=<expr> is treated as truthy", {
 })
 
 test_that("piped expressions can be parsed for dependencies", {
-  deps <- dependencies("resources/magrittr.R")
+  deps <- dependencies(renv_tests_path("resources/magrittr.R"))
   expect_setequal(deps$Package, c("A", "B", "C"))
 })
 
@@ -606,17 +606,52 @@ test_that("dependencies() detects usages of Junit test reporters", {
 })
 
 test_that("dependencies() detects usage of ragg_png device", {
-  
+
   check <- function(document) {
-    
+
     file <- renv_scope_tempfile("renv-test-", fileext = ".R")
     writeLines(document, con = file)
-    
+
     deps <- dependencies(file, quiet = TRUE)
     expect_contains(deps$Package, "ragg")
   }
-  
+
   check("opts_chunk$set(dev = \"ragg_png\")")
   check("knitr::opts_chunk$set(dev = \"ragg_png\")")
-  
+
+})
+
+test_that("dependencies() does not create 'object' in parent environment", {
+  result <- dependencies("resources/code.R", quiet = TRUE)
+  expect_false(exists("object", envir = environment(), inherits = FALSE))
+})
+
+test_that("R scripts that appear destined for knitr::spin() are detected", {
+  result <- dependencies("resources/knitr-spin.R", quiet = TRUE)
+  expect_contains(result$Package, c("knitr", "rmarkdown"))
+})
+
+test_that("renv infers a dev. dependency on lintr", {
+  project <- renv_tests_scope()
+  file.create(".lintr")
+  deps <- dependencies(quiet = TRUE, dev = TRUE)
+  expect_contains(deps$Package, "lintr")
+})
+
+test_that("https://github.com/rstudio/renv/issues/2052", {
+
+  renv_scope_tempdir()
+  dir.create("subdir")
+  writeLines("library(A)", con = "subdir/test.R")
+  writeLines(c("*", "!/**/", "!*.*"), con = ".renvignore")
+  deps <- dependencies(quiet = TRUE, root = getwd())
+  expect_contains(deps$Package, "A")
+
+})
+
+test_that("https://github.com/rstudio/renv/issues/2047", {
+  renv_tests_scope()
+  writeLines("citation(\"breakfast\")", con = "_deps.R")
+  init()
+  expect_true(renv_package_installed("breakfast"))
 })

@@ -43,6 +43,11 @@ the$install_step_width <- 48L
 #'
 #' @inherit renv-params
 #'
+#' @param include Packages which should be installed. `include` can
+#'   occasionally be useful when you'd like to call `renv::install()` with
+#'   no arguments, but restrict package installation to only some subset
+#'   of dependencies in the project.
+#'
 #' @param exclude Packages which should not be installed. `exclude` is useful
 #'   when using `renv::install()` to install all dependencies in a project,
 #'   except for a specific set of packages.
@@ -87,6 +92,7 @@ the$install_step_width <- 48L
 #' }
 install <- function(packages = NULL,
                     ...,
+                    include      = NULL,
                     exclude      = NULL,
                     library      = NULL,
                     type         = NULL,
@@ -165,6 +171,10 @@ install <- function(packages = NULL,
   # apply exclude parameter
   if (length(exclude))
     packages <- setdiff(packages, exclude)
+
+  # apply include parameter
+  if (length(include))
+    packages <- intersect(packages, include)
 
   if (empty(packages)) {
     writef("- There are no packages to install.")
@@ -432,8 +442,9 @@ renv_install_package <- function(record) {
 
   # link into cache
   if (renv_cache_config_enabled(project = project)) {
-    renv_cache_synchronize(record, linkable = linkable)
-    feedback <- paste0(feedback, " and cached")
+    cached <- renv_cache_synchronize(record, linkable = linkable)
+    if (cached)
+      feedback <- paste(feedback, "and cached")
   }
 
   verbose <- config$install.verbose()

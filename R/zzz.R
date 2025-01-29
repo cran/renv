@@ -28,10 +28,15 @@
       Sys.setenv(RENV_PATHS_SANDBOX = sandbox)
     }
 
-    # don't lock sandbox while testing / checking
-    options(renv.sandbox.locking_enabled = FALSE)
-
   }
+  
+  # don't lock sandbox while testing / checking
+  if (testing() || checking() || devmode()) {
+    options(renv.sandbox.locking_enabled = FALSE)
+    Sys.setenv(RENV_SANDBOX_LOCKING_ENABLED = FALSE)
+  }
+  
+  
 
   renv_defer_init()
   renv_metadata_init()
@@ -59,11 +64,16 @@
 
   # if an renv project already appears to be loaded, then re-activate
   # the sandbox now -- this is primarily done to support suspend and
-  # resume with RStudio where the user profile might not be run
+  # resume with RStudio where the user profile might not have been run,
+  # but RStudio would have restored options from the prior session
+  #
+  # https://github.com/rstudio/renv/issues/2036
   if (renv_rstudio_available()) {
     project <- getOption("renv.project.path")
-    if (!is.null(project))
+    if (!is.null(project)) {
+      renv_project_set(project)
       renv_sandbox_activate(project = project)
+    }
   }
 
   # make sure renv is unloaded on exit, so locks etc. are released
@@ -103,8 +113,7 @@
 
 # NOTE: required for devtools::load_all()
 .onDetach <- function(libpath) {
-  package <- Sys.getenv("DEVTOOLS_LOAD", unset = NA)
-  if (identical(package, .packageName))
+  if (devmode())
     .onUnload(libpath)
 }
 
@@ -112,7 +121,7 @@ renv_zzz_run <- function() {
 
   # check if we're in pkgload::load_all()
   # if so, then create some files
-  if (renv_envvar_exists("DEVTOOLS_LOAD")) {
+  if (devmode()) {
     renv_zzz_bootstrap_activate()
     renv_zzz_bootstrap_config()
   }

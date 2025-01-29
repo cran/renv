@@ -15,15 +15,29 @@ remote <- function(spec) {
 
 # take a short-form remotes spec, parse that into a remote,
 # and generate a corresponding package record
-renv_remotes_resolve <- function(spec, latest = FALSE) {
+renv_remotes_resolve <- function(spec, latest = FALSE, infer = FALSE) {
 
   # check for already-resolved specs
   if (is.null(spec) || is.list(spec))
     return(spec)
 
+  # check for a package name prefix and remove it
+  regexps <- .standard_regexps()
+  pattern <- sprintf("^%s=", regexps$valid_package_name)
+  spec <- sub(pattern, "", spec)
+
   # remove a trailing slash
   # https://github.com/rstudio/renv/issues/1135
   spec <- gsub("/+$", "", spec, perl = TRUE)
+
+  # check if we should infer the package version
+  infer <-
+    infer &&
+    grepl(renv_regexps_package_name(), spec) &&
+    renv_package_installed(spec)
+
+  if (infer)
+    spec <- paste(spec, renv_package_version(spec), sep = "@")
 
   # check for archive URLs -- this is a bit hacky
   if (grepl("^(?:file|https?)://", spec)) {
@@ -96,6 +110,12 @@ renv_remotes_resolve_impl <- function(spec, latest = FALSE) {
 
   if (isbioc)
     remote$type <- "bioc"
+
+  # treat HEAD refs as an implicit request to use the default branch
+  # of the associated remote repository
+  # https://github.com/rstudio/renv/issues/2040
+  if (identical(remote$ref, "HEAD"))
+    remote$ref <- NULL
 
   resolved <- switch(
     remote$type,
@@ -499,8 +519,9 @@ renv_remotes_resolve_github_sha_ref <- function(host, user, repo, ref) {
   # build url for github commits endpoint
   fmt <- "%s/repos/%s/%s/commits/%s"
   origin <- renv_retrieve_origin(host)
-  ref <- ref %||% getOption("renv.github.default_branch", default = "master")
-  url <- sprintf(fmt, origin, user, repo, ref %||% "master")
+
+  ref <- ref %||% renv_remotes_resolve_github_ref(host, user, repo)
+  url <- sprintf(fmt, origin, user, repo, ref %||% "main")
 
   # prepare headers
   headers <- c(Accept = "application/vnd.github.sha")
@@ -610,7 +631,7 @@ renv_remotes_resolve_github_ref <- function(host, user, repo) {
     renv_remotes_resolve_github_ref_impl(host, user, repo),
     error = function(e) {
       warning(e)
-      getOption("renv.github.default_branch", default = "master")
+      getOption("renv.github.default_branch", default = "main")
     }
   )
 
@@ -632,7 +653,7 @@ renv_remotes_resolve_github_ref_impl <- function(host, user, repo) {
   json <- renv_json_read(jsonfile)
 
   # read default branch
-  json$default_branch %||% getOption("renv.github.default_branch", default = "master")
+  json$default_branch %||% getOption("renv.github.default_branch", default = "main")
 
 }
 
@@ -660,7 +681,7 @@ renv_remotes_resolve_github <- function(remote) {
   )
 
   # if an abbreviated sha was provided as the ref, expand it here
-  if (nzchar(ref) && startswith(sha, ref))
+  if (nzchar(ref) && startsWith(sha, ref))
     ref <- sha
 
   # check whether the repository has a .gitmodules file; if so, then we'll have
@@ -807,17 +828,8 @@ renv_remotes_resolve_git_description <- function(record) {
 }
 
 renv_remotes_resolve_git_pull <- function(pr) {
-  # to be able to checkout PR 760:
-  # git fetch origin pull/760/head:pr-760
-  # or:
-  # git fetch origin pull/760/head:pull/760
-
-  # so format for ref is:
-  # pull/{ref_number}/head:pr-{ref_number}
-  fmt <- "pull/%s/head:pull/%s"
-
-  remote_ref <- sprintf(fmt, pr, pr)
-  remote_ref
+  fmt <- "pull/%1$s/head:pull/%1$s"
+  sprintf(fmt, pr)
 }
 
 renv_remotes_resolve_gitlab_ref <- function(host, user, repo) {

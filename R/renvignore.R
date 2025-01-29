@@ -92,10 +92,20 @@ renv_renvignore_parse <- function(contents, prefix = "") {
   #
   # The exclusion of 'dir' will take precedence, and dir/matched won't
   # get a chance to apply.
-  include <- sort(unique(unlist(map(include, function(rule) {
+  expanded <- map(include, function(rule) {
+    
+    # check for slashes; leave unslashed rules alone
     idx <- gregexpr("(?:/|$)", rule, perl = TRUE)[[1L]]
+    if (length(idx) == 1L)
+      return(rule)
+  
+    # otherwise, split into multiple rules for each sub-directory
     gsub("^/*", "/", substring(rule, 1L, idx))
-  }))))
+    
+  })
+  
+  # collapse back into a list
+  include <- unique(unlist(expanded))
 
   # parse patterns separately
   list(
@@ -144,8 +154,9 @@ renv_renvignore_parse_impl <- function(entries, prefix = "") {
   # prepend prefix
   entries <- sprintf("^\\Q%s/\\E%s", prefix, entries)
 
-  # remove \\Q\\E
+  # remove \\Q\\E, \\E\\Q
   entries <- gsub("\\Q\\E", "", entries, fixed = TRUE)
+  entries <- gsub("\\E\\Q", "", entries, fixed = TRUE)
 
   # all done!
   entries

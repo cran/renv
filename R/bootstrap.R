@@ -50,10 +50,6 @@ heredoc <- function(text, leave = 0) {
 
 }
 
-startswith <- function(string, prefix) {
-  substring(string, 1, nchar(prefix)) == prefix
-}
-
 bootstrap <- function(version, library) {
 
   friendly <- renv_bootstrap_version_friendly(version)
@@ -404,6 +400,9 @@ renv_bootstrap_download_github <- function(version) {
 
   # prepare download options
   token <- renv_bootstrap_github_token()
+  if (is.null(token))
+    token <- ""
+
   if (nzchar(Sys.which("curl")) && nzchar(token)) {
     fmt <- "--location --fail --header \"Authorization: token %s\""
     extra <- sprintf(fmt, token)
@@ -792,8 +791,14 @@ renv_bootstrap_validate_version <- function(version, description = NULL) {
 }
 
 renv_bootstrap_validate_version_dev <- function(version, description) {
+  
   expected <- description[["RemoteSha"]]
-  is.character(expected) && startswith(expected, version)
+  if (!is.character(expected))
+    return(FALSE)
+  
+  pattern <- sprintf("^\\Q%s\\E", version)
+  grepl(pattern, expected, perl = TRUE)
+  
 }
 
 renv_bootstrap_validate_version_release <- function(version, description) {
@@ -973,10 +978,10 @@ renv_bootstrap_version_friendly <- function(version, shafmt = NULL, sha = NULL) 
 
 renv_bootstrap_exec <- function(project, libpath, version) {
   if (!renv_bootstrap_load(project, libpath, version))
-    renv_bootstrap_run(version, libpath)
+    renv_bootstrap_run(project, libpath, version)
 }
 
-renv_bootstrap_run <- function(version, libpath) {
+renv_bootstrap_run <- function(project, libpath, version) {
 
   # perform bootstrap
   bootstrap(version, libpath)
@@ -987,7 +992,7 @@ renv_bootstrap_run <- function(version, libpath) {
 
   # try again to load
   if (requireNamespace("renv", lib.loc = libpath, quietly = TRUE)) {
-    return(renv::load(project = getwd()))
+    return(renv::load(project = project))
   }
 
   # failed to download or load renv; warn the user

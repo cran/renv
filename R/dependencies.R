@@ -2,29 +2,28 @@
 #' Find R package dependencies in a project
 #'
 #' @description
-#' `dependencies()` will crawl files within your project, looking for \R files
+#' `dependencies()` will scan files within your project, looking for \R files
 #' and the packages used within those \R files. This is done primarily by
 #' parsing the code and looking for calls of the form `library(package)`,
 #' `require(package)`, `requireNamespace("package")`, and `package::method()`.
 #' renv also supports package loading with
 #' [box](https://cran.r-project.org/package=box) (`box::use(...)`) and
-#' [pacman](https://cran.r-project.org/package=pacman) (`pacman::p_load(...)`)
-#' .
+#' [pacman](https://cran.r-project.org/package=pacman) (`pacman::p_load(...)`).
 #'
 #' For \R package projects, `renv` will also detect dependencies expressed
 #' in the `DESCRIPTION` file. For projects using Python, \R dependencies within
 #' the \R code chunks of your project's `.ipynb` files will also be used.
 #'
 #' Note that the \code{\link[rmarkdown:rmarkdown-package]{rmarkdown}} package is
-#' required in order to crawl dependencies in R Markdown files.
+#' required in order to scan dependencies in R Markdown files.
 #'
 #' # Missing dependencies
 #'
 #' `dependencies()` uses static analysis to determine which packages are used
-#' by your project. This means that it inspects, but doesn't run, your
-#' source. Static analysis generally works well, but is not 100% reliable in
-#' detecting the packages required by your project. For example, renv is
-#' unable to detect this kind of usage:
+#' by your project. This means that it inspects, but doesn't run, the \R code
+#' in your project. Static analysis generally works well, but is not
+#' 100% reliable in detecting the packages required by your project. For
+#' example, `renv` is unable to detect this kind of usage:
 #'
 #' ```{r eval=FALSE}
 #' for (package in c("dplyr", "ggplot2")) {
@@ -33,8 +32,9 @@
 #' ```
 #'
 #' It also can't generally tell if one of the packages you use, uses one of
-#' its suggested packages. For example, `tidyr::separate_wider_delim()`
-#' uses the stringr package which is only suggested, not required by tidyr.
+#' its suggested packages. For example, the `tidyr::separate_wider_delim()`
+#' function requires the `stringr` package, but `stringr` is only suggested,
+#' not required, by `tidyr`.
 #'
 #' If you find that renv's dependency discovery misses one or more packages
 #' that you actually use in your project, one escape hatch is to include a file
@@ -44,25 +44,6 @@
 #' library(dplyr)
 #' library(ggplot2)
 #' library(stringr)
-#' ```
-#'
-#' # Explicit dependencies
-#'
-#' Alternatively, you can suppress dependency discover and instead rely
-#' on an explicit set of packages recorded by you in a project `DESCRIPTION` file.
-#' Call `renv::settings$snapshot.type("explicit")` to enable "explicit" mode,
-#' then enumerate your dependencies in a project `DESCRIPTION` file.
-#'
-#' In that case, your `DESCRIPTION` might look something like this:
-#'
-#' ```
-#' Type: project
-#' Description: My project.
-#' Depends:
-#'     tidyverse,
-#'     devtools,
-#'     shiny,
-#'     data.table
 #' ```
 #'
 #' # Ignoring files
@@ -231,7 +212,7 @@ renv_dependencies_impl <- function(
 
   # resolve errors
   errors <- match.arg(errors)
-  
+
   # the path to the user .Rprofile is used when discovering dependencies,
   # so resolve that eagerly now
   renv_scope_binding(
@@ -295,6 +276,7 @@ renv_dependencies_root_impl <- function(path) {
 renv_dependencies_callback <- function(path) {
 
   cbname <- list(
+    ".lintr"        = function(path) renv_dependencies_discover_lintr(path),
     ".Rprofile"     = function(path) renv_dependencies_discover_r(path),
     "DESCRIPTION"   = function(path) renv_dependencies_discover_description(path),
     "NAMESPACE"     = function(path) renv_dependencies_discover_namespace(path),
@@ -501,7 +483,7 @@ renv_dependencies_discover_impl <- function(path) {
     signalCondition(warnify(status))
     NULL
   }
-  
+
   status
 
 }
@@ -995,7 +977,13 @@ renv_dependencies_discover_chunks_ranges <- function(path, contents, patterns) {
 
 renv_dependencies_discover_ipynb <- function(path) {
 
-  json <- renv_json_read(path)
+  json <- catch(renv_json_read(path))
+  if (inherits(json, "error")) {
+    info <- renv_file_info(path)
+    if (!is.na(info$size) && info$size > 1)
+      renv_dependencies_error(path, error = json)
+  }
+
   if (!identical(json$metadata$kernelspec$language, "R"))
     return()
 
@@ -1029,6 +1017,10 @@ renv_dependencies_discover_rproj <- function(path) {
 
 }
 
+renv_dependencies_discover_lintr <- function(path) {
+  renv_dependencies_list(path, "lintr", dev = TRUE)
+}
+
 renv_dependencies_discover_r <- function(path  = NULL,
                                          text  = NULL,
                                          expr  = NULL,
@@ -1046,10 +1038,10 @@ renv_dependencies_discover_r <- function(path  = NULL,
 
   if (inherits(expr, "error"))
     return(renv_dependencies_error(path, error = expr))
-  
+
   # resolve dev
   dev <- dev %||% path == the$paths$r_profile_user
-  
+
   # update current path
   state <- renv_dependencies_state()
   if (!is.null(state))
@@ -1061,6 +1053,7 @@ renv_dependencies_discover_r <- function(path  = NULL,
     renv_dependencies_discover_r_library_require,
     renv_dependencies_discover_r_require_namespace,
     renv_dependencies_discover_r_colon,
+    renv_dependencies_discover_r_citation,
     renv_dependencies_discover_r_pacman,
     renv_dependencies_discover_r_modules,
     renv_dependencies_discover_r_import,
@@ -1075,20 +1068,44 @@ renv_dependencies_discover_r <- function(path  = NULL,
   )
 
   envir <- envir %||% new.env(parent = emptyenv())
-  renv_dependencies_recurse(expr, function(node) {
-    
-    # normalize calls (handle magrittr pipes)
-    node <- renv_call_normalize(node)
-    for (method in methods)
-      method(node, envir)
-    
-    # return (potentially transformed) node
-    assign("object", node, envir = parent.frame())
-    invisible(node)
-    
-  })
+  callback <- if (renv_ext_enabled()) {
 
+    function(node) {
+      node <- renv_call_normalize(node)
+      for (method in methods)
+        method(node, envir)
+      invisible(node)
+    }
+
+  } else {
+
+    function(node) {
+
+      node <- renv_call_normalize(node)
+      for (method in methods)
+        method(node, envir)
+
+      assign("object", node, envir = parent.frame())
+      invisible(node)
+
+    }
+
+  }
+
+  renv_dependencies_recurse(expr, callback)
   packages <- ls(envir = envir, all.names = TRUE)
+
+  # also try to detect knitr::spin() dependencies -- this needs to
+  # happen outside of the regular dependency discovery machinery
+  # as it will rely on checking comments in the document
+  #
+  # https://github.com/rstudio/renv/issues/2023
+  if (is.character(text) || is.character(path)) {
+    text <- text %||% readLines(path, n = 1L, warn = FALSE)
+    if (length(text) && grepl("^\\s*#'\\s*[-]{3}\\s*$", text[[1L]], perl = TRUE))
+      packages <- union(c("knitr", "rmarkdown"), packages)
+  }
+
   renv_dependencies_list(path, packages, dev = dev)
 }
 
@@ -1196,7 +1213,26 @@ renv_dependencies_discover_r_colon <- function(node, envir) {
   if (is.symbol(package))
     package <- as.character(package)
 
-  if (!is.character(package) || length(package) != 1)
+  if (!is.character(package) || length(package) != 1L)
+    return(FALSE)
+
+  envir[[package]] <- TRUE
+  TRUE
+
+}
+
+renv_dependencies_discover_r_citation <- function(node, envir) {
+
+  node <- renv_call_expect(node, "utils", "citation")
+  if (is.null(node))
+    return(FALSE)
+
+  matched <- catch(match.call(utils::citation, node))
+  if (inherits(matched, "error"))
+    return(FALSE)
+
+  package <- matched[["package"]]
+  if (!is.character(package) || length(package) != 1L)
     return(FALSE)
 
   envir[[package]] <- TRUE
@@ -1262,7 +1298,7 @@ renv_dependencies_discover_r_modules <- function(node, envir) {
   if (identical(node[[1L]], quote(modules::import))) {
     renv_dependencies_discover_r_modules_impl(node, envir)
   }
-  
+
   # check for 'import' usages with a module block
   node <- renv_call_expect(node, "modules", "module")
   if (length(node) >= 2L &&
@@ -1274,31 +1310,31 @@ renv_dependencies_discover_r_modules <- function(node, envir) {
       renv_dependencies_discover_r_modules_impl(node, envir)
     })
   }
-    
+
 }
 
 renv_dependencies_discover_r_modules_impl <- function(node, envir) {
-  
+
   node <- renv_call_expect(node, "modules", c("import"))
   if (is.null(node))
     return(FALSE)
-  
+
   # attempt to match the call
   prototype <- function(from, ..., attach = TRUE, where = parent.frame()) {}
   matched <- catch(match.call(prototype, node, expand.dots = FALSE))
   if (inherits(matched, "error"))
     return(FALSE)
-  
+
   # extract character vector or symbol from `from`
   package <- matched[["from"]]
   if (empty(package))
     return(FALSE)
-  
+
   # package could be symbols or character so call as.character
   # to be safe then mark packages as known
   envir[[as.character(package)]] <- TRUE
   TRUE
-  
+
 }
 
 renv_dependencies_discover_r_import <- function(node, envir) {
@@ -1461,7 +1497,7 @@ renv_dependencies_discover_r_testthat <- function(node, envir) {
     envir[["xml2"]] <- TRUE
     return(TRUE)
   }
-  
+
   # check for an R6 class inheriting from a JunitReporter
   class <- renv_call_expect(node, "R6", "R6Class")
   if (!is.null(class) && identical(class$inherit, quote(JunitReporter))) {
@@ -1473,7 +1509,7 @@ renv_dependencies_discover_r_testthat <- function(node, envir) {
   node <- renv_call_expect(node, "testthat", c("test_package", "test_dir", "test_file"))
   if (is.null(node))
     return(FALSE)
-  
+
   candidates <- list(
     "Junit",
     "junit",
@@ -1496,23 +1532,23 @@ renv_dependencies_discover_r_testthat <- function(node, envir) {
 }
 
 renv_dependencies_discover_r_knitr <- function(node, envir) {
-  
+
   matched <- is.call(node) && (
     identical(node[[1L]], quote(knitr::opts_chunk$set)) ||
     identical(node[[1L]], quote(opts_chunk$set))
   )
-  
+
   if (!matched)
     return(FALSE)
-  
+
   args <- as.list(node)
   if (identical(args[["dev"]], "ragg_png")) {
     envir[["ragg"]] <- TRUE
     return(TRUE)
   }
-  
+
   FALSE
-  
+
 }
 
 renv_dependencies_discover_r_glue_impl <- function(string, node, envir) {
@@ -1888,10 +1924,10 @@ renv_dependencies_eval <- function(expr) {
 }
 
 renv_dependencies_recurse <- function(object, callback) {
-  
+
   if (is.call(object))
     callback(object)
-  
+
   if (is.recursive(object))
     for (i in seq_along(object))
       if (is.call(object[[i]]))

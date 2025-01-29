@@ -707,7 +707,7 @@ renv_retrieve_repos <- function(record) {
 
     # if this is a package from r-universe, try restoring from github
     # (currently inferred from presence for RemoteUrl field)
-    unifields <- c("RemoteUrl", "RemoteRef", "RemoteSha")
+    unifields <- c("RemoteUrl", "RemoteSha")
     if (all(unifields %in% names(record)))
       methods$push(renv_retrieve_git)
     else
@@ -782,16 +782,24 @@ renv_retrieve_repos_error_report <- function(record, errors) {
 
 }
 
-renv_retrieve_url <- function(record) {
+renv_retrieve_url_resolve <- function(record) {
 
-  if (is.null(record$RemoteUrl)) {
-    fmt <- "package '%s' has no recorded RemoteUrl"
-    stopf(fmt, record$Package)
+  # https://github.com/rstudio/renv/issues/2060
+  pkgref <- record$RemotePkgRef
+  if (!is.null(pkgref)) {
+    remote <- renv_remotes_parse(pkgref)
+    if (identical(remote$type, "url"))
+      return(remote$url)
   }
 
-  resolved <- renv_remotes_resolve_url(record$RemoteUrl, quiet = FALSE)
-  renv_retrieve_successful(record, resolved$Path)
+  record$RemoteUrl
 
+}
+
+renv_retrieve_url <- function(record) {
+  url <- renv_retrieve_url_resolve(record)
+  resolved <- renv_remotes_resolve_url(url, quiet = FALSE)
+  renv_retrieve_successful(record, resolved$Path)
 }
 
 renv_retrieve_repos_archive_name <- function(record, type = "source") {
@@ -900,16 +908,37 @@ renv_retrieve_repos_source_fallback <- function(record, repo) {
 
 renv_retrieve_repos_archive <- function(record) {
 
-  for (repo in getOption("repos")) {
+  # get the current repositories
+  repos <- getOption("repos")
+
+  # if this record has a repository recorded, use or prefer it
+  repository <- record[["Repository"]]
+  if (is.character(repository)) {
+    names(repository) <- names(repository) %||% repository
+    if (grepl("://", repository, fixed = TRUE)) {
+      repos <- c(repository, repos)
+    } else if (repository %in% names(repos)) {
+      matches <- names(repos) == repository
+      repos <- c(repos[matches], repos[!matches])
+    }
+  }
+
+  for (repo in repos) {
 
     # try to determine path to package in archive
     root <- renv_retrieve_repos_archive_root(repo, record)
     if (is.null(root))
       next
 
-    # attempt download
+    # attempt download; report errors via condition handler
     name <- renv_retrieve_repos_archive_name(record, type = "source")
     status <- catch(renv_retrieve_repos_impl(record, "source", name, root))
+    if (inherits(status, "error")) {
+      attr(status, "record") <- record
+      renv_condition_signal("renv.retrieve.error", status)
+    }
+
+    # exit now if we had success
     if (identical(status, TRUE))
       return(TRUE)
 
@@ -931,16 +960,16 @@ renv_retrieve_repos_archive_root <- function(url, record) {
     if (!is.null(result))
       return(result)
   }
-  
+
   # retrieve the appropriate formatter for this repository url
   formatter <- memoize(
     key   = url,
     value = renv_retrieve_repos_archive_formatter(url)
   )
-  
+
   # use it
   formatter(url, record)
-  
+
 }
 
 renv_retrieve_repos_archive_formatter <- function(url) {
@@ -952,14 +981,14 @@ renv_retrieve_repos_archive_formatter <- function(url) {
     cran = function(repo, record) {
       with(record, file.path(repo, "src/contrib/Archive", Package))
     },
-    
+
     # format used by older releases of Artifactory
     # https://github.com/rstudio/renv/issues/602
     # https://github.com/rstudio/renv/issues/1996
     artifactory = function(repo, record) {
       with(record, file.path(repo, "src/contrib/Archive", Package, Version))
     },
-    
+
     # format used by Nexus
     # https://github.com/rstudio/renv/issues/595
     nexus = function(repo, record) {
@@ -967,7 +996,7 @@ renv_retrieve_repos_archive_formatter <- function(url) {
     }
 
   )
-  
+
   # check for an override
   override <- getOption("renv.repos.formatters")
   if (!is.null(override)) {
@@ -975,11 +1004,11 @@ renv_retrieve_repos_archive_formatter <- function(url) {
     if (!is.null(formatter))
       return(formatter)
   }
-  
+
   # build URL to PACKAGES file in src/contrib
   pkgurl <- file.path(url, "src/contrib/PACKAGES")
   headers <- renv_download_headers(pkgurl)
-  
+
   # use the headers to infer the repository type
   if ("x-artifactory-id" %in% names(headers)) {
     formatters[["cran"]]

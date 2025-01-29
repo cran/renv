@@ -171,8 +171,16 @@ test_that("a project with unnamed repositories can be initialized", {
   renv_scope_options(repos = repos)
   init()
 
-  repos <- getOption("repos")
-  expect_equal(names(repos), c("CRAN", "https://cloud.r-project.org"))
+  lockfile <- renv_lockfile_read("renv.lock")
+  repos <- lockfile[["R"]][["Repositories"]]
+  
+  expect_equal(
+    repos,
+    list(
+      CRAN = "https://cran.rstudio.com",
+      "https://cloud.r-project.org" = "https://cloud.r-project.org"
+    )
+  )
 
 })
 
@@ -268,4 +276,20 @@ test_that("init() respects Remotes in a project DESCRIPTION file", {
   writeLines("Depends: skeleton\nRemotes: kevinushey/skeleton", con = "DESCRIPTION")
   init()
   expect_true(renv_package_installed("skeleton"))
+})
+
+test_that("a project using named remotes can be initialized", {
+  project <- renv_tests_scope()
+  
+  contents <- heredoc('
+    Depends:
+      toast
+    Remotes:
+      toast=toast
+  ')
+  writeLines(contents, con = "DESCRIPTION")
+  
+  init(settings = list(snapshot.type = "explicit"))
+  expect_true(renv_package_installed("toast"))
+  
 })
