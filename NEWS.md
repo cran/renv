@@ -1,10 +1,36 @@
 
+# renv 1.1.2
+
+* `renv` gains the `sysreqs()` function, which can be used to query the system
+  packages required by a set of R packages. Functionality is currently available
+  for Debian-based distributions, as well as Red Hat distributions.
+  
+* On Linux, `renv` now uses the database from
+  <https://github.com/rstudio/r-system-requirements> when determining if
+  an R package's required system libraries are installed, and notifies
+  the user which packages (if any) are missing during install / restore.
+  
+* Fixed an issue where `renv` could fail to retrieve credentials registered
+  for 'github.com' when querying URLs at 'api.github.com'.
+
+* Fixed an issue where `renv` could stall when loading a project and validating
+  that the configured version of Bioconductor is compatible with the version
+  of R currently in use.
+
+* `renv::snapshot()` no longer fails to generate a new lockfile if the project
+  contains a lockfile which could not be read or parsed.
+
+* Fixed an issue where lockfiles containing unicode characters were not
+  correctly written or read with versions of R (< 4.2.0) on Windows. (#2091)
+
+
 # renv 1.1.1
 
 * Fixed an issue where very long lockfiles could be truncated on write. (#2089)
 
 * Fixed an issue where `renv` inadvertently made web requests in
   tests during `R CMD check`.
+
 
 # renv 1.1.0
 

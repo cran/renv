@@ -200,12 +200,18 @@ snapshot <- function(project  = NULL,
   valid <- renv_snapshot_validate(project, new, libpaths)
   renv_snapshot_validate_report(valid, prompt, force)
 
-  # get prior lockfile state
-  old <- list()
-  if (file.exists(lockfile)) {
+  # get prior lockfile state; be robust against invalid lockfiles
+  old <- tryCatch(
+    if (file.exists(lockfile)) renv_lockfile_read(lockfile),
+    error = function(cnd) {
+      extra <- "The report below will omit lockfile package versions."
+      message <- paste(conditionMessage(cnd), extra, sep = "\n")
+      warning(message, call. = FALSE)
+      list()
+    }
+  )
 
-    # read a pre-existing lockfile (if any)
-    old <- renv_lockfile_read(lockfile)
+  if (length(old)) {
 
     # preserve records from alternate OSes in lockfile
     alt <- renv_snapshot_preserve(old, new)
@@ -424,7 +430,7 @@ renv_snapshot_validate_bioconductor <- function(project, lockfile, libpaths) {
 
     fmt <- "%s [installed %s != latest %s]"
     msg <- sprintf(fmt, format(bad$Package), format(bad$Version), bad$Latest)
-    caution_bullets(
+    bulletin(
       "The following Bioconductor packages appear to be from a separate Bioconductor release:",
       msg,
       c(
@@ -482,7 +488,7 @@ renv_snapshot_validate_dependencies_available <- function(project, lockfile, lib
 
   })
 
-  caution_bullets(
+  bulletin(
     "The following required packages are not installed:",
     sprintf("%s  [required by %s]", format(missing), usedby),
     "Consider reinstalling these packages before snapshotting the lockfile."
@@ -546,7 +552,7 @@ renv_snapshot_validate_dependencies_compatible <- function(project, lockfile, li
 
   fmt <- "%s requires %s, but version %s is installed"
   txt <- sprintf(fmt, format(package), format(requires), format(request))
-  caution_bullets(
+  bulletin(
     "The following package(s) have unsatisfied dependencies:",
     txt,
     "Consider updating the required dependencies as appropriate."
@@ -627,7 +633,7 @@ renv_snapshot_library <- function(library = NULL,
 
     messages <- map_chr(broken, conditionMessage)
     text <- sprintf("'%s': %s", names(broken), messages)
-    caution_bullets(
+    bulletin(
       "renv was unable to snapshot the following packages:",
       text,
       "These packages will likely need to be repaired and / or reinstalled."
@@ -659,7 +665,7 @@ renv_snapshot_check_broken_link <- function(paths) {
   if (!any(broken))
     return(paths)
 
-  caution_bullets(
+  bulletin(
     "The following package(s) have broken symlinks into the cache:",
     basename(paths)[broken],
     "Use `renv::repair()` to try and reinstall these packages."
@@ -676,7 +682,7 @@ renv_snapshot_check_tempfile <- function(paths) {
   if (!any(missing))
     return(paths)
 
-  caution_bullets(
+  bulletin(
     "The following folder(s) appear to be left-over temporary directories:",
     map_chr(paths[missing], renv_path_pretty),
     "Consider removing these folders from your R library."
@@ -693,7 +699,7 @@ renv_snapshot_check_missing_description <- function(paths) {
   if (!any(missing))
     return(paths)
 
-  caution_bullets(
+  bulletin(
     "The following package(s) are missing their DESCRIPTION files:",
     sprintf("%s [%s]", format(basename(paths[missing])), paths[missing]),
     c(
@@ -1201,7 +1207,7 @@ renv_snapshot_report_missing <- function(missing, type) {
       "Use `renv::dependencies()` to see where this package is used in your project."
   )
 
-  caution_bullets(
+  bulletin(
     preamble = preamble,
     values = sort(unique(missing)),
     postamble = postamble

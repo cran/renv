@@ -319,6 +319,8 @@ test_that("snapshot() accepts relative library paths", {
 test_that("snapshot(update = TRUE) preserves old records", {
 
   skip_on_cran()
+  skip_if_no_github_auth()
+
   renv_tests_scope("breakfast")
   init()
 
@@ -663,5 +665,17 @@ test_that("empty .ipynb files are handled gracefully", {
 
   writeLines("", con = "example.ipynb")
   snapshot()
+
+})
+
+test_that("invalid lockfiles don't prevent calls to snapshot", {
+
+  skip_on_cran()
+  project <- renv_tests_scope("bread")
+  init()
+
+  writeLines("whoops!", con = "renv.lock")
+  suppressWarnings(snapshot())
+  expect_true(TRUE)
 
 })
