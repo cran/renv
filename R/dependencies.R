@@ -73,7 +73,32 @@
 #' Using ignore files is important if your project contains a large number
 #' of files; for example, if you have a `data/` directory containing many
 #' text files.
-
+#'
+#'
+#' ## Profile-specific Ignore Rules
+#'
+#' Profile-specific sections are also supported in `.renvignore` files.
+#' These sections are marked with a comment header of the form `#| <code>`,
+#' where `<code>` is \R code that indicates if this section of the `.renvignore`
+#' should apply. The `profile` variable is set to the same value as the current
+#' profile, or `"default"` if the default profile (no profile) is selected.
+#' See `vignette("profiles", package = "renv")` for more information on profiles.
+#'
+#' ```
+#' # ignore all directories by default
+#' */
+#'
+#' #| profile == "default"
+#' !default
+#'
+#' #| profile == "extra"
+#' !extra
+#' ```
+#'
+#' Note that the first section in a `.renvignore` file implicitly applies to
+#' all profiles.
+#'
+#'
 #' # Errors
 #'
 #' renv's attempts to enumerate package dependencies in your project can fail
@@ -229,17 +254,20 @@ renv_dependencies_impl <- function(
   elapsed <- difftime(after, before, units = "secs")
 
   renv_condition_signal("renv.dependencies.elapsed_time", elapsed)
-
   renv_dependencies_report(errors)
 
-  deps <- if (empty(deps) || nrow(deps) == 0L) {
-    renv_dependencies_list_empty()
-  } else {
-    # drop NAs, and only keep 'dev' dependencies if requested
-    rows(deps, deps$Dev %in% c(dev, FALSE))
+  if (empty(deps) || nrow(deps) == 0L) {
+    result <- renv_dependencies_list_empty()
+    return(take(result, field))
   }
 
-  take(deps, field)
+  # drop other NAs, just in case -- this really is an issue in the underlying
+  # dependency computation code somewhere, but we still want to insulate users
+  # from unexpected errors
+  #
+  # https://github.com/rstudio/renv/issues/2110
+  keep <- !is.na(deps$Package) & deps$Dev %in% c(dev, FALSE)
+  take(rows(deps, keep), field)
 }
 
 renv_dependencies_root <- function(path = getwd()) {
@@ -564,16 +592,18 @@ renv_dependencies_discover_description <- function(path,
     path = path
   )
 
+  names(data) <- fields
+
   # if this is a bioconductor package, add their implicit dependencies
   if ("biocViews" %in% names(dcf)) {
     data[[length(data) + 1L]] <- renv_dependencies_list(
       source = path,
       packages = c(renv_bioconductor_manager(), "BiocVersion")
     )
+    names(data)[[length(data)]] <- "Bioconductor"
   }
 
-  bind(data)
-
+  bind(data, index = "Type")
 }
 
 renv_dependencies_discover_namespace <- function(path) {

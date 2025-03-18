@@ -1,4 +1,37 @@
 
+# renv 1.1.3
+
+* Fixed an issue where `renv::hydrate()` could fail to install packages
+  discovered in the user library during `renv::init()`. (#2109)
+
+* `renv::update()` now only updates the packages installed in the project
+  library by default. `renv::update(all = TRUE)` can be used to also
+  check if packages installed in the default library are out-of-date, and
+  install updated copies into the project library. (#2108)
+  
+* Fixed an issue where package installation could fail on Arch Linux with the
+  error message "don't know how to check sysreqs on this system". (#2107)
+
+* `renv` now supports profile-specific comments within `.gitignore` and
+  `.renvignore` files. These are comments of the form `#| <code>`, where
+  `<code>` is R code which should indicate if the `.renvignore` rules should
+  apply. Typically, this should be of the form `#| profile == "extra"`, or
+  `#| profile %in% c("extra", "other")`. Note that only a small subset of
+  base R functions are available for evaluation in this context. Note that
+  the first section in a `.renvignore` implicitly applies to all profiles --
+  if you want to limit it to just the default profile, you can use
+  `#| profile == "default"` for the first line. (#1662)
+  
+* The environment variable `RENV_PATHS_VERSION` can now be used to substitute
+  the R version component normally used in library / cache paths. The provided
+  path can include placeholders like `%V` for the full R version including
+  the patch level, and `%v` for the R version without the patch level. Defaults
+  to `R-%v` when unset. (#1687)
+
+* `renv::install()` gains the `transactional` argument, for parity with
+  `renv::restore()`. (#1109)
+
+
 # renv 1.1.2
 
 * `renv` gains the `sysreqs()` function, which can be used to query the system
