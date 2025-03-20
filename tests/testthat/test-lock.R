@@ -1,6 +1,8 @@
 
 test_that("locks can be acquired, released", {
 
+  skip_on_cran()
+
   renv_scope_options(renv.config.locking.enabled = TRUE)
   path <- renv_lock_path(renv_scope_tempfile())
 
@@ -13,6 +15,8 @@ test_that("locks can be acquired, released", {
 })
 
 test_that("scoped locks are released appropriately", {
+
+  skip_on_cran()
 
   renv_scope_options(renv.config.locking.enabled = TRUE)
   path <- renv_lock_path(renv_scope_tempfile())
@@ -27,6 +31,8 @@ test_that("scoped locks are released appropriately", {
 })
 
 test_that("we can recursively acquire locks", {
+
+  skip_on_cran()
 
   renv_scope_options(renv.config.locking.enabled = TRUE)
   path <- renv_lock_path(renv_scope_tempfile())
@@ -51,6 +57,8 @@ test_that("we can recursively acquire locks", {
 
 test_that("other processes cannot lock our owned locks", {
 
+  skip_on_cran()
+
   skip_if(
     is.null(formals(system2)[["timeout"]]),
     "system2() lacks the timeout argument"
@@ -68,7 +76,7 @@ test_that("other processes cannot lock our owned locks", {
 
   args <- c("--vanilla", "-s", "-f", shQuote(script))
   output <- suppressWarnings(
-    system2(R(), args, stdout = FALSE, stderr = FALSE, timeout = 1L)
+    system2(R(), args, stdout = FALSE, stderr = FALSE, timeout = 5L)
   )
 
   expect_equal(output, 124L)
@@ -76,6 +84,8 @@ test_that("other processes cannot lock our owned locks", {
 })
 
 test_that("locks are released on process exit", {
+
+  skip_on_cran()
 
   renv_scope_options(renv.config.locking.enabled = TRUE)
   path <- renv_lock_path(renv_scope_tempfile())
@@ -87,7 +97,7 @@ test_that("locks are released on process exit", {
 
   args <- c("--vanilla", "-s", "-e", shQuote(stringify(code)))
   status <- suppressWarnings(
-    system2(R(), args, stdout = FALSE, stderr = FALSE, timeout = 1L)
+    system2(R(), args, stdout = FALSE, stderr = FALSE, timeout = 5L)
   )
 
   expect_equal(status, 1L)
@@ -96,6 +106,8 @@ test_that("locks are released on process exit", {
 })
 
 test_that("we can refresh locks", {
+
+  skip_on_cran()
 
   # create a file
   path <- renv_scope_tempfile("renv-lock-")
@@ -118,6 +130,8 @@ test_that("we can refresh locks", {
 
 
 test_that("old locks are considered 'orphaned'", {
+
+  skip_on_cran()
 
   renv_scope_options(renv.config.locking.enabled = TRUE)
   renv_scope_envvars(RENV_WATCHDOG_ENABLED = "FALSE")

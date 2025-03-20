@@ -1,4 +1,19 @@
 
+# renv 1.1.4
+
+* Fixed an issue where `renv` could erroneously record packages installed
+  from Posit Package Manager snapshots as being installed from CRAN. (#2104)
+
+* `renv` now only checks for archived packages during installation when
+  `options(renv.install.allowArchivedPackages = TRUE)` is set. This fixes
+  an issue where `renv` could erroneously discover that Rcpp 1.3 was available
+  when using the Posit Package Manager repository.
+
+* Fixed an issue where `renv::dependencies()` could fail with an
+  unhelpful error message if the scanned document contained a
+  YAML header whose contents was not a map. (#2117)
+
+
 # renv 1.1.3
 
 * Fixed an issue where `renv::hydrate()` could fail to install packages
