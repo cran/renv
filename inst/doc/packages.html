@@ -39,6 +39,108 @@ ul.task-list{list-style: none;}
 
 
 
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
 
 
 
@@ -245,7 +347,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 this, one must declare their R package dependencies within the package
 <code>DESCRIPTION</code> file. If you want to prepare your environment
 for package development, you can use:</p>
-<pre><code>renv::install()</code></pre>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>()</span></code></pre></div>
 <p>to install the packages as declared in the package’s
 <code>DESCRIPTION</code> file. This action is roughly analogous to
 <code>remotes::install_deps()</code>.</p>
@@ -253,7 +355,7 @@ for package development, you can use:</p>
 then you likely want to build and test your package against the latest
 versions of your dependencies as available on CRAN. For this, you should
 consider using:</p>
-<pre><code>renv::update()</code></pre>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">update</span>()</span></code></pre></div>
 <p>to ensure your package dependencies are up-to-date, as
 appropriate.</p>
 </div>
@@ -270,8 +372,8 @@ installed in your system library.</p>
 <p>In these cases, you can declare your development dependencies using
 the <code>Remotes</code> field of the <code>DESCRIPTION</code> file;
 e.g.</p>
-<pre><code>Remotes:
-  r-lib/ggplot2</code></pre>
+<div class="sourceCode" id="cb3"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="ex">Remotes:</span></span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="ex">r-lib/ggplot2</span></span></code></pre></div>
 <p>and <code>renv::install()</code> will parse that remotes declaration
 and retrieve the requested package. See the remotes vignette, <a href="https://remotes.r-lib.org/articles/dependencies.html">Dependency
 resolution for R package development</a>, for more details.</p>
@@ -281,9 +383,9 @@ resolution for R package development</a>, for more details.</p>
 <p>For package projects using renv, a library path outside of the
 project directory will be used instead. As an example, on macOS, this
 might look like:</p>
-<pre><code>&gt; .libPaths()
-[1] &quot;/Users/kevin/Library/Caches/org.R-project.R/R/renv/library/example-552f6e80/R-4.3/aarch64-apple-darwin20&quot;
-[2] &quot;/Users/kevin/Library/Caches/org.R-project.R/R/renv/sandbox/R-4.3/aarch64-apple-darwin20/ac5c2659&quot;</code></pre>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="sc">&gt;</span> <span class="fu">.libPaths</span>()</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>[<span class="dv">1</span>] <span class="st">&quot;/Users/kevin/Library/Caches/org.R-project.R/R/renv/library/example-552f6e80/R-4.3/aarch64-apple-darwin20&quot;</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>[<span class="dv">2</span>] <span class="st">&quot;/Users/kevin/Library/Caches/org.R-project.R/R/renv/sandbox/R-4.3/aarch64-apple-darwin20/ac5c2659&quot;</span></span></code></pre></div>
 <p>This is done to avoid issues with <code>R CMD build</code>, which can
 become very slow if your project contains a large number of files – as
 can happen if the project library is located in
@@ -296,10 +398,10 @@ normally are.</p>
 project libraries in this scenario, you can use the
 <code>RENV_PATHS_LIBRARY_ROOT</code> environment variable. For
 example:</p>
-<pre><code>RENV_PATHS_LIBRARY_ROOT = ~/.renv/library</code></pre>
+<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="ex">RENV_PATHS_LIBRARY_ROOT</span> = ~/.renv/library</span></code></pre></div>
 <p>If you’d still prefer to keep your project library within the project
 directory, you can set:</p>
-<pre><code>RENV_PATHS_LIBRARY = renv/library</code></pre>
+<div class="sourceCode" id="cb6"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="ex">RENV_PATHS_LIBRARY</span> = renv/library</span></code></pre></div>
 <p>within an appropriate <code>.Renviron</code> start-up profile – but
 please be aware of the caveats to doing this, as the performance of
 <code>R CMD build</code> will be affected.</p>
@@ -323,8 +425,8 @@ the other R packages currently available on CRAN. For that reason, when
 preparing your package for submission, you’ll need to ensure your source
 package tarball does not include any <code>renv</code> infrastructure.
 <code>renv</code> makes this easy by automatically including</p>
-<pre><code>^renv$
-^renv\.lock$</code></pre>
+<div class="sourceCode" id="cb7"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="ex">^renv$</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="ex">^renv\.lock$</span></span></code></pre></div>
 <p>in your package’s <code>.Rbuildignore</code> file. This instructs
 <code>R CMD build</code> to not include these files and folders in the
 generated package tarball. Through this, even if <code>renv</code> is

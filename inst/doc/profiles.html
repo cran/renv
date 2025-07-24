@@ -366,7 +366,7 @@ renv.</p>
 <p>By default, renv projects use the “default” profile, which implies
 that library and lockfile paths are set in the typical way. To activate
 a particular profile, use:</p>
-<pre><code>renv::activate(profile = &quot;dev&quot;)</code></pre>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">activate</span>(<span class="at">profile =</span> <span class="st">&quot;dev&quot;</span>)</span></code></pre></div>
 <p>This creates a profile called <code>&quot;dev&quot;</code>, and sets it as the
 default for the project, so that newly-launched R sessions will operate
 using the <code>&quot;dev&quot;</code> profile. After setting this and
@@ -376,28 +376,28 @@ the project root.</p>
 <p>Alternatively, if you want to activate a particular profile for an R
 session without setting it as the default for new R sessions, you can
 use:</p>
-<pre><code>Sys.setenv(RENV_PROFILE = &quot;dev&quot;)</code></pre>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">Sys.setenv</span>(<span class="at">RENV_PROFILE =</span> <span class="st">&quot;dev&quot;</span>)</span></code></pre></div>
 <p>and renv will automatically use that profile as appropriate when
 computing library and lockfile paths. Similarly, from the command line,
 you might enforce the use of a particular profile in an renv project
 with:</p>
-<pre><code>export RENV_PROFILE=dev</code></pre>
+<div class="sourceCode" id="cb3"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="bu">export</span> <span class="va">RENV_PROFILE</span><span class="op">=</span>dev</span></code></pre></div>
 <p>With that set, renv would default to using the <code>&quot;dev&quot;</code>
 profile for any newly-launched R sessions within renv projects.</p>
 <p>To activate the “default” profile used by a project, use:</p>
-<pre><code>renv::activate(profile = &quot;default&quot;)</code></pre>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">activate</span>(<span class="at">profile =</span> <span class="st">&quot;default&quot;</span>)</span></code></pre></div>
 </div>
 <div id="managing-profile-specific-dependencies" class="section level2">
 <h2>Managing profile-specific dependencies</h2>
 <p>Profile-specific package dependencies can be declared within the
 project’s top-level <code>DESCRIPTION</code> file. For example, to
 declare that the shiny profile depends on the <a href="https://shiny.posit.co/">shiny</a> and <a href="https://www.tidyverse.org/">tidyverse</a> packages:</p>
-<pre><code>Config/renv/profiles/shiny/dependencies: shiny, tidyverse</code></pre>
+<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="ex">Config/renv/profiles/shiny/dependencies:</span> shiny, tidyverse</span></code></pre></div>
 <p>If you’d like to also declare that these packages should be installed
 from a custom remote (analogous to the <code>Remotes</code> field for
 the default profile), you can define those remotes with a separate
 field:</p>
-<pre><code>Config/renv/profiles/shiny/remotes: rstudio/shiny, tidyverse/tidyverse</code></pre>
+<div class="sourceCode" id="cb6"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="ex">Config/renv/profiles/shiny/remotes:</span> rstudio/shiny, tidyverse/tidyverse</span></code></pre></div>
 <p>These remotes will then be respected in calls to
 <code>renv::install()</code>.</p>
 <p>The packages and remotes must be specified separately, as renv cannot

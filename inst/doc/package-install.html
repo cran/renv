@@ -341,18 +341,6 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(renv)</span>
-<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="co">#&gt; Attaching package: &#39;renv&#39;</span></span>
-<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="co">#&gt; The following objects are masked from &#39;package:stats&#39;:</span></span>
-<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="co">#&gt;     embed, update</span></span>
-<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="co">#&gt; The following objects are masked from &#39;package:utils&#39;:</span></span>
-<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a><span class="co">#&gt;     history, upgrade</span></span>
-<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a><span class="co">#&gt; The following objects are masked from &#39;package:base&#39;:</span></span>
-<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb1-12"><a href="#cb1-12" tabindex="-1"></a><span class="co">#&gt;     autoload, load, remove, use</span></span></code></pre></div>
 <p>Package installation is an important part of renv. This vignette
 gives you the details, starting with an overview of renv’s cache, before
 going into various installation challenges around building from source
@@ -424,7 +412,7 @@ cache, as well as a global administrator-managed cache, visible within
 an renv project. To do so, you can specify the paths to the cache
 separated with a <code>;</code> (or <code>:</code> on Unix if
 preferred). For example:</p>
-<pre><code>RENV_PATHS_CACHE=/path/to/local/cache;/path/to/global/cache</code></pre>
+<div class="sourceCode" id="cb1"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="va">RENV_PATHS_CACHE</span><span class="op">=</span>/path/to/local/cache<span class="kw">;</span><span class="ex">/path/to/global/cache</span></span></code></pre></div>
 <p>In such a case, renv will iterate over the cache locations in order
 when trying to find a package, and newly-installed packages will enter
 the first writable cache path listed in
@@ -469,14 +457,14 @@ with the <code>renv::purge()</code> function. See the
 when removing packages from the cache.</p>
 <p>You can also force a package to be re-installed and re-cached with
 the following functions:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="co"># restore packages from the lockfile, bypassing the cache</span></span>
-<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">restore</span>(<span class="at">rebuild =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a></span>
-<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="co"># re-install a package</span></span>
-<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>(<span class="st">&quot;&lt;package&gt;&quot;</span>, <span class="at">rebuild =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a></span>
-<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="co"># rebuild all packages in the project</span></span>
-<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">rebuild</span>()</span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="co"># restore packages from the lockfile, bypassing the cache</span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">restore</span>(<span class="at">rebuild =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co"># re-install a package</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>(<span class="st">&quot;&lt;package&gt;&quot;</span>, <span class="at">rebuild =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co"># rebuild all packages in the project</span></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">rebuild</span>()</span></code></pre></div>
 <p>See each function’s respective documentation for more details.</p>
 </div>
 </div>
@@ -504,29 +492,29 @@ manner similar to <code>install.packages()</code>. In particular, the
 <code>R</code> options <code>configure.args</code> and
 <code>configure.vars</code> can be used to map package names to their
 appropriate configuration. For example:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="co"># installation of RNetCDF may require us to set include paths for netcdf</span></span>
-<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>configure.args <span class="ot">=</span> <span class="fu">c</span>(<span class="at">RNetCDF =</span> <span class="st">&quot;--with-netcdf-include=/usr/include/udunits2&quot;</span>)</span>
-<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="fu">options</span>(<span class="at">configure.args =</span> configure.args)</span>
-<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>(<span class="st">&quot;RNetCDF&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="co"># installation of RNetCDF may require us to set include paths for netcdf</span></span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>configure.args <span class="ot">=</span> <span class="fu">c</span>(<span class="at">RNetCDF =</span> <span class="st">&quot;--with-netcdf-include=/usr/include/udunits2&quot;</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="fu">options</span>(<span class="at">configure.args =</span> configure.args)</span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>(<span class="st">&quot;RNetCDF&quot;</span>)</span></code></pre></div>
 <p>This could also be specified as, for example,</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">options</span>(</span>
-<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  <span class="at">configure.args.RNetCDF =</span> <span class="st">&quot;--with-netcdf-include=/usr/include/udunits2&quot;</span></span>
-<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>)</span>
-<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>(<span class="st">&quot;RNetCDF&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">options</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">configure.args.RNetCDF =</span> <span class="st">&quot;--with-netcdf-include=/usr/include/udunits2&quot;</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>)</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>(<span class="st">&quot;RNetCDF&quot;</span>)</span></code></pre></div>
 </div>
 <div id="install-flags" class="section level3">
 <h3>Install flags</h3>
 <p>Similarly, additional flags that should be passed to
 <code>R CMD INSTALL</code> can be set via the <code>install.opts</code>
 <code>R</code> option:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="co"># installation of R packages using the Windows Subsystem for Linux</span></span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co"># may require the `--no-lock` flag to be set during install</span></span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="fu">options</span>(<span class="at">install.opts =</span> <span class="st">&quot;--no-lock&quot;</span>)</span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>(<span class="st">&quot;xml2&quot;</span>)</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a></span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="co"># alternatively, you can set such options for specific packages with e.g.</span></span>
-<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="fu">options</span>(<span class="at">install.opts =</span> <span class="fu">list</span>(<span class="at">xml2 =</span> <span class="st">&quot;--no-lock&quot;</span>))</span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>(<span class="st">&quot;xml2&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="co"># installation of R packages using the Windows Subsystem for Linux</span></span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="co"># may require the `--no-lock` flag to be set during install</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="fu">options</span>(<span class="at">install.opts =</span> <span class="st">&quot;--no-lock&quot;</span>)</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>(<span class="st">&quot;xml2&quot;</span>)</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="co"># alternatively, you can set such options for specific packages with e.g.</span></span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="fu">options</span>(<span class="at">install.opts =</span> <span class="fu">list</span>(<span class="at">xml2 =</span> <span class="st">&quot;--no-lock&quot;</span>))</span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>(<span class="st">&quot;xml2&quot;</span>)</span></code></pre></div>
 </div>
 <div id="vignettes" class="section level3">
 <h3>Vignettes</h3>
@@ -569,7 +557,7 @@ details.</p>
 <p>If you’ve already configured R’s downloader and would like to bypass
 renv’s attempts to use <code>curl</code>, you can use the R option
 <code>renv.download.override</code>. For example, executing:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.download.override =</span> utils<span class="sc">::</span>download.file)</span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.download.override =</span> utils<span class="sc">::</span>download.file)</span></code></pre></div>
 <p>would instruct renv to use R’s own download machinery when attempting
 to download files from the internet (respecting the R options
 <code>download.file.method</code> and <code>download.file.extra</code>
@@ -579,21 +567,21 @@ function, provided its signature matches that of
 <p>You can also instruct renv to use a different download method by
 setting the <code>RENV_DOWNLOAD_METHOD</code> environment variable. For
 example:</p>
-<pre><code># use Windows&#39; internal download machinery
-Sys.setenv(RENV_DOWNLOAD_METHOD = &quot;wininet&quot;)
-
-# use R&#39;s bundled libcurl implementation
-Sys.setenv(RENV_DOWNLOAD_METHOD = &quot;libcurl&quot;)</code></pre>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># use Windows&#39; internal download machinery</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">Sys.setenv</span>(<span class="at">RENV_DOWNLOAD_METHOD =</span> <span class="st">&quot;wininet&quot;</span>)</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co"># use R&#39;s bundled libcurl implementation</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="fu">Sys.setenv</span>(<span class="at">RENV_DOWNLOAD_METHOD =</span> <span class="st">&quot;libcurl&quot;</span>)</span></code></pre></div>
 <p>If you find that downloads work outside of renv projects, but not
 within renv projects, you may need to tell renv to use the same download
 file method that R has been configured to use. You can check which
 download method R is currently configured to use with:</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">getOption</span>(<span class="st">&quot;download.file.method&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">getOption</span>(<span class="st">&quot;download.file.method&quot;</span>)</span></code></pre></div>
 <p>And the downloader currently used by renv can be queried with:</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>renv<span class="sc">:::</span><span class="fu">renv_download_method</span>()</span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>renv<span class="sc">:::</span><span class="fu">renv_download_method</span>()</span></code></pre></div>
 <p>You can force renv to use the same download method as R by
 setting:</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">Sys.setenv</span>(<span class="at">RENV_DOWNLOAD_METHOD =</span> <span class="fu">getOption</span>(<span class="st">&quot;download.file.method&quot;</span>))</span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">Sys.setenv</span>(<span class="at">RENV_DOWNLOAD_METHOD =</span> <span class="fu">getOption</span>(<span class="st">&quot;download.file.method&quot;</span>))</span></code></pre></div>
 <p>and, if necessary, you could also set this environment variable
 within e.g. your <code>~/.Renviron</code>, so that it is visible to all
 R sessions. See <code>?Startup</code> for more details.</p>
@@ -626,13 +614,13 @@ more details.</p>
 <p>As an <a href="https://github.com/rstudio/renv/issues/146">example</a>, the
 following <code>_curlrc</code> works when using authentication with NTLM
 and SSPI on Windows:</p>
-<pre><code>--proxy &quot;your.proxy.dns:port&quot;
---proxy-ntlm
---proxy-user &quot;:&quot;
---insecure</code></pre>
+<div class="sourceCode" id="cb11"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="ex">--proxy</span> <span class="st">&quot;your.proxy.dns:port&quot;</span></span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="ex">--proxy-ntlm</span></span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="ex">--proxy-user</span> <span class="st">&quot;:&quot;</span></span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="ex">--insecure</span></span></code></pre></div>
 <p>The <a href="https://cran.r-project.org/package=curl">curl</a> R
 package also has a helper:</p>
-<pre><code>curl::ie_get_proxy_for_url()</code></pre>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>curl<span class="sc">::</span><span class="fu">ie_get_proxy_for_url</span>()</span></code></pre></div>
 <p>which may be useful when attempting to discover this proxy
 address.</p>
 </div>
@@ -683,24 +671,24 @@ option to provide package-specific authentication settings.
 names with environment variables, or a function accepting a package name
 + record, and returning a list of environment variables. For
 example:</p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="co"># define a function providing authentication</span></span>
-<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.auth =</span> <span class="cf">function</span>(package, record) {</span>
-<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>  <span class="cf">if</span> (package <span class="sc">==</span> <span class="st">&quot;MyPackage&quot;</span>)</span>
-<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">GITHUB_PAT =</span> <span class="st">&quot;&lt;pat&gt;&quot;</span>))</span>
-<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>})</span>
-<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a></span>
-<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a><span class="co"># use a named list directly</span></span>
-<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.auth =</span> <span class="fu">list</span>(</span>
-<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a>  <span class="at">MyPackage =</span> <span class="fu">list</span>(<span class="at">GITHUB_PAT =</span> <span class="st">&quot;&lt;pat&gt;&quot;</span>)</span>
-<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a>))</span>
-<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a></span>
-<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a><span class="co"># alternatively, set package-specific option</span></span>
-<span id="cb14-13"><a href="#cb14-13" tabindex="-1"></a><span class="co"># as a list</span></span>
-<span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.auth.MyPackage =</span> <span class="fu">list</span>(<span class="at">GITHUB_PAT =</span> <span class="st">&quot;&lt;pat&gt;&quot;</span>))</span>
-<span id="cb14-15"><a href="#cb14-15" tabindex="-1"></a><span class="co"># as a function</span></span>
-<span id="cb14-16"><a href="#cb14-16" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.auth.MyPackage =</span> <span class="cf">function</span>(record) {</span>
-<span id="cb14-17"><a href="#cb14-17" tabindex="-1"></a>   <span class="fu">list</span>(<span class="at">GITHUB_PAT =</span> <span class="st">&quot;&lt;pat&gt;&quot;</span>)</span>
-<span id="cb14-18"><a href="#cb14-18" tabindex="-1"></a>})</span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="co"># define a function providing authentication</span></span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.auth =</span> <span class="cf">function</span>(package, record) {</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  <span class="cf">if</span> (package <span class="sc">==</span> <span class="st">&quot;MyPackage&quot;</span>)</span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">GITHUB_PAT =</span> <span class="st">&quot;&lt;pat&gt;&quot;</span>))</span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>})</span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a></span>
+<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a><span class="co"># use a named list directly</span></span>
+<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.auth =</span> <span class="fu">list</span>(</span>
+<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a>  <span class="at">MyPackage =</span> <span class="fu">list</span>(<span class="at">GITHUB_PAT =</span> <span class="st">&quot;&lt;pat&gt;&quot;</span>)</span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a>))</span>
+<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a></span>
+<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a><span class="co"># alternatively, set package-specific option</span></span>
+<span id="cb13-13"><a href="#cb13-13" tabindex="-1"></a><span class="co"># as a list</span></span>
+<span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.auth.MyPackage =</span> <span class="fu">list</span>(<span class="at">GITHUB_PAT =</span> <span class="st">&quot;&lt;pat&gt;&quot;</span>))</span>
+<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a><span class="co"># as a function</span></span>
+<span id="cb13-16"><a href="#cb13-16" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.auth.MyPackage =</span> <span class="cf">function</span>(record) {</span>
+<span id="cb13-17"><a href="#cb13-17" tabindex="-1"></a>   <span class="fu">list</span>(<span class="at">GITHUB_PAT =</span> <span class="st">&quot;&lt;pat&gt;&quot;</span>)</span>
+<span id="cb13-18"><a href="#cb13-18" tabindex="-1"></a>})</span></code></pre></div>
 <p>For packages installed from Git remotes, renv will attempt to use
 <code>git</code> from the command line to download and restore the
 associated package. Hence, it is recommended that authentication is done
@@ -711,13 +699,13 @@ remote, it can be supplied with a prefix of the form
 <code>&lt;package&gt;=</code>. For example, the igraph package on GitHub
 at <a href="https://github.com/igraph/rigraph" class="uri">https://github.com/igraph/rigraph</a> could be installed
 with:</p>
-<pre><code>renv::install(&quot;igraph=igraph/rigraph&quot;)</code></pre>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>renv<span class="sc">::</span><span class="fu">install</span>(<span class="st">&quot;igraph=igraph/rigraph&quot;</span>)</span></code></pre></div>
 <div id="azure-devops" class="section level4">
 <h4>Azure DevOps</h4>
 <p>Authentication with Azure DevOps may require credentials to be set in
 a slightly different way. In particular, you can use:</p>
-<pre><code>GITHUB_USER = &lt;username&gt;
-GITHUB_PASS = &lt;password&gt;</code></pre>
+<div class="sourceCode" id="cb15"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="ex">GITHUB_USER</span> = <span class="op">&lt;</span>username<span class="op">&gt;</span></span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a><span class="ex">GITHUB_PASS</span> = <span class="op">&lt;</span>password<span class="op">&gt;</span></span></code></pre></div>
 <p>replacing <code>&lt;username&gt;</code> and
 <code>&lt;password&gt;</code> as appropriate – for example, your
 password may just be a PAT. See <a href="https://github.com/rstudio/renv/issues/1751" class="uri">https://github.com/rstudio/renv/issues/1751</a> for more
@@ -734,8 +722,8 @@ such servers expect authentication credentials where:</p>
 is provided as the password.</li>
 </ul>
 <p>To help facilitate this, you can set:</p>
-<pre><code>GIT_USER = &lt;pat&gt;
-GIT_PASS = x-oauth-basic</code></pre>
+<div class="sourceCode" id="cb16"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="ex">GIT_USER</span> = <span class="op">&lt;</span>pat<span class="op">&gt;</span></span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a><span class="ex">GIT_PASS</span> = x-oauth-basic</span></code></pre></div>
 <p>in an appropriate startup R file.</p>
 </div>
 </div>
@@ -751,10 +739,10 @@ accessing that URL.</p>
 access that repository are stored in the <code>AUTH_HEADER</code>
 environment variable. You could define
 <code>renv.download.headers</code> like so:</p>
-<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.download.headers =</span> <span class="cf">function</span>(url) {</span>
-<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">grepl</span>(<span class="st">&quot;^https://my/repository&quot;</span>, url))</span>
-<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">c</span>(<span class="at">Authorization =</span> <span class="fu">Sys.getenv</span>(<span class="st">&quot;AUTH_HEADER&quot;</span>)))</span>
-<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>})</span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.download.headers =</span> <span class="cf">function</span>(url) {</span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">grepl</span>(<span class="st">&quot;^https://my/repository&quot;</span>, url))</span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a>    <span class="fu">return</span>(<span class="fu">c</span>(<span class="at">Authorization =</span> <span class="fu">Sys.getenv</span>(<span class="st">&quot;AUTH_HEADER&quot;</span>)))</span>
+<span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a>})</span></code></pre></div>
 <p>With the above, renv will set the <code>Authorization</code> header
 whenever it attempts to download files from the repository at URL
 <code>https://my/repository</code>.</p>
@@ -763,7 +751,7 @@ whenever it attempts to download files from the repository at URL
 <h3>Debugging</h3>
 <p>If having problems with downloads, you can get more debugging
 information (including raw requests and responses) by setting:</p>
-<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.download.trace =</span> <span class="cn">TRUE</span>) </span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="fu">options</span>(<span class="at">renv.download.trace =</span> <span class="cn">TRUE</span>) </span></code></pre></div>
 </div>
 </div>
 <div class="footnotes footnotes-end-of-document">

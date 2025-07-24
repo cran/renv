@@ -1,4 +1,25 @@
 
+# renv 1.1.5
+
+* Fixed an issue where `renv::dependencies()` could fail for chunks which
+  had a `label` which was not a length-one character vector. (#2144)
+
+* Fixed an issue where `file.rename()` could fail when unpacking a
+  package during installation in certain Windows environments. (#2156)
+
+* `renv`'s dependency discovery now supports usages of `base::use()`. (#2130)
+
+* Fixed an issue where `renv` could fail to parse remote references
+  containing an `@` character. (#2135)
+
+* Fixed an issue where `renv::sysreqs(distro = <...>)` could fail when
+  passed an alternate distribution without a version specifier. (#2105)
+
+* Fixed an issue where multimode R documents containing chunk headers
+  which did not parse to an R list could cause dependency inference
+  to fail. (#2110)
+
+
 # renv 1.1.4
 
 * Fixed an issue where `renv` could erroneously record packages installed
@@ -6,8 +27,8 @@
 
 * `renv` now only checks for archived packages during installation when
   `options(renv.install.allowArchivedPackages = TRUE)` is set. This fixes
-  an issue where `renv` could erroneously discover that Rcpp 1.3 was available
-  when using the Posit Package Manager repository.
+  an issue where `renv` could erroneously discover that Rcpp 1.3 was
+  available when using the Posit Package Manager repository.
 
 * Fixed an issue where `renv::dependencies()` could fail with an
   unhelpful error message if the scanned document contained a
