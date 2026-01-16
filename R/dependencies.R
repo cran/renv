@@ -311,6 +311,8 @@ renv_dependencies_callback <- function(path) {
     "_bookdown.yml" = function(path) renv_dependencies_discover_bookdown(path),
     "_pkgdown.yml"  = function(path) renv_dependencies_discover_pkgdown(path),
     "_quarto.yml"   = function(path) renv_dependencies_discover_quarto(path),
+    "_server.yml"   = function(path) renv_dependencies_discover_plumber_server(path),
+    "_server.yaml"  = function(path) renv_dependencies_discover_plumber_server(path),
     "renv.lock"     = function(path) renv_dependencies_discover_renv_lock(path),
     "rsconnect"     = function(path) renv_dependencies_discover_rsconnect(path)
   )
@@ -701,6 +703,25 @@ renv_dependencies_discover_quarto <- function(path) {
   #
   # https://github.com/rstudio/renv/issues/995
   renv_dependencies_list_empty()
+}
+
+renv_dependencies_discover_plumber_server <- function(path) {
+  # require yaml package for parsing YAML
+  if (!renv_dependencies_require("yaml", basename(path)))
+    return(renv_dependencies_list_empty())
+
+  # read and parse yaml file
+  contents <- catch(yaml::read_yaml(path))
+  if (inherits(contents, "error"))
+    return(renv_dependencies_error(path, error = contents))
+
+  # check if engine field exists and has a value
+  engine <- contents$engine
+  if (!pstring(engine) || !nzchar(engine))
+    return(renv_dependencies_list_empty())
+
+  # return the engine as a dependency
+  renv_dependencies_list(path, engine)
 }
 
 renv_dependencies_discover_rsconnect <- function(path) {
@@ -1096,6 +1117,7 @@ renv_dependencies_discover_r <- function(path  = NULL,
     renv_dependencies_discover_r_require_namespace,
     renv_dependencies_discover_r_colon,
     renv_dependencies_discover_r_citation,
+    renv_dependencies_discover_r_data,
     renv_dependencies_discover_r_pacman,
     renv_dependencies_discover_r_modules,
     renv_dependencies_discover_r_import,
@@ -1270,6 +1292,25 @@ renv_dependencies_discover_r_citation <- function(node, envir) {
     return(FALSE)
 
   matched <- catch(match.call(utils::citation, node))
+  if (inherits(matched, "error"))
+    return(FALSE)
+
+  package <- matched[["package"]]
+  if (!is.character(package) || length(package) != 1L)
+    return(FALSE)
+
+  envir[[package]] <- TRUE
+  TRUE
+
+}
+
+renv_dependencies_discover_r_data <- function(node, envir) {
+
+  node <- renv_call_expect(node, "utils", "data")
+  if (is.null(node))
+    return(FALSE)
+
+  matched <- catch(match.call(utils::data, node))
   if (inherits(matched, "error"))
     return(FALSE)
 

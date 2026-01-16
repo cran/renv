@@ -110,7 +110,7 @@
 #'   validation checks have failed?
 #'
 #' @param reprex Boolean; generate output appropriate for embedding the lockfile
-#'   as part of a [reprex](https://www.tidyverse.org/help/#reprex)?
+#'   as part of a [reprex](https://tidyverse.org/help/#reprex)?
 #'
 #' @return The generated lockfile, as an \R object (invisibly). Note that
 #'   this function is normally called for its side effects.
@@ -127,7 +127,7 @@ snapshot <- function(project  = NULL,
                      library  = NULL,
                      lockfile = paths$lockfile(project = project),
                      type     = settings$snapshot.type(project = project),
-                     dev      = FALSE,
+                     dev      = NULL,
                      repos    = getOption("repos"),
                      packages = NULL,
                      exclude  = NULL,
@@ -145,6 +145,10 @@ snapshot <- function(project  = NULL,
   project <- renv_project_resolve(project)
   renv_project_lock(project = project)
   renv_scope_verbose_if(prompt)
+
+  # use setting as default if dev not explicitly provided
+  if (is.null(dev))
+    dev <- settings$snapshot.dev(project = project)
 
   repos <- renv_repos_validate(repos)
   renv_scope_options(repos = repos)
@@ -723,7 +727,10 @@ renv_snapshot_description <- function(path = NULL, package = NULL) {
 
 renv_snapshot_description_impl <- function(dcf, path = NULL) {
 
-  version <- getOption("renv.lockfile.version", default = 2L)
+  version <-
+    getOption("renv.lockfile.version") %||%
+    Sys.getenv("RENV_LOCKFILE_VERSION", unset = 2L)
+
   if (version == 1L)
     renv_snapshot_description_impl_v1(dcf, path)
   else if (version == 2L)

@@ -1,6 +1,40 @@
 
+renv_ppm_parse <- function(url) {
+
+  pattern <- paste0(
+    "^",                                 # start of url
+    "(?<root>",                          # start of root of url
+      "(?<scheme>[^:]+)://",             # scheme
+      "(?<authority>[^/]+)",             # authority
+    ")/",                                # end of root of url
+    "(?<repos>[^/]+)/",                  # repository name
+    "(?:",                               # begin optional binary parts
+      "(?<binary>__[^_]+__)/",           # binary prefix
+      "(?<platform>[^/]+)/",             # platform for binaries
+    ")?",                                # end optional binary parts
+    "(?<snapshot>[^/]+)",                # snapshot
+    "$"
+  )
+
+  matches <- gregexpr(pattern, url, perl = TRUE)[[1]]
+  starts <- attr(matches, "capture.start")
+  ends <- starts + attr(matches, "capture.length") - 1
+  strings <- substring(url, starts, ends)
+  names(strings) <- attr(matches, "capture.names")
+
+  if (length(strings) == 0L || !any(nzchar(strings)))
+    return(NULL)
+
+  as.list(c(url = url, strings))
+
+}
+
 renv_ppm_normalize <- function(url) {
   sub("/__[^_]+__/[^/]+/", "/", url)
+}
+
+renv_ppm_is_manylinux <- function(url) {
+  grepl("/__linux__/manylinux_\\d+_\\d+/", url)
 }
 
 renv_ppm_transform <- function(repos = getOption("repos")) {
@@ -31,6 +65,10 @@ renv_ppm_transform_impl <- function(url) {
 
   # don't transform non-https URLs
   if (!grepl("^https?://", url))
+    return(url)
+
+  # manylinux URLs are already in the desired format
+  if (renv_ppm_is_manylinux(url))
     return(url)
 
   # if this already appears to be a binary URL, then avoid
@@ -161,6 +199,12 @@ renv_ppm_platform_impl <- function(file = "/etc/os-release") {
 
     id <- properties$ID %||% ""
 
+    # handle distros based on Ubuntu
+    if ("UBUNTU_CODENAME" %in% names(properties)) {
+      id <- "ubuntu"
+      properties$VERSION_CODENAME <- properties$UBUNTU_CODENAME
+    }
+
     case(
       identical(id, "ubuntu")    ~ renv_ppm_platform_ubuntu(properties),
       identical(id, "centos")    ~ renv_ppm_platform_centos(properties),
@@ -203,8 +247,9 @@ renv_ppm_platform_rhel <- function(properties) {
   if (is.null(id))
     return(NULL)
 
-  version <- ifelse(numeric_version(id) < "9", "centos", "rhel")
-  paste0(version, substring(id, 1L, 1L))
+  name <- ifelse(numeric_version(id) < "9", "centos", "rhel")
+  version <- strsplit(id, ".", fixed = TRUE)[[1L]][[1L]]
+  paste0(name, version)
 
 }
 

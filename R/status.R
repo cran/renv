@@ -121,7 +121,7 @@ status <- function(project = NULL,
                    lockfile = NULL,
                    sources = TRUE,
                    cache = FALSE,
-                   dev = FALSE)
+                   dev = NULL)
 {
   renv_scope_error_handler()
   renv_dots_check(...)
@@ -134,6 +134,10 @@ status <- function(project = NULL,
 
   project <- renv_project_resolve(project)
   renv_project_lock(project = project)
+
+  # use setting as default if dev not explicitly provided
+  if (is.null(dev))
+    dev <- settings$snapshot.dev(project = project)
 
   # check to see if we've initialized this project
   if (!renv_status_check_initialized(project, library, lockfile)) {
@@ -261,7 +265,35 @@ renv_status_check_consistent <- function(lockfile, library, used) {
 
 }
 
+renv_status_check_enabled <- function(parent) {
+
+  # get the name of the calling function
+  ok <- is.call(parent) && length(parent) && is.symbol(parent[[1L]])
+  if (!ok)
+    return(TRUE)
+
+  invoker <- as.character(parent[[1L]])
+  parts <- strsplit(invoker, "_", fixed = TRUE)[[1L]]
+  if (length(parts) < 3L)
+    return(TRUE)
+
+  # check the relevant config option
+  scope <- parts[[2L]]
+  name <- paste(tail(parts, n = -2L), collapse = "_")
+  value <- renv_config_get(
+    name    = name,
+    scope   = scope,
+    default = TRUE
+  )
+
+  truthy(value, default = TRUE)
+
+}
+
 renv_status_check_initialized <- function(project, library = NULL, lockfile = NULL) {
+
+  if (!renv_status_check_enabled(sys.call()))
+    return(TRUE)
 
   # only done if library and lockfile are NULL; that is, if the user
   # is calling `renv::status()` without arguments
@@ -304,6 +336,9 @@ renv_status_check_initialized <- function(project, library = NULL, lockfile = NU
 
 renv_status_check_synchronized <- function(lockfile, library) {
 
+  if (!renv_status_check_enabled(sys.call()))
+    return(TRUE)
+
   lockfile <- renv_lockfile_records(lockfile)
   library <- renv_lockfile_records(library)
 
@@ -329,6 +364,9 @@ renv_status_check_synchronized <- function(lockfile, library) {
 }
 
 renv_status_check_version <- function(lockfile) {
+
+  if (!renv_status_check_enabled(sys.call()))
+    return(TRUE)
 
   version <- lockfile$R$Version
   if (renv_version_eq(version, getRversion(), n = 2L))

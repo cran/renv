@@ -1,3 +1,4 @@
+
 test_that("reports if status not possible", {
 
   renv_tests_scope()
@@ -84,5 +85,53 @@ test_that("status() notifies user if packages are missing and inconsistent", {
   install("bread@0.1.0")
 
   expect_snapshot(. <- status())
+
+})
+
+test_that("status() version check can be disabled", {
+
+  project <- renv_tests_scope("bread")
+  init()
+
+  # write an incompatible R version into the lockfile
+  lockfile <- renv_lockfile_read(file = "renv.lock")
+  lockfile$R$Version <- "1.0.0"
+  renv_lockfile_write(lockfile, file = "renv.lock")
+
+  renv_scope_options(renv.status.check_version = TRUE)
+  expect_snapshot(. <- renv::status())
+
+  renv_scope_options(renv.status.check_version = FALSE)
+  expect_snapshot(. <- renv::status())
+
+})
+
+test_that("status() uses settings$snapshot.dev() as default for dev parameter", {
+
+  renv_tests_scope()
+  init()
+
+  # Create a project that would have dev dependencies
+  writeLines("PackageUseDevtools: Yes", con = "project.Rproj")
+
+  project <- getwd()
+
+  # Verify default setting is FALSE
+  expect_false(settings$snapshot.dev())
+
+  # Test that the setting can be set and retrieved
+  settings$snapshot.dev(TRUE)
+  expect_true(settings$snapshot.dev())
+
+  settings$snapshot.dev(FALSE)
+  expect_false(settings$snapshot.dev())
+
+  # Test that dependencies discovered with dev=FALSE don't include devtools
+  deps1 <- renv_snapshot_dependencies(project, dev = FALSE)
+  expect_false("devtools" %in% deps1)
+
+  # Test that dependencies discovered with dev=TRUE do include devtools
+  deps2 <- renv_snapshot_dependencies(project, dev = TRUE)
+  expect_true("devtools" %in% deps2)
 
 })
