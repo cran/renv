@@ -9,6 +9,16 @@ catf <- function(fmt, ..., appendLF = TRUE) {
   if (quiet)
     return(invisible())
 
+  # also check for config environment variables that should suppress messages
+  # https://github.com/rstudio/renv/issues/2214
+  enabled <- Sys.getenv("RENV_CONFIG_STARTUP_QUIET", unset = NA)
+  if (!is.na(enabled) && tolower(enabled) %in% c("true", "1"))
+    return(invisible())
+
+  enabled <- Sys.getenv("RENV_CONFIG_SYNCHRONIZED_CHECK", unset = NA)
+  if (!is.na(enabled) && tolower(enabled) %in% c("false", "0"))
+    return(invisible())
+
   msg <- sprintf(fmt, ...)
   cat(msg, file = stdout(), sep = if (appendLF) "\n" else "")
 
@@ -387,6 +397,12 @@ renv_bootstrap_find_cache <- function(version) {
 
   # infer path to renv cache
   cache <- Sys.getenv("RENV_PATHS_CACHE", unset = "")
+  if (!nzchar(cache)) {
+    root <- Sys.getenv("RENV_PATHS_ROOT", unset = NA)
+    if (!is.na(root))
+      cache <- file.path(root, "cache")
+  }
+
   if (!nzchar(cache)) {
     tools <- asNamespace("tools")
     if (is.function(tools$R_user_dir)) {
@@ -876,7 +892,7 @@ renv_bootstrap_validate_version_dev <- function(version, description) {
 
 renv_bootstrap_validate_version_release <- function(version, description) {
   expected <- description[["Version"]]
-  is.character(expected) && identical(expected, version)
+  is.character(expected) && identical(c(expected), c(version))
 }
 
 renv_bootstrap_hash_text <- function(text) {

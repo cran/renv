@@ -1,7 +1,7 @@
-e29703a9801f47762d3c9bf38236d895 *DESCRIPTION
+c6fdbbc5c689e7f7a2e50451ca25127d *DESCRIPTION
 c34edb018ed1f858cabf20e3ee58fd55 *LICENSE
 7a1d613c60faba716511eb1af1ee037e *NAMESPACE
-c56bf430a71aa67f919eb2cebd7b35ea *NEWS.md
+dc3e014a0064d98a5eed5fc98fcd6626 *NEWS.md
 023d17b249bc6c7a7b41e7dc00af95e8 *R/aaa.R
 7bd05fdbdac09fc82678ba605d2f3263 *R/abi.R
 fbd5779f1ba597caed25184243a17f6e *R/abort.R
@@ -19,7 +19,7 @@ cc207980d0293129ed02f6f01040420f *R/archive.R
 6c2cbb5b3f73155e1736d61c16f2429d *R/bind.R
 0722a531cd5f2e29c2dbf9e761c66f97 *R/binding.R
 4734e614c00a05aa1724634655ad7f96 *R/bioconductor.R
-8e2fd0cb1bda5a66ba79363a547901ea *R/bootstrap.R
+1536f0fc40936ebea64a41c1450f36ef *R/bootstrap.R
 19fe2f39c3496e6962aa8589142b200e *R/cache.R
 8e58b98d5fc2b9e2af7cc58bfc0e2d4f *R/call.R
 08c918afeae0ad2486a1d17b0e252115 *R/caution.R
@@ -32,7 +32,7 @@ c8b858c7241b99a12b2ae3c961dd893b *R/cleanse.R
 63aad727450d622b556cd5814377a6d5 *R/conda.R
 e6bdfaa56b33db335dff082cc58c1bd2 *R/condition.R
 765f72fe85c092e5c82481a39c31842e *R/config-defaults.R
-59f7744e421005eac3c51b4581cdd0b5 *R/config.R
+0bb7a16e6dfae3097572bd747e450723 *R/config.R
 37834a7b7966a6030195e6e7b0f51432 *R/consent.R
 46bf5d5e493af43a63ade8687906c119 *R/cran.R
 32d10d32726b15a9109d4be19d62e101 *R/curl.R
@@ -41,7 +41,7 @@ e6bdfaa56b33db335dff082cc58c1bd2 *R/condition.R
 e087e69e3a26cdfc5f10dfc67ced28fd *R/deactivate.R
 cf51e72226ee4730eda902b40e7928bc *R/debuggify.R
 1ef3052486279870534d96be30aae975 *R/defer.R
-2cb09d6cdef9ae9019fd6e553a3e0264 *R/dependencies.R
+c05ab82e0f516a1f02ce94415e557b85 *R/dependencies.R
 593d3a08bd7dcdea4ac2d93abfd787de *R/description.R
 594d1ada4fd176a7cc22451bcbe63900 *R/diagnostics.R
 15b7302f0f7ecb785f2398754bec0ae0 *R/difftime.R
@@ -150,7 +150,7 @@ a3ac62c61a50f8d638dd3271bfe389b4 *R/regexps.R
 243a7954e5a86aa2a8cfc6a67c229e3f *R/remotes.R
 f98296c4d78e0ce931d5e5eda7808ebe *R/remove.R
 a39f191b89685a860d5fe4d26f1ba1ba *R/renv-package.R
-8f308b070d4d38da4f92de7f29b1fd52 *R/renvignore.R
+d9dfc6abe5c0e71d26db0f6cbf89e946 *R/renvignore.R
 99903bee8bc705502582453b7296fd12 *R/repair.R
 b1415cbb0c79ec5179e469751dc029a0 *R/report.R
 1d28ab87c2673c68591102db33f579b6 *R/repos.R
@@ -249,12 +249,12 @@ ea39c9ac07269d67364c15a271b14aab *inst/doc/renv.html
 ca8ebc764f16251d80cba7c1fed0f40d *inst/doc/rsconnect.Rmd
 a9dd905639ed0b21e13e9dd490e6d94e *inst/doc/rsconnect.html
 1e324837b9799a2b12ffef7887aad26a *inst/ext/renv.c
-7e74df211359a1765cf5fdf318fec193 *inst/repos/src/contrib/PACKAGES
-f20f85e2c3e047f604496adc1eff4b61 *inst/repos/src/contrib/PACKAGES.gz
-95ed6a245d64fb82c6f1da49325bbb7c *inst/repos/src/contrib/PACKAGES.rds
-e18a6c10d29ba0dce844754154b097d5 *inst/repos/src/contrib/renv_1.1.6.tar.gz
+bf4381f64cb8e206c4e0cd0c22cccb3d *inst/repos/src/contrib/PACKAGES
+4e6320a6788abad57a43c4c784bd2532 *inst/repos/src/contrib/PACKAGES.gz
+cb239bf7b7b4b224c006e09271e93189 *inst/repos/src/contrib/PACKAGES.rds
+5f308bcf7a03b6594da335d0e5bcb603 *inst/repos/src/contrib/renv_1.1.7.tar.gz
 c852598faf15e9a614eee1ae5933ad09 *inst/resources/WELCOME
-8e38d197143af28c1f181dcdee4f92a5 *inst/resources/activate.R
+f8ec18cbcd18bc4e030537c81cea02cb *inst/resources/activate.R
 38ebcc4778f15ad0c0e1cf144f17bf4e *inst/resources/scripts-git-askpass.cmd
 0f28660d57f2dd9dad52380e812e83d5 *inst/resources/scripts-git-askpass.sh
 63ba0c4b0cfe770b0241478e3e93ef37 *inst/resources/vendor/renv.R
@@ -410,7 +410,7 @@ d6fc9ae828e82898ff8949470f05fcd5 *tests/testthat/test-autoload.R
 81c5e2612d6ef43aba6c9dba8073f95e *tests/testthat/test-bind.R
 d41d8cd98f00b204e9800998ecf8427e *tests/testthat/test-binding.R
 7152e5e469b2009dc353e12e37b549ff *tests/testthat/test-bioconductor.R
-9f9d7b6d857bc9d8317f72174731c9d5 *tests/testthat/test-bootstrap.R
+4a4edb401851082c7970177614a5c965 *tests/testthat/test-bootstrap.R
 a8a0ff36a2a877573238aa18591e26f4 *tests/testthat/test-cache.R
 6d6032221fe017477caaa00039bff778 *tests/testthat/test-call.R
 41d06c4eb786533b4dcb0d8744588c3e *tests/testthat/test-caution.R
@@ -418,7 +418,7 @@ a8a0ff36a2a877573238aa18591e26f4 *tests/testthat/test-cache.R
 39334513c1472164007ab974d5e6d9bb *tests/testthat/test-checkout.R
 21baadf0ea0427719e5f93be9f2f4fb4 *tests/testthat/test-clean.R
 3f4178047417f4ee0eb30eeb995b6ecf *tests/testthat/test-cleanse.R
-cc51623e5df6b3f278684fd3a4e09fa5 *tests/testthat/test-config.R
+77b9bea99dea2a75c57f4abd4233f9bd *tests/testthat/test-config.R
 ad4db01224cc269d1d6405c270f740d8 *tests/testthat/test-consent.R
 13ced21728f0e221e417ffa35bb01343 *tests/testthat/test-dcf.R
 76cdb82d8b433e107597ae2259aba474 *tests/testthat/test-deactivate.R
@@ -428,7 +428,7 @@ a56a402ee5ca93a0b311cf45b9bd6f5a *tests/testthat/test-defer.R
 da500d08110074d29da0522cb8c8cea5 *tests/testthat/test-dots.R
 d71d556a47b8d5a0c002f97f0e7189df *tests/testthat/test-download.R
 6754b7b6e57b2e1dd776cbe10c00076b *tests/testthat/test-dynamic.R
-eaae34a62c107f7afe451d8ea435c901 *tests/testthat/test-embed.R
+244648b53d4a0c0fb75d844cb52c0014 *tests/testthat/test-embed.R
 d79d9a4c2b9da27d452eee9a0c1f70ee *tests/testthat/test-enumerate.R
 888a3d35f5fe491632bf2cff0b7a58ea *tests/testthat/test-envvar.R
 eaca8d6bb018ebc08ff07b58bad11315 *tests/testthat/test-envvars.R
@@ -484,7 +484,7 @@ a087dbb445eaf6d9aaafdd2f476a1a09 *tests/testthat/test-r.R
 aa519340f01f1fe2b26f3e0330448efd *tests/testthat/test-rehash.R
 175c4334e6b37703cdcad033657223f2 *tests/testthat/test-reload.R
 3236fc7fee88765f4753f285d86a7520 *tests/testthat/test-remotes.R
-8a2a31bd66c950e79d6837586603c015 *tests/testthat/test-renvignore.R
+68c88603a61e1fed85b58d6a2ee42932 *tests/testthat/test-renvignore.R
 2fcee48c3c55cb3d734bd21411b26ef9 *tests/testthat/test-repair.R
 5d88ba366a05caf71cf5c29cf1bde3e3 *tests/testthat/test-repos.R
 025d25dd72dc718fe9dae1542aa0b9a1 *tests/testthat/test-restore.R
