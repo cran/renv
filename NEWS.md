@@ -1,4 +1,9 @@
 
+# renv 1.1.8
+
+* Update to conform with changes to the R API.
+
+
 # renv 1.1.7
 
 * Fixed an issue where `.renvignore` files were not read when the project root

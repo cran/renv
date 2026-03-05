@@ -1,7 +1,7 @@
-c6fdbbc5c689e7f7a2e50451ca25127d *DESCRIPTION
+fec94cdbf3bded81cbd91298d1813787 *DESCRIPTION
 c34edb018ed1f858cabf20e3ee58fd55 *LICENSE
 7a1d613c60faba716511eb1af1ee037e *NAMESPACE
-dc3e014a0064d98a5eed5fc98fcd6626 *NEWS.md
+354a98e4a84f3d11d0f103a803c85ba7 *NEWS.md
 023d17b249bc6c7a7b41e7dc00af95e8 *R/aaa.R
 7bd05fdbdac09fc82678ba605d2f3263 *R/abi.R
 fbd5779f1ba597caed25184243a17f6e *R/abort.R
@@ -248,7 +248,7 @@ ea39c9ac07269d67364c15a271b14aab *inst/doc/renv.html
 25ee8dd0f95a8eb5c34ca2c95e0031c2 *inst/doc/rsconnect.R
 ca8ebc764f16251d80cba7c1fed0f40d *inst/doc/rsconnect.Rmd
 a9dd905639ed0b21e13e9dd490e6d94e *inst/doc/rsconnect.html
-1e324837b9799a2b12ffef7887aad26a *inst/ext/renv.c
+0cc01645d3591710fd46b664a6b4d441 *inst/ext/renv.c
 bf4381f64cb8e206c4e0cd0c22cccb3d *inst/repos/src/contrib/PACKAGES
 4e6320a6788abad57a43c4c784bd2532 *inst/repos/src/contrib/PACKAGES.gz
 cb239bf7b7b4b224c006e09271e93189 *inst/repos/src/contrib/PACKAGES.rds
