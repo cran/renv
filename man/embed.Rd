@@ -11,6 +11,7 @@ use(
   ...,
   lockfile = NULL,
   library = NULL,
+  repos = getOption("repos"),
   isolate = TRUE,
   sandbox = TRUE,
   attach = FALSE,
@@ -19,7 +20,26 @@ use(
 }
 \arguments{
 \item{path}{The path to an \R or R Markdown script. The default will use the current
-document, if running within RStudio.}
+document, if running within RStudio.
+\subsection{Package Resolution}{
+
+When \code{embed()} generates a call to \code{use()}, it needs to determine the
+package versions to record. The \code{lockfile} parameter controls where these
+versions come from:
+\enumerate{
+\item If \code{lockfile} is \code{NULL} (the default), and the project has an existing
+\code{renv.lock} file, that project lockfile is used. Only packages present
+in the lockfile will be included -- any dependencies not recorded in the
+lockfile will be omitted.
+\item If \code{lockfile} is a path to a lockfile, or a lockfile object, that
+lockfile is used directly.
+\item If \code{lockfile} is \code{FALSE}, or if no project lockfile exists, package
+versions are inferred from the currently-installed packages in the
+active library paths.
+\item If \code{lockfile} is \code{NA}, package versions are inferred from the
+latest versions available in the active package repositories.
+}
+}}
 
 \item{...}{The \R packages to be used with this script. Ignored if \code{lockfile} is
 non-\code{NULL}.}
@@ -36,6 +56,12 @@ When \code{NULL} (the default), a library path within the \R temporary
 directory will be generated and used. Note that this same library path
 will be re-used on future calls to \code{renv::use()}, allowing \code{renv::use()}
 to be used multiple times within a single script.}
+
+\item{repos}{The \R package repositories to use. When \code{NULL}, packages will be
+resolved from the renv cache, without querying any external repositories.
+This can be useful if you'd like to use packages that have already been
+cached by renv, even when no active package repositories have been
+configured.}
 
 \item{isolate}{Boolean; should the active library paths be included in the set of library
 paths activated for this script? Set this to \code{TRUE} if you only want the

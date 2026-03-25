@@ -6,7 +6,7 @@ renv_description_read <- function(path = NULL,
                                   ...)
 {
   # if given a package name, construct path to that package
-  path <- path %||% find.package(package)
+  path <- path %||% renv_package_find_impl(package, compat = TRUE)
 
   # normalize non-absolute paths
   if (!renv_path_absolute(path))
@@ -87,13 +87,6 @@ renv_description_read_impl <- function(path = NULL, subdir = NULL, ...) {
 
 }
 
-renv_description_path <- function(path) {
-  childpath <- file.path(path, "DESCRIPTION")
-  indirect <- file.exists(childpath)
-  path[indirect] <- childpath[indirect]
-  path
-}
-
 # parse the dependency requirements normally presented in
 # Depends, Imports, Suggests, and so on
 renv_description_parse_field <- function(field) {
@@ -103,26 +96,24 @@ renv_description_parse_field <- function(field) {
     return(NULL)
 
   pattern <- paste0(
-    "([a-zA-Z0-9._]+)",                      # package name
-    "(?:\\s*\\(([><=]+)\\s*([0-9.-]+)\\))?"  # optional version specification
+    "^\\s*",                                  # leading whitespace
+    "([a-zA-Z0-9._]+)",                       # package name
+    "(?:\\s*\\(([><=]+)\\s*([0-9.-]+)\\))?",  # optional version specification
+    "\\s*$"                                   # trailing whitespace
   )
 
   # split on commas
-  parts <- strsplit(field, "\\s*,\\s*")[[1]]
+  x <- strsplit(field, ",", fixed = TRUE)[[1L]]
 
   # drop any empty fields
-  x <- parts[nzchar(parts)]
-
-  # match to split on package name, version
-  m <- regexec(pattern, x)
-  matches <- regmatches(x, m)
-  if (empty(matches))
+  x <- x[nzchar(x)]
+  if (empty(x))
     return(NULL)
 
   data_frame(
-    Package = extract_chr(matches, 2L),
-    Require = extract_chr(matches, 3L),
-    Version = extract_chr(matches, 4L)
+    Package = sub(pattern, "\\1", x, perl = TRUE),
+    Require = sub(pattern, "\\2", x, perl = TRUE),
+    Version = sub(pattern, "\\3", x, perl = TRUE)
   )
 
 }
@@ -145,39 +136,6 @@ renv_description_built_version <- function(desc = NULL) {
     return(NA)
 
   substring(built, 3L, regexpr(";", built, fixed = TRUE) - 1L)
-}
-
-renv_description_dependency_fields_expand <- function(fields) {
-
-  expanded <- map(fields, function(field) {
-
-    case(
-
-      identical(field, FALSE)
-        ~ NULL,
-
-      identical(field, "strong") || is.na(field)
-        ~ c("Depends", "Imports", "LinkingTo"),
-
-      identical(field, "most") || identical(field, TRUE)
-        ~ c("Depends", "Imports", "LinkingTo", "Suggests"),
-
-      identical(field, "all")
-        ~ c("Depends", "Imports", "LinkingTo", "Suggests", "Enhances"),
-
-      field
-
-    )
-
-  })
-
-  unique(unlist(expanded, recursive = FALSE, use.names = FALSE))
-
-}
-
-renv_description_dependency_fields <- function(fields, project) {
-  fields <- fields %||% settings$package.dependency.fields(project = project)
-  renv_description_dependency_fields_expand(fields)
 }
 
 renv_description_remotes <- function(path) {

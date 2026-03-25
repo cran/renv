@@ -343,10 +343,9 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <div id="introduction" class="section level2">
 <h2>Introduction</h2>
-<p>Starting with <code>renv 0.13.0</code>, it is possible to activate
-and switch between different profiles associated with a project. A
-profile can be thought of as a different mode in which a project is
-used. For example:</p>
+<p>It is possible to activate and switch between different profiles
+associated with a project. A profile can be thought of as a different
+mode in which a project is used. For example:</p>
 <ul>
 <li>A “development” profile might be used when developing and testing a
 project,</li>
@@ -413,6 +412,26 @@ leave the <code>Imports</code>, <code>Depends</code> and
 <p>When set, only the dependencies listed in the project
 <code>DESCRIPTION</code> file will be used when the lockfile is
 generated. See <code>?renv::snapshot</code> for more details.</p>
+</div>
+<div id="profile-specific-ignore-rules" class="section level2">
+<h2>Profile-specific ignore rules</h2>
+<p><code>.renvignore</code> files support profile-specific sections
+using comments of the form <code>#| &lt;expr&gt;</code>, where
+<code>&lt;expr&gt;</code> is an R expression evaluated to determine
+whether the subsequent ignore rules should apply. This is useful when
+different profiles should scan different parts of the project for
+dependencies.</p>
+<p>For example, to ignore the <code>shiny/</code> directory unless the
+“shiny” profile is active:</p>
+<pre><code># rules in this section apply to all profiles
+data/*.csv
+
+#| profile == &quot;shiny&quot;
+# only ignore these when the shiny profile is active
+scripts/batch-*.R</code></pre>
+<p>The first section (before any <code>#|</code> comment) applies to all
+profiles. If you want to restrict it to only the default profile, add
+<code>#| profile == &quot;default&quot;</code> as the first line.</p>
 </div>
 
 

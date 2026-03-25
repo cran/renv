@@ -197,11 +197,6 @@ renv_sysreqs_resolve <- function(sysreqs, rules = renv_sysreqs_rules()) {
   unlist(matches, recursive = FALSE)
 }
 
-renv_sysreqs_read <- function(package) {
-  desc <- renv_description_read(package)
-  desc[["SystemRequirements"]] %||% ""
-}
-
 renv_sysreqs_rules <- function() {
   the$sysreqs <- the$sysreqs %||% renv_sysreqs_rules_impl()
 }
@@ -331,15 +326,41 @@ renv_sysreqs_aliases_rpm <- function(pkgs) {
 
 }
 
-renv_sysreqs_check <- function(sysreqs, prompt) {
+renv_sysreqs_type <- function() {
 
-  # check for a supported package installer
-  type <- case(
-    nzchar(Sys.which("dpkg")) ~ "deb",
-    nzchar(Sys.which("rpm"))  ~ "rpm",
-    ~ NULL
+  # try to infer package type from the known distro
+  distro <- the$distro
+  if (!is.null(distro)) {
+
+    deb <- c("debian", "ubuntu")
+    rpm <- c(
+      "centos", "fedora", "opensuse", "opensuse-leap",
+      "opensuse-tumbleweed", "redhat", "rocky", "rockylinux",
+      "sle", "sles"
+    )
+
+    type <- case(
+      distro %in% deb ~ "deb",
+      distro %in% rpm ~ "rpm"
+    )
+
+    if (!is.null(type))
+      return(type)
+
+  }
+
+  # fall back to checking which tools are available
+  case(
+    nzchar(Sys.which("dpkg-query")) ~ "deb",
+    nzchar(Sys.which("rpm"))        ~ "rpm"
   )
 
+}
+
+renv_sysreqs_check <- function(sysreqs, prompt) {
+
+  # check the tool used for package queries
+  type <- renv_sysreqs_type()
   if (is.null(type))
     return(NULL)
 

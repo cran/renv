@@ -756,32 +756,6 @@ renv_retrieve_repos <- function(record) {
 
 }
 
-renv_retrieve_repos_error_report <- function(record, errors) {
-
-  if (empty(errors))
-    return()
-
-  messages <- extract(errors, "message")
-  if (empty(messages))
-    return()
-
-  messages <- unlist(messages, recursive = TRUE, use.names = FALSE)
-  if (empty(messages))
-    return()
-
-  fmt <- "The following error(s) occurred while retrieving '%s':"
-  preamble <- sprintf(fmt, record$Package)
-
-  bulletin(
-    preamble = preamble,
-    values   = paste("-", messages)
-  )
-
-  if (renv_verbose())
-    str(errors)
-
-}
-
 renv_retrieve_url_resolve <- function(record) {
 
   # https://github.com/rstudio/renv/issues/2060
@@ -911,13 +885,15 @@ renv_retrieve_repos_archive <- function(record) {
   # get the current repositories
   repos <- getOption("repos")
 
-  # if this record has a repository recorded, use or prefer it
+  # if this record has a repository recorded, use or prefer it;
+  # in strict mode with a URL-valued Repository, use only that repository
   repository <- record[["Repository"]]
+  strict <- renv_restore_state(key = "strict") %||% FALSE
   if (is.character(repository)) {
     names(repository) <- names(repository) %||% repository
     if (grepl("://", repository, fixed = TRUE)) {
-      repos <- c(repository, repos)
-    } else if (repository %in% names(repos)) {
+      repos <- when(strict, repository, c(repository, repos))
+    } else if (!strict && repository %in% names(repos)) {
       matches <- names(repos) == repository
       repos <- c(repos[matches], repos[!matches])
     }
@@ -1038,11 +1014,18 @@ renv_retrieve_repos_impl <- function(record,
   # if we weren't provided a repository for this package, try to find it
   if (is.null(repo)) {
 
+    # in strict mode with a URL-valued Repository, search only that repository
+    repository <- record[["Repository"]]
+    strict <- renv_restore_state(key = "strict") %||% FALSE
+    repos <- if (strict && is.character(repository) && grepl("://", repository, fixed = TRUE))
+      renv_repos_baseurl(repository)
+
     entry <- catch(
       renv_available_packages_entry(
         package = package,
         type    = type,
         filter  = version,
+        repos   = repos,
         prefer  = record[["Repository"]]
       )
     )

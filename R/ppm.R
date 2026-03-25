@@ -183,7 +183,13 @@ renv_ppm_platform <- function(file = "/etc/os-release") {
   if (renv_platform_macos())
     return("macos")
 
-  renv_ppm_platform_impl(file)
+  platform <- renv_ppm_platform_impl(file)
+
+  # https://github.com/rstudio/renv/issues/2227
+  if (startsWith(platform, "opensuse15"))
+    return("opensuse156")
+
+  platform
 
 }
 
@@ -351,19 +357,6 @@ renv_ppm_enabled <- function() {
   enabled <- Sys.getenv("RENV_RSPM_ENABLED", unset = NA)
   if (!is.na(enabled))
     return(truthy(enabled, default = TRUE))
-
-  # TODO: can we remove this check?
-  # https://github.com/rstudio/renv/issues/1132
-  if (!testing()) {
-
-    disabled <-
-      renv_platform_linux() &&
-      identical(renv_platform_machine(), "aarch64")
-
-    if (disabled)
-      return(FALSE)
-
-  }
 
   # check for project setting
   enabled <- settings$ppm.enabled()

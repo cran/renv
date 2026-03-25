@@ -246,8 +246,9 @@ renv_load_r <- function(project, fields) {
 
   # only compare major, minor versions
   if (!identical(requested, current)) {
-    fmt <- "%s Using R %s (lockfile was generated with R %s)"
-    writef(fmt, info_bullet(), getRversion(), version)
+    fmt <- "Using R %s (lockfile was generated with R %s)"
+    msg <- fyi(fmt, getRversion(), version)
+    writef(msg)
   }
 
 }
@@ -620,7 +621,7 @@ renv_load_bioconductor <- function(project, bioconductor) {
     return()
 
   # if we don't have a valid Bioconductor version, bail
-  version <- bioconductor[["Version"]]
+  version <- getOption("renv.bioconductor.version") %||% bioconductor[["Version"]]
   if (is.null(version))
     return()
 
@@ -934,7 +935,7 @@ renv_load_base <- function(call, envir) {
 
   # check for a 'file' argument that looks like a file
   file <- eval(matched[["file"]], envir = envir)
-  if (is.character(file) && endswith(file, ".RData"))
+  if (is.character(file) && endsWith(file, ".RData"))
     return(renv_load_base_impl(call, envir))
 
 }

@@ -190,7 +190,7 @@ renv_available_packages_success <- function(db, url, type) {
   # add in necessary missing columns
   required <- c(
     "Package", "Version", "Priority",
-    "Depends", "Imports", "LinkingTo", "Suggests", "Enhances",
+    "Depends", "Imports", "LinkingTo", "Suggests", "Enhances", "Remotes",
     "License", "License_is_FOSS", "License_restricts_use",
     "OS_type", "Archs", "MD5sum",
     if (type %in% "source") "NeedsCompilation",
@@ -389,6 +389,7 @@ renv_available_packages_latest <- function(package,
 {
   methods <- list(
     renv_available_packages_latest_repos,
+    renv_available_packages_latest_crandb,
     if (getOption("renv.install.allowArchivedPackages", default = FALSE))
       renv_available_packages_latest_archive,
     if (renv_p3m_enabled())
@@ -441,8 +442,12 @@ renv_available_packages_latest <- function(package,
   if (identical(lhsv, rhsv)) {
     if (identical(attr(lhs, "type", exact = TRUE), "binary"))
       return(lhs)
-    else
-      return(rhs)
+    # when rhs is from crandb it has no URL; prefer lhs to avoid archive
+    # fallback which fails for packages still live on CRAN (#1735)
+    # renv_record_tagged is true if the record has a url and type. Crandb does not have URL.
+    if (!renv_record_tagged(rhs))
+      return(lhs)
+    return(rhs)
   }
 
   # otherwise, return the regular repository entry
@@ -576,6 +581,124 @@ renv_available_packages_latest_archive <- function(package,
   }
 
   NULL
+
+}
+
+# Query crandb API to find the newest version of a package
+# that is compatible with the current version of R
+renv_available_packages_latest_crandb <- function(package,
+                                                  type = NULL,
+                                                  repos = NULL)
+{
+  # check if crandb lookups are enabled
+  if (!config$crandb.enabled())
+    return(NULL)
+
+  # query crandb for all versions of this package
+  json <- renv_available_packages_crandb_query(package)
+  if (is.null(json))
+    return(NULL)
+
+  versions <- json$versions
+  if (is.null(versions) || length(versions) == 0L)
+    return(NULL)
+
+  # get current R version
+  rversion <- getRversion()
+
+  # find versions compatible with this R version
+  compatible <- Filter(function(v) {
+    renv_available_packages_crandb_r_compatible(versions[[v]], rversion)
+  }, names(versions))
+
+  if (length(compatible) == 0L)
+    return(NULL)
+
+  # sort by version and take the newest; keep original version string (e.g. "1.6-5")
+  # so archive tarball names match CRAN (Matrix_1.6-5.tar.gz not Matrix_1.6.5.tar.gz)
+  ord <- order(numeric_version(compatible), decreasing = TRUE)
+  newest <- compatible[ord[[1L]]]
+
+  # use first repository name if available
+  repos <- repos %||% getOption("repos")
+  reponame <- names(repos)[[1L]] %||% "CRAN"
+
+  list(
+    Package    = package,
+    Version    = newest,
+    Source     = "Repository",
+    Repository = reponame
+  )
+
+}
+
+renv_available_packages_crandb_query <- function(package) {
+
+  memoize(
+    key   = package,
+    value = renv_available_packages_crandb_query_impl(package),
+    scope = "crandb-history"
+  )
+
+}
+
+renv_available_packages_crandb_query_impl <- function(package) {
+
+  url <- sprintf("https://crandb.r-pkg.org/%s/all", URLencode(package, reserved = TRUE))
+  destfile <- tempfile("renv-crandb-", fileext = ".json")
+
+  status <- catch(download(url, destfile = destfile, quiet = TRUE))
+  if (inherits(status, "error"))
+    return(NULL)
+
+  catch(renv_json_read(destfile))
+
+}
+
+renv_available_packages_crandb_r_compatible <- function(entry, rversion) {
+
+  # if no Depends field, assume compatible
+  depends <- entry$Depends
+  if (is.null(depends))
+    return(TRUE)
+
+  # check for R dependency
+  rdep <- depends$R
+  if (is.null(rdep))
+    return(TRUE)
+
+  # parse the requirement (e.g., ">= 3.4", ">= 4.0.0")
+  renv_version_requirement_satisfied(rversion, rdep)
+
+}
+
+renv_version_requirement_satisfied <- function(version, requirement) {
+
+  # handle "*" or empty requirements
+  if (is.null(requirement) || requirement %in% c("*", ""))
+    return(TRUE)
+
+  # parse operator and version from requirement like ">= 3.4"
+  pattern <- "^\\s*([><=!]+)\\s*([0-9.]+)\\s*$"
+  if (!grepl(pattern, requirement))
+    return(TRUE)
+
+  op <- sub(pattern, "\\1", requirement)
+  reqver <- sub(pattern, "\\2", requirement)
+
+  # perform comparison
+  cmp <- renv_version_compare(version, reqver)
+
+  switch(
+    op,
+    ">=" = cmp >= 0L,
+    ">"  = cmp > 0L,
+    "<=" = cmp <= 0L,
+    "<"  = cmp < 0L,
+    "==" = cmp == 0L,
+    "!=" = cmp != 0L,
+    TRUE
+  )
 
 }
 
@@ -772,9 +895,9 @@ renv_available_packages_flatten <- function(dbs) {
   # stack the databases together
   stacked <- bind(dbs)
 
-  # order by package + version
-  # TODO: 'order()' is kind of slow for numeric versions; can we do better?
-  index <- with(stacked, order(Package, numeric_version(Version), decreasing = TRUE))
+  # order by package + version (descending)
+  vrank <- renv_version_rank(stacked$Version)
+  index <- order(stacked$Package, vrank, decreasing = TRUE)
   ordered <- rows(stacked, index)
 
   # remove duplicates

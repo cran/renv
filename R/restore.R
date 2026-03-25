@@ -48,6 +48,13 @@ the$restore_state <- NULL
 #'  as the recursive dependency of another package, your request will be
 #'  ignored.
 #'
+#' @param strict Boolean; when `TRUE`, packages whose lockfile records contain
+#'   a repository URL in the `Repository` field will only be retrieved from
+#'   that exact repository. If the recorded repository is unavailable, the
+#'   restore will fail rather than falling back to other configured
+#'   repositories. This can be useful when you need to ensure that packages
+#'   are installed from a specific source (e.g. an internal package repository).
+#'
 #' @return A named list of package records which were installed by renv.
 #'
 #' @family reproducibility
@@ -64,6 +71,7 @@ restore <- function(project = NULL,
                     rebuild       = FALSE,
                     repos         = NULL,
                     clean         = FALSE,
+                    strict        = FALSE,
                     transactional = NULL,
                     prompt        = interactive())
 {
@@ -140,7 +148,7 @@ restore <- function(project = NULL,
   }
 
   # set up Bioconductor version + repositories
-  biocversion <- lockfile$Bioconductor$Version
+  biocversion <- getOption("renv.bioconductor.version") %||% lockfile$Bioconductor$Version
   if (!is.null(biocversion)) {
     renv_bioconductor_init(library = library)
     biocversion <- package_version(biocversion)
@@ -197,11 +205,11 @@ restore <- function(project = NULL,
   }
 
   # perform the restore
-  records <- renv_restore_run_actions(project, diff, current, lockfile, rebuild)
+  records <- renv_restore_run_actions(project, diff, current, lockfile, rebuild, strict)
   renv_restore_successful(records, prompt, project)
 }
 
-renv_restore_run_actions <- function(project, actions, current, lockfile, rebuild) {
+renv_restore_run_actions <- function(project, actions, current, lockfile, rebuild, strict = FALSE) {
 
   packages <- names(actions)
 
@@ -210,7 +218,8 @@ renv_restore_run_actions <- function(project, actions, current, lockfile, rebuil
     library  = renv_libpaths_active(),
     records  = renv_lockfile_records(lockfile),
     packages = packages,
-    rebuild  = rebuild
+    rebuild  = rebuild,
+    strict   = strict
   )
 
   # first, handle package removals
@@ -223,12 +232,24 @@ renv_restore_run_actions <- function(project, actions, current, lockfile, rebuil
   installs <- actions[actions != "remove"]
   packages <- names(installs)
 
-  # perform the install
-  records <- renv_retrieve_impl(packages)
-  renv_install_impl(records)
+  # resolve dependency graph using lockfile records as lookup table
+  lockrecords <- renv_lockfile_records(lockfile)
+  descriptions <- renv_graph_init(packages, records = lockrecords, project = project)
+
+  # download + install in parallel dependency waves
+  records <- renv_graph_install(descriptions)
+
+  # error if any requested packages failed to install
+  failed <- setdiff(packages, names(records))
+  if (length(failed)) {
+    stopf(
+      "failed to install %s",
+      paste(shQuote(failed), collapse = ", ")
+    )
+  }
 
   # detect dependency tree repair
-  diff <- renv_lockfile_diff_packages(renv_lockfile_records(lockfile), records)
+  diff <- renv_lockfile_diff_packages(lockrecords, records)
   diff <- diff[diff != "remove"]
   if (!empty(diff)) {
     renv_pretty_print_records(
@@ -257,6 +278,7 @@ renv_restore_begin <- function(project = NULL,
                                packages = NULL,
                                handler = NULL,
                                rebuild = NULL,
+                               strict = FALSE,
                                recursive = TRUE)
 {
   # resolve rebuild request
@@ -298,6 +320,10 @@ renv_restore_begin <- function(project = NULL,
 
     # packages which should be rebuilt (skipping the cache)
     rebuild = rebuild,
+
+    # when TRUE, packages with a URL-valued Repository field must be
+    # retrieved from that exact repository; no fallback to other repos
+    strict = strict,
 
     # should package dependencies be crawled recursively? this is useful if
     # the records list is incomplete and needs to be built as packages are

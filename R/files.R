@@ -105,7 +105,7 @@ renv_file_copy_dir_r <- function(source, target) {
     )
   )
 
-  if (inherits(status, "error"))
+  if (inherits(status, "condition"))
     stop(status)
 
   # R will copy the directory to a sub-directory in the
@@ -261,6 +261,10 @@ renv_file_link <- function(source, target, overwrite = FALSE) {
     if (identical(status, TRUE))
       return(TRUE)
 
+    # file.symlink() may leave behind a broken symlink on filesystems
+    # that don't support symlinks (e.g. CIFS / SMB network mounts)
+    unlink(target)
+
   }
 
   # all else fails, just perform a copy
@@ -358,10 +362,6 @@ renv_file_backup <- function(path) {
 
 renv_file_info <- function(paths, extra_cols = FALSE) {
   suppressWarnings(file.info(paths, extra_cols = extra_cols))
-}
-
-renv_file_mode <- function(paths) {
-  suppressWarnings(file.mode(paths))
 }
 
 # NOTE: returns true for files that are broken symlinks

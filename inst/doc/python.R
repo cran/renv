@@ -5,3 +5,6 @@ knitr::opts_chunk$set(
   eval = FALSE
 )
 
+## -----------------------------------------------------------------------------
+# renv::use_python(python = FALSE)
+

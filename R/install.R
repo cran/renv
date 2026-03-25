@@ -6,7 +6,7 @@ the$install_pkg_type <- NULL
 the$install_dependency_fields <- NULL
 
 # the formatted width of installation steps printed to the console
-the$install_step_width <- 48L
+the$install_step_width <- 40L
 
 #' Install packages
 #'
@@ -124,9 +124,11 @@ install <- function(packages = NULL,
   renv_project_lock(project = project)
   renv_scope_verbose_if(prompt)
 
-  # handle 'dependencies'
+  # handle 'dependencies'; only override the binding when the user explicitly
+  # passes a value, so that renv_dependencies_discover_description_fields()
+  # can still add Suggests for the project DESCRIPTION by default
   if (!is.null(dependencies)) {
-    fields <- renv_description_dependency_fields(dependencies, project = project)
+    fields <- renv_dependencies_fields(dependencies, project = project)
     renv_scope_binding(the, "install_dependency_fields", fields)
   }
 
@@ -191,8 +193,10 @@ install <- function(packages = NULL,
     return(invisible(list()))
   }
 
-  # add bioconductor packages if necessary
+  # add bioconductor packages if necessary; scope bioconductor repos
+  # so they're available for transitive dependency resolution in graph_init
   if (renv_bioconductor_required(remotes)) {
+    renv_scope_bioconductor(project = project)
     bioc <- c(renv_bioconductor_manager(), "BiocVersion")
     packages <- unique(c(packages, bioc))
   }
@@ -225,34 +229,66 @@ install <- function(packages = NULL,
     rebuild  = rebuild
   )
 
-  # retrieve packages
-  records <- renv_retrieve_impl(packages)
-  if (empty(records)) {
+  # build dependency graph; this resolves transitive dependencies
+  # and fetches DESCRIPTION metadata without downloading tarballs
+  descriptions <- renv_graph_init(packages, records = records, project = project)
+  if (empty(descriptions)) {
     writef("- There are no packages to install.")
     return(invisible(list()))
   }
 
+  # filter out packages that are already correctly installed so
+  # the report only lists packages that will actually be installed;
+  # renv_graph_install performs the same filtering internally
+  library <- renv_libpaths_active()
+  requirements <- renv_graph_requirements(descriptions)
+  needed <- Filter(function(pkg) {
+    renv_graph_needs_update(pkg, descriptions[[pkg]], requirements)
+  }, names(descriptions))
+
+  if (empty(needed)) {
+    writef("- All packages are already installed.")
+    return(invisible(list()))
+  }
+
   if (prompt || renv_verbose()) {
-    renv_install_report(records, library = renv_libpaths_active())
+    renv_install_report(descriptions[needed], library = library)
     cancel_if(prompt && !proceed())
   }
 
-  # check for installed dependencies
+  # check for system requirements using pre-fetched descriptions
   if (config$sysreqs.check(default = renv_platform_linux())) {
-    paths <- map(records, `[[`, "Path")
-    sysreqs <- map(paths, renv_sysreqs_read)
+    sysreqs <- map(descriptions, function(desc) desc[["SystemRequirements"]] %||% "")
     renv_sysreqs_check(sysreqs, prompt = prompt)
   }
 
+  # download and install packages in dependency-wave order
+  records <- renv_graph_install(descriptions)
 
-  # install retrieved records
-  before <- Sys.time()
-  renv_install_impl(records)
-  after <- Sys.time()
-
-  time <- renv_difftime_format(difftime(after, before))
-  n <- length(records)
-  writef("Successfully installed %s in %s.", nplural("package", n), time)
+  # if any explicitly-requested packages failed, signal an error
+  # (this preserves the old behavior where install("nonexistent") errors)
+  # but don't error for packages that are already installed —
+  # unless resolution itself failed (e.g. incompatible R version)
+  requested <- names(remotes) %||% packages
+  failed <- setdiff(requested, names(records))
+  failed <- intersect(failed, names(descriptions))
+  library <- renv_libpaths_active()
+  failed <- Filter(function(pkg) {
+    if (isTRUE(attr(descriptions[[pkg]], "resolution_failed")))
+      return(TRUE)
+    !renv_package_installed(pkg, lib.loc = library)
+  }, failed)
+  if (length(failed)) {
+    reasons <- vapply(failed, function(pkg) {
+      attr(descriptions[[pkg]], "resolution_error") %||% ""
+    }, character(1L))
+    labels <- ifelse(
+      nzchar(reasons),
+      sprintf("%s (%s)", shQuote(failed), reasons),
+      shQuote(failed)
+    )
+    stopf("failed to install %s", paste(labels, collapse = ", "))
+  }
 
   # check loaded packages and inform user if out-of-sync
   renv_install_postamble(names(records))
@@ -449,7 +485,7 @@ renv_install_package <- function(record) {
   before <- Sys.time()
   withCallingHandlers(
     renv_install_package_impl(record),
-    error = function(e) writef("FAILED")
+    error = function(e) renv_install_step_error(record)
   )
   after <- Sys.time()
 
@@ -465,9 +501,8 @@ renv_install_package <- function(record) {
       feedback <- paste(feedback, "and cached")
   }
 
-  verbose <- config$install.verbose()
   elapsed <- difftime(after, before, units = "auto")
-  renv_install_step_ok(feedback, elapsed = elapsed, verbose = verbose)
+  renv_install_step_ok(feedback, record, elapsed = elapsed)
 
   invisible()
 
@@ -497,9 +532,6 @@ renv_install_package_cache <- function(record, cache, linker) {
   callback <- renv_file_backup(target)
   defer(callback())
 
-  # report successful link to user
-  renv_install_step_start("Installing", record, verbose = FALSE)
-
   before <- Sys.time()
   linker(cache, target)
   after <- Sys.time()
@@ -510,7 +542,7 @@ renv_install_package_cache <- function(record, cache, linker) {
   )
 
   elapsed <- difftime(after, before, units = "auto")
-  renv_install_step_ok(type, elapsed = elapsed)
+  renv_install_step_ok(type, record, elapsed = elapsed)
 
   return(TRUE)
 
@@ -573,16 +605,10 @@ renv_install_package_impl_prebuild <- function(record, path, quiet) {
     return(path)
   }
 
-  verbose <- config$install.verbose()
-  renv_install_step_start("Building", record, verbose = verbose)
-
   before <- Sys.time()
   package <- record$Package
   newpath <- r_cmd_build(package, path)
   after <- Sys.time()
-  elapsed <- difftime(after, before, units = "auto")
-
-  renv_install_step_ok("from source", elapsed = elapsed)
 
   newpath
 
@@ -612,10 +638,6 @@ renv_install_package_impl <- function(record, quiet = TRUE) {
 
   # check whether we should build before install
   path <- renv_install_package_impl_prebuild(record, path, quiet)
-
-  # report start of installation to user
-  verbose <- config$install.verbose()
-  renv_install_step_start("Installing", record, verbose = verbose)
 
   # run user-defined hooks before, after install
   options <- renv_install_package_options(package)
@@ -737,68 +759,6 @@ renv_install_package_options <- function(package) {
   options[[package]]
 }
 
-# nocov start
-renv_install_preflight_requirements <- function(records) {
-
-  deps <- bapply(records, function(record) {
-    renv_dependencies_discover_description(record$Path)
-  }, index = "ParentPackage")
-
-  splat <- split(deps, deps$Package)
-  bad <- enumerate(splat, function(package, requirements) {
-
-    # skip NULL records (should be handled above)
-    record <- records[[package]]
-    if (is.null(record))
-      return(NULL)
-
-    version <- record$Version
-
-    # drop packages without explicit version requirement
-    requirements <- requirements[nzchar(requirements$Require), ]
-    if (nrow(requirements) == 0)
-      return(NULL)
-
-    # add in requested version
-    requirements$RequestedVersion <- version
-
-    # generate expressions to evaluate
-    fmt <- "package_version('%s') %s package_version('%s')"
-    code <- with(requirements, sprintf(fmt, RequestedVersion, Require, Version))
-    parsed <- parse(text = code)
-    ok <- map_lgl(parsed, eval, envir = baseenv())
-
-    # return requirements that weren't satisfied
-    requirements[!ok, ]
-
-  })
-
-  bad <- bind(unname(bad))
-  if (empty(bad))
-    return(TRUE)
-
-  package  <- bad$ParentPackage
-  requires <- sprintf("%s (%s %s)", bad$Package, bad$Require, bad$Version)
-  actual   <- sprintf("%s %s", bad$Package, bad$RequestedVersion)
-
-  fmt <- "Package '%s' requires '%s', but '%s' will be installed"
-  text <- sprintf(fmt, format(package), format(requires), format(actual))
-  if (renv_verbose()) {
-    bulletin(
-      "The following issues were discovered while preparing for installation:",
-      text,
-      "Installation of these packages may not succeed."
-    )
-  }
-
-  if (interactive() && !proceed())
-    return(FALSE)
-
-  TRUE
-
-}
-# nocov end
-
 renv_install_postamble <- function(packages) {
 
   # only diagnose packages currently loaded
@@ -877,21 +837,17 @@ renv_install_report <- function(records, library) {
   )
 }
 
-renv_install_step_start <- function(action, record, verbose = FALSE) {
+renv_install_step_ok <- function(message, record, elapsed = NULL) {
 
   pkgver <- paste(record[["Package"]], record[["Version"]])
-  if (verbose)
-    return(writef("- %s %s ...", action, pkgver))
+  if (!is.null(elapsed) && !testing() && elapsed >= 0.5)
+    message <- sprintf("%s in %s", message, renv_difftime_format_short(elapsed))
 
-  message <- sprintf("- %s %s ... ", action, pkgver)
-  printf(format(message, width = the$install_step_width))
+  writef("%s %s [%s]", yay(), format(pkgver, width = the$install_step_width), message)
 
 }
 
-renv_install_step_ok <- function(..., elapsed = NULL, verbose = FALSE) {
-  renv_report_ok(
-    message = paste(..., collapse = ""),
-    elapsed = elapsed,
-    verbose = verbose
-  )
+renv_install_step_error <- function(record) {
+  pkgver <- paste(record[["Package"]], record[["Version"]])
+  writef("%s %s", boo(), format(pkgver, width = the$install_step_width))
 }

@@ -46,6 +46,18 @@
     The method to use when attempting to copy directories. See **Copy Methods**
     for more information.
 
+- name: "crandb.enabled"
+  type: "logical[1]"
+  default: false
+  description: >
+    Use the [crandb](https://github.com/r-hub/crandb) service when
+    looking up packages from CRAN which are not available in the configured
+    repositories? When enabled, renv will query the crandb API to find the
+    latest version of a package compatible with the current version of R.
+    This can be useful when an older version of R is being used, and the
+    latest version of a package on CRAN requires a newer version of R.
+    Disabled by default.
+
 - name: "connect.timeout"
   type: "integer[1]"
   default: 20
@@ -197,6 +209,15 @@
     copy or move those packages back into the project library only if all packages
     were successfully downloaded and installed. This can be useful if you'd like to
     avoid mutating your project library if installation of one or more packages fails.
+
+- name: "install.jobs"
+  type: "integer[1]"
+  default: 4
+  description: >
+    The number of packages to install concurrently during `install()` and
+    `restore()`. Packages within the same dependency wave are installed in
+    parallel using this many concurrent R CMD INSTALL processes. Set to `1L`
+    for sequential installation.
 
 - name: "install.verbose"
   type: "logical[1]"

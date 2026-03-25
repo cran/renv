@@ -60,6 +60,8 @@ Defaults to \code{NULL}.}
 Defaults to \code{"api.bitbucket.org/2.0"}.}
 \subsection{renv.config.copy.method}{The method to use when attempting to copy directories. See \strong{Copy Methods} for more information.
 Defaults to \code{"auto"}.}
+\subsection{renv.config.crandb.enabled}{Use the \href{https://github.com/r-hub/crandb}{crandb} service when looking up packages from CRAN which are not available in the configured repositories? When enabled, renv will query the crandb API to find the latest version of a package compatible with the current version of R. This can be useful when an older version of R is being used, and the latest version of a package on CRAN requires a newer version of R. Disabled by default.
+Defaults to \code{FALSE}.}
 \subsection{renv.config.connect.timeout}{The amount of time to spend (in seconds) when attempting to download a file. Only applicable when the \code{curl} downloader is used.
 Defaults to \code{20L}.}
 \subsection{renv.config.connect.retry}{The number of times to attempt re-downloading a file, when transient download errors occur. Only applicable when the \code{curl} downloader is used.
@@ -95,6 +97,8 @@ Defaults to \code{TRUE}.}
 Defaults to \code{TRUE}.}
 \subsection{renv.config.install.transactional}{Perform a transactional install of packages during install and restore? When enabled, renv will first install packages into a temporary library, and later copy or move those packages back into the project library only if all packages were successfully downloaded and installed. This can be useful if you'd like to avoid mutating your project library if installation of one or more packages fails.
 Defaults to \code{TRUE}.}
+\subsection{renv.config.install.jobs}{The number of packages to install concurrently during \code{install()} and \code{restore()}. Packages within the same dependency wave are installed in parallel using this many concurrent R CMD INSTALL processes. Set to \code{1L} for sequential installation.
+Defaults to \code{4L}.}
 \subsection{renv.config.install.verbose}{Be verbose when installing R packages from sources? When \code{TRUE}, renv will stream any output generated during package build + installation to the console.
 Defaults to \code{FALSE}.}
 \subsection{renv.config.locking.enabled}{Use interprocess locks when invoking methods which might mutate the project library? Enable this to allow multiple processes to use the same renv project, while minimizing risks relating to concurrent access to the project library. Disable this if you encounter locking issues. Locks are stored as files within the project at \code{renv/lock}; if you need to manually remove a stale lock you can do so via \code{unlink("renv/lock", recursive = TRUE)}.

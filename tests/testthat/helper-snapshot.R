@@ -6,7 +6,15 @@ expect_snapshot <- function(...,
                             variant = NULL,
                             cnd_class = FALSE)
 {
-  renv_scope_options(renv.verbose = TRUE)
+  if (renv_platform_windows() && getRversion() < "4.2") {
+    testthat::skip("Snapshot tests unsupported on older Windows")
+  }
+
+  renv_scope_options(
+    renv.caution.verbose = TRUE,
+    renv.verbose = TRUE
+  )
+
   testthat::expect_snapshot(
     ...,
     cran = cran,
@@ -40,8 +48,14 @@ strip_dirs <- function(x) {
     "<wd-name>"         = basename(getwd())
   )
 
+  # normalize backslashes to forward slashes so snapshots are
+  # platform-independent; do this before applying filters so that
+  # filter paths (which use forward slashes) match consistently
+  x <- chartr("\\", "/", x)
+
   # apply filters
   enumerate(filters, function(target, source) {
+    source <- chartr("\\", "/", source)
     x <<- gsub(source, target, x, fixed = TRUE)
   })
 
@@ -52,6 +66,9 @@ strip_dirs <- function(x) {
 
   # Standardise the dashes produced by header()
   x <- gsub("-{3,}\\s*$", "---", x, perl = TRUE)
+
+  # Collapse width-dependent padding in progress lines
+  x <- gsub("(\\.\\.\\.) +(OK|FAILED)", "\\1 \\2", x)
 
   # Standardise version
   x <- gsub(renv_metadata_version_friendly(), "<version>", x, fixed = TRUE)

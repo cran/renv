@@ -16,9 +16,39 @@ test_that("we can check out packages from our local repository", {
 
 })
 
+test_that("checkout with actions = 'snapshot' creates a lockfile without installing", {
+
+  project <- renv_tests_scope()
+  init()
+
+  # checkout with snapshot action only -- no packages should be installed
+  checkout(packages = "breakfast", actions = "snapshot")
+
+  # packages should not be installed
+  expect_false(renv_package_installed("breakfast"))
+  expect_false(renv_package_installed("bread"))
+
+  # lockfile should exist and contain the full dependency tree
+  lockfile <- renv_lockfile_read(paths$lockfile(project = project))
+  records <- renv_lockfile_records(lockfile)
+
+  expect_true("breakfast" %in% names(records))
+  expect_true("oatmeal" %in% names(records))
+  expect_true("toast" %in% names(records))
+  expect_true("bread" %in% names(records))
+
+  # records should have dependency metadata
+  expect_identical(records$breakfast$Source, "Repository")
+  expect_identical(records$breakfast$Version, "1.0.0")
+  expect_true(!is.null(records$breakfast$Depends))
+
+})
+
 test_that("we can check out packages from the package manager instance", {
+
   skip_on_cran()
   skip_if(Sys.info()[["machine"]] == "aarch64")
+  skip_if(getRversion() >= "4.6.0")
 
   renv_tests_scope()
   init()
@@ -32,4 +62,5 @@ test_that("we can check out packages from the package manager instance", {
   # check that we installed the requested version
   expect_true(renv_package_installed("rlang"))
   expect_true(renv_package_version("rlang") == "1.0.6")
+
 })

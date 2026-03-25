@@ -3,11 +3,6 @@
 # Here, "suite of tests" might also mean "a single test" interactively.
 renv_tests_setup <- function(scope = parent.frame()) {
 
-  # only run if interactive, or if testing
-  ok <- interactive() || testthat::is_testing()
-  if (!ok)
-    return()
-
   # make sure this only runs once
   if (!once())
     return()
@@ -76,12 +71,13 @@ renv_tests_setup_options <- function(scope = parent.frame()) {
 
   renv_scope_options(
     renv.bootstrap.quiet = TRUE,
-    renv.config.user.library = FALSE,
-    renv.config.sandbox.enabled = TRUE,
-    renv.consent = TRUE,
-    restart = NULL,
+    renv.caution.verbose = interactive(),
     renv.config.install.transactional = FALSE,
+    renv.config.sandbox.enabled = TRUE,
+    renv.config.user.library = FALSE,
+    renv.consent = TRUE,
     renv.tests.running = TRUE,
+    restart = NULL,
     scope = scope
   )
 
@@ -177,6 +173,8 @@ renv_tests_setup_repos <- function(scope = parent.frame()) {
   source <- renv_tests_path("packages")
   target <- renv_scope_tempfile("renv-packages-", scope = scope)
   renv_file_copy(source, target)
+  if (!file.exists(target))
+    stopf("failed to copy '%s' to '%s'", source, target)
   renv_scope_wd(target)
 
   # update the local packrat package version to match what's available
@@ -244,9 +242,10 @@ renv_tests_setup_repos <- function(scope = parent.frame()) {
 
   # update PACKAGES metadata
   tools::write_PACKAGES(
-    dir = contrib,
-    subdirs = subdirs,
-    type = "source",
+    dir        = contrib,
+    subdirs    = subdirs,
+    type       = "source",
+    fields     = "Remotes",
     latestOnly = FALSE
   )
 

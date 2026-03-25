@@ -60,6 +60,15 @@ config <- list(
     )
   },
 
+  crandb.enabled = function(..., default = FALSE) {
+    renv_config_get(
+      name    = "crandb.enabled",
+      type    = "logical[1]",
+      default = default,
+      args    = list(...)
+    )
+  },
+
   connect.timeout = function(..., default = 20L) {
     renv_config_get(
       name    = "connect.timeout",
@@ -208,6 +217,15 @@ config <- list(
     renv_config_get(
       name    = "install.transactional",
       type    = "logical[1]",
+      default = default,
+      args    = list(...)
+    )
+  },
+
+  install.jobs = function(..., default = 4L) {
+    renv_config_get(
+      name    = "install.jobs",
+      type    = "integer[1]",
       default = default,
       args    = list(...)
     )

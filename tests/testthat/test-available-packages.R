@@ -177,6 +177,7 @@ test_that("we can query the R universe", {
   # reduce risk of false positive test failures
   rownames(lhs) <- rownames(rhs) <- NULL
   lhs$MD5sum <- rhs$MD5sum <- NULL
+  lhs$Remotes <- rhs$Remotes <- NULL
 
   # otherwise, check they're identical
   expect_identical(lhs, rhs)
@@ -193,4 +194,91 @@ test_that("available_packages() tolerates missing repositories", {
   dbs <- available_packages(type = "source")
   expect_false(is.null(dbs[["CRAN"]]))
   expect_true(is.null(dbs[["NARC"]]))
+})
+
+test_that("crandb query returns R-compatible versions", {
+  skip_on_cran()
+  skip_if_offline()
+  skip_if_offline(host = "r-pkg.org")
+  renv_scope_options(renv.config.crandb.enabled = TRUE)
+
+  # Query crandb for a package with known R version requirements
+  json <- renv_available_packages_crandb_query("forcats")
+  expect_type(json, "list")
+  expect_true("versions" %in% names(json))
+
+  # Test R compatibility checking
+  # forcats 1.0.1 requires R >= 4.1
+  entry_101 <- json$versions[["1.0.1"]]
+  expect_true(renv_available_packages_crandb_r_compatible(entry_101, "4.5.0"))
+  expect_true(renv_available_packages_crandb_r_compatible(entry_101, "4.1.0"))
+  expect_false(renv_available_packages_crandb_r_compatible(entry_101, "4.0.0"))
+
+  # forcats 1.0.0 requires R >= 3.4
+  entry_100 <- json$versions[["1.0.0"]]
+  expect_true(renv_available_packages_crandb_r_compatible(entry_100, "4.0.0"))
+  expect_true(renv_available_packages_crandb_r_compatible(entry_100, "3.4.0"))
+  expect_false(renv_available_packages_crandb_r_compatible(entry_100, "3.3.0"))
+
+})
+
+test_that("crandb returns newest compatible version", {
+  skip_on_cran()
+  skip_if_offline()
+  skip_if_offline(host = "r-pkg.org")
+  renv_scope_options(renv.config.crandb.enabled = TRUE)
+
+  # Test that we get the newest compatible version
+  result <- renv_available_packages_latest_crandb("forcats")
+  expect_type(result, "list")
+  expect_equal(result$Package, "forcats")
+  expect_equal(result$Source, "Repository")
+  expect_equal(result$Repository, "CRAN")
+
+  # Version should be valid
+
+  expect_true(nzchar(result$Version))
+  expect_no_error(numeric_version(result$Version))
+})
+
+test_that("when crandb is enabled, repos entry is preferred when versions match (tagged record)", {
+  skip_on_cran()
+  skip_if_offline()
+  skip_if_offline(host = "r-pkg.org")
+
+  # Use real CRAN so both repos and crandb can return the same package version
+  renv_scope_options(
+    repos = c(CRAN = "https://cloud.r-project.org"),
+    renv.config.crandb.enabled = TRUE,
+    pkgType = "source"
+  )
+
+  # For a package live on CRAN, both repos and crandb return the same version.
+  # We must get the repos (tagged) entry so retrieval uses the current URL,
+  # not the archive (#1735).
+  record <- renv_available_packages_latest("RColorBrewer", type = "source")
+  expect_true(renv_record_tagged(record), info = "record should be from repos (tagged), not crandb (untagged)")
+  expect_equal(record$Package, "RColorBrewer")
+  expect_true(nzchar(record$Version))
+})
+
+test_that("version requirement parsing works correctly", {
+
+  # Test various requirement formats
+  expect_true(renv_version_requirement_satisfied("4.0.0", ">= 3.4"))
+  expect_true(renv_version_requirement_satisfied("4.0.0", ">= 4.0"))
+  expect_true(renv_version_requirement_satisfied("4.0.0", ">= 4.0.0"))
+  expect_false(renv_version_requirement_satisfied("4.0.0", ">= 4.1"))
+
+  expect_true(renv_version_requirement_satisfied("3.6.0", "> 3.5"))
+  expect_false(renv_version_requirement_satisfied("3.5.0", "> 3.5"))
+
+  expect_true(renv_version_requirement_satisfied("4.0.0", "<= 4.0"))
+  expect_false(renv_version_requirement_satisfied("4.1.0", "<= 4.0"))
+
+  # Empty/null requirements should be satisfied
+  expect_true(renv_version_requirement_satisfied("4.0.0", NULL))
+  expect_true(renv_version_requirement_satisfied("4.0.0", "*"))
+  expect_true(renv_version_requirement_satisfied("4.0.0", ""))
+
 })
