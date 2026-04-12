@@ -61,3 +61,41 @@
       [32m✔[0m toast 1.0.0                              [copied from cache]
       Successfully installed 4 packages in XXXX seconds.
 
+# install() report doesn't crash when a package has no version
+
+    Code
+      install()
+    Output
+      The following package(s) will be installed:
+      - missing [*]
+      These packages will be installed into "<wd>/renv/library/<platform-prefix>".
+      
+      # Downloading packages ---
+      [31m✖[0m missing                                 
+      # Installing packages ---
+      
+      The following package(s) were not installed successfully:
+      - [missing]: failed to download
+      You may need to manually download and install these packages.
+      
+    Condition
+      Error:
+      ! failed to install "missing" (package 'missing' is not available)
+
+# install from local sources shows progress
+
+    Code
+      install(path)
+    Output
+      The following package(s) will be installed:
+      - bread [1.0.0]
+      These packages will be installed into "<wd>/renv/library/<platform-prefix>".
+      
+      # Downloading packages ---
+      [32m✔[0m bread 1.0.0                             
+      Successfully downloaded 1 package in XXXX seconds.
+      
+      # Installing packages ---
+      [32m✔[0m bread 1.0.0                              [built from source]
+      Successfully installed 1 package in XXXX seconds.
+

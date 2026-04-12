@@ -437,9 +437,11 @@ renv_remotes_resolve_bitbucket <- function(remote) {
   sha <- json$hash
 
   # get DESCRIPTION file
-  fmt <- "%s/repositories/%s/%s/src/%s/DESCRIPTION"
+  parts <- c(if (nzchar(subdir %||% "")) subdir, "DESCRIPTION")
+  descpath <- paste(parts, collapse = "/")
+  fmt <- "%s/repositories/%s/%s/src/%s/%s"
   origin <- renv_retrieve_origin(host)
-  url <- sprintf(fmt, origin, user, repo, ref)
+  url <- sprintf(fmt, origin, user, repo, ref, descpath)
 
   destfile <- renv_scope_tempfile("renv-description-")
   download(url, destfile = destfile, type = "bitbucket", quiet = TRUE)
@@ -880,7 +882,7 @@ renv_remotes_resolve_gitlab <- function(remote) {
 
   ref <- remote$ref %||% renv_remotes_resolve_gitlab_ref(host, user, repo)
 
-  parts <- c(subdir, "DESCRIPTION")
+  parts <- c(if (nzchar(subdir %||% "")) subdir, "DESCRIPTION")
   descpath <- URLencode(paste(parts, collapse = "/"), reserved = TRUE)
 
   # scope authentication

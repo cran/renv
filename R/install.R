@@ -180,6 +180,12 @@ install <- function(packages = NULL,
   # figure out which packages we should install
   packages <- names(remotes) %||% renv_snapshot_dependencies(project, dev = TRUE)
 
+  # apply ignored.packages setting when auto-discovering
+  if (is.null(remotes)) {
+    ignored <- renv_project_ignored_packages(project)
+    packages <- setdiff(packages, ignored)
+  }
+
   # apply exclude parameter
   if (length(exclude))
     packages <- setdiff(packages, exclude)
@@ -284,8 +290,8 @@ install <- function(packages = NULL,
     }, character(1L))
     labels <- ifelse(
       nzchar(reasons),
-      sprintf("%s (%s)", shQuote(failed), reasons),
-      shQuote(failed)
+      sprintf("%s (%s)", dQuote(failed), reasons),
+      dQuote(failed)
     )
     stopf("failed to install %s", paste(labels, collapse = ", "))
   }

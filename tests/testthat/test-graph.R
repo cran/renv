@@ -427,6 +427,125 @@ test_that("renv_graph_compatible returns TRUE for no requirements", {
 
 })
 
+# needs update ----
+
+test_that("renv_graph_needs_update preserves installed transitive deps", {
+
+  renv_tests_scope()
+
+  # install bread 1.0.0 into the test library
+  descriptions <- renv_graph_init("bread")
+  renv_graph_install(descriptions)
+  expect_true(renv_package_installed("bread"))
+
+  # set up restore state as though "breakfast" was explicitly requested;
+  # bread is a transitive dependency, not explicitly requested
+  renv_scope_restore(
+    project  = getwd(),
+    library  = renv_libpaths_active(),
+    packages = "breakfast"
+  )
+
+  # simulate graph resolution having resolved bread to a newer version
+  record <- list(Package = "bread", Version = "2.0.0", Source = "Repository")
+
+  # requirements that bread 1.0.0 satisfies
+  requirements <- new.env(parent = emptyenv())
+  requirements[["bread"]] <- data.frame(
+    Package    = "bread",
+    Require    = ">=",
+    Version    = "1.0.0",
+    RequiredBy = "toast",
+    stringsAsFactors = FALSE
+  )
+
+  # installed bread 1.0.0 satisfies >= 1.0.0, so no update needed
+  expect_false(renv_graph_needs_update("bread", record, requirements))
+
+})
+
+test_that("renv_graph_needs_update upgrades when requirements not satisfied", {
+
+  renv_tests_scope()
+
+  # install bread 1.0.0
+  descriptions <- renv_graph_init("bread")
+  renv_graph_install(descriptions)
+
+  renv_scope_restore(
+    project  = getwd(),
+    library  = renv_libpaths_active(),
+    packages = "breakfast"
+  )
+
+  record <- list(Package = "bread", Version = "2.0.0", Source = "Repository")
+
+  # requirements that bread 1.0.0 does NOT satisfy
+  requirements <- new.env(parent = emptyenv())
+  requirements[["bread"]] <- data.frame(
+    Package    = "bread",
+    Require    = ">=",
+    Version    = "2.0.0",
+    RequiredBy = "toast",
+    stringsAsFactors = FALSE
+  )
+
+  # installed bread 1.0.0 doesn't satisfy >= 2.0.0, so update is needed
+  expect_true(renv_graph_needs_update("bread", record, requirements))
+
+})
+
+test_that("renv_graph_needs_update always updates explicitly-requested packages", {
+
+  renv_tests_scope()
+
+  # install bread 1.0.0
+  descriptions <- renv_graph_init("bread")
+  renv_graph_install(descriptions)
+
+  # bread is explicitly requested this time
+  renv_scope_restore(
+    project  = getwd(),
+    library  = renv_libpaths_active(),
+    packages = "bread"
+  )
+
+  record <- list(Package = "bread", Version = "2.0.0", Source = "Repository")
+
+  # requirements that bread 1.0.0 satisfies
+  requirements <- new.env(parent = emptyenv())
+  requirements[["bread"]] <- data.frame(
+    Package    = "bread",
+    Require    = ">=",
+    Version    = "1.0.0",
+    RequiredBy = "toast",
+    stringsAsFactors = FALSE
+  )
+
+  # even though 1.0.0 satisfies requirements, bread was explicitly
+  # requested so it should be updated
+  expect_true(renv_graph_needs_update("bread", record, requirements))
+
+})
+
+test_that("renv_graph_needs_update returns TRUE when package not installed", {
+
+  renv_tests_scope()
+
+  renv_scope_restore(
+    project  = getwd(),
+    library  = renv_libpaths_active(),
+    packages = "breakfast"
+  )
+
+  record <- list(Package = "bread", Version = "1.0.0", Source = "Repository")
+  requirements <- new.env(parent = emptyenv())
+
+  # bread is not installed, so it needs to be installed
+  expect_true(renv_graph_needs_update("bread", record, requirements))
+
+})
+
 # install result parsing ----
 
 test_that("renv_graph_install_parse_result handles NULL data", {
@@ -808,6 +927,21 @@ test_that("renv_graph_deps respects custom fields argument", {
 
 })
 
+test_that("renv_graph_deps handles list-valued dependency fields from v2 lockfiles", {
+
+  # v2 lockfile records store dependency fields as lists (JSON arrays)
+  # rather than comma-separated strings; renv_graph_deps should handle both
+  desc <- list(
+    Package   = "mypkg",
+    Imports   = list("Rcpp", "data.table", "jsonlite"),
+    LinkingTo = list("Rcpp", "BH")
+  )
+
+  deps <- renv_graph_deps(desc)
+  expect_true(setequal(deps, c("Rcpp", "data.table", "jsonlite", "BH")))
+
+})
+
 test_that("renv_graph_deps returns empty for package with no deps", {
 
   desc <- list(Package = "mypkg", Version = "1.0.0")
@@ -848,5 +982,55 @@ test_that("renv_graph_urls gracefully handles mixed sources", {
   # bread should resolve; fake should be NULL
   expect_true(is.list(urls[["bread"]]))
   expect_null(urls[["fake"]])
+
+})
+
+# https://github.com/rstudio/renv/issues/2264
+test_that("renv_graph_description_repository respects install_pkg_type", {
+
+  renv_tests_scope()
+
+  # track the type argument passed to renv_available_packages_entry
+  env <- new.env(parent = emptyenv())
+  env$types <- character()
+
+  renv_scope_trace(
+    what   = renv:::renv_available_packages_entry,
+    tracer = bquote({
+      .env <- .(env)
+      .env$types <- c(.env$types, type)
+    })
+  )
+
+  record <- list(Package = "bread", Source = "Repository")
+
+  # default: install_pkg_type is NULL, should fall back to "source"
+  renv_graph_description_repository(record)
+  expect_true("source" %in% env$types)
+
+  # when install_pkg_type is set, it should be forwarded
+  env$types <- character()
+  renv_scope_binding(the, "install_pkg_type", "binary")
+  catch(renv_graph_description_repository(record))
+  expect_true("binary" %in% env$types)
+  expect_false("source" %in% env$types)
+
+})
+
+# https://github.com/rstudio/renv/issues/2249
+test_that("gitlab DESCRIPTION path handles empty RemoteSubdir", {
+
+  # when subdir is empty or NULL, the encoded path should be just "DESCRIPTION"
+  # (not "%2FDESCRIPTION" which results from pasting "" with "DESCRIPTION")
+  for (subdir in list(NULL, "")) {
+    parts <- c(if (nzchar(subdir %||% "")) subdir, "DESCRIPTION")
+    descpath <- URLencode(paste(parts, collapse = "/"), reserved = TRUE)
+    expect_equal(descpath, "DESCRIPTION")
+  }
+
+  # when subdir is non-empty, it should appear in the path
+  parts <- c(if (nzchar("src" %||% "")) "src", "DESCRIPTION")
+  descpath <- URLencode(paste(parts, collapse = "/"), reserved = TRUE)
+  expect_equal(descpath, "src%2FDESCRIPTION")
 
 })

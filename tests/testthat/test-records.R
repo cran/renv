@@ -80,6 +80,13 @@ test_that("we can format records in various ways", {
 
 })
 
+test_that("renv_record_format_short handles missing Version", {
+
+  record <- list(Package = "thispackagedoesnotexist")
+  expect_equal(renv_record_format_short(record), "*")
+
+})
+
 test_that("compatible records from pak are handled correctly", {
 
   lhs <- list(
@@ -116,6 +123,23 @@ test_that("compatible records from pak are handled correctly", {
 
   change <- renv_lockfile_diff_record(lhs, rhs)
   expect_null(change)
+
+})
+
+test_that("records with NULL versions are treated as crossgrades", {
+
+  # https://github.com/rstudio/renv/issues/2248
+  before <- list(Package = "skeleton", Version = NULL)
+  after  <- list(Package = "skeleton", Version = "1.0.0")
+  expect_equal(renv_lockfile_diff_record(before, after), "crossgrade")
+
+  before <- list(Package = "skeleton", Version = "1.0.0")
+  after  <- list(Package = "skeleton", Version = NULL)
+  expect_equal(renv_lockfile_diff_record(before, after), "crossgrade")
+
+  before <- list(Package = "skeleton", Version = NULL)
+  after  <- list(Package = "skeleton", Version = NULL)
+  expect_equal(renv_lockfile_diff_record(before, after), "crossgrade")
 
 })
 
@@ -183,5 +207,21 @@ test_that("remote hosts are included when formatting", {
 
   remote <- renv_record_format_remote(record, pak = TRUE)
   expect_equal(remote, "github@github.example.com::kevinushey/skeleton@e4aafb92b86ba7eba3b7036d9d96fdfb6c32761a")
+
+})
+
+test_that("renv_record_source infers 'repository' from Repository field", {
+
+  # a record with Source explicitly set uses that
+  record <- list(Package = "skeleton", Version = "1.0.0", Source = "GitHub")
+  expect_equal(renv_record_source(record), "github")
+
+  # a record with no Source but a Repository field infers 'repository'
+  record <- list(Package = "skeleton", Version = "1.0.0", Repository = "CRAN")
+  expect_equal(renv_record_source(record), "repository")
+
+  # a record with neither Source nor Repository falls back to 'unknown'
+  record <- list(Package = "skeleton", Version = "1.0.0")
+  expect_equal(renv_record_source(record), "unknown")
 
 })

@@ -557,3 +557,117 @@ test_that("the Repository field in a lockfile can be overridden", {
   expect_true(renv_package_installed("bread"))
 
 })
+
+test_that("restore(packages = ...) installs missing transitive dependencies", {
+  skip_on_cran()
+  renv_tests_scope("breakfast")
+  init()
+
+  remove("bread")
+  expect_false(renv_package_installed("bread"))
+  expect_true(renv_package_installed("toast"))
+
+  restore(packages = "toast")
+
+  expect_true(renv_package_installed("bread"))
+  expect_true(renv_package_installed("toast"))
+})
+
+test_that("restore(packages = ..., exclude = ...) excludes transitive deps", {
+  skip_on_cran()
+  renv_tests_scope("breakfast")
+  init()
+
+  remove("bread")
+  expect_false(renv_package_installed("bread"))
+
+  restore(packages = "toast", exclude = "bread")
+
+  # bread should still be missing because it was excluded
+  expect_false(renv_package_installed("bread"))
+})
+
+test_that("restore(packages = ...) is a no-op for already-installed transitive deps", {
+  skip_on_cran()
+  renv_tests_scope("breakfast")
+  init()
+
+  # everything is already installed after init(); restore should succeed
+  # without error and not reinstall anything
+  expect_true(renv_package_installed("bread"))
+  expect_true(renv_package_installed("toast"))
+
+  restore(packages = "toast")
+
+  expect_true(renv_package_installed("bread"))
+  expect_true(renv_package_installed("toast"))
+})
+
+test_that("restore(packages = ...) walks the full transitive closure", {
+  skip_on_cran()
+  renv_tests_scope("breakfast")
+  init()
+
+  # bread is two levels deep: breakfast -> toast -> bread
+  remove("bread")
+  expect_false(renv_package_installed("bread"))
+
+  restore(packages = "breakfast")
+
+  expect_true(renv_package_installed("bread"))
+  expect_true(renv_package_installed("toast"))
+  expect_true(renv_package_installed("breakfast"))
+})
+
+test_that("restore(packages = ...) works for a leaf package with no deps", {
+  skip_on_cran()
+  renv_tests_scope("breakfast")
+  init()
+
+  remove("oatmeal")
+  expect_false(renv_package_installed("oatmeal"))
+
+  restore(packages = "oatmeal")
+
+  expect_true(renv_package_installed("oatmeal"))
+})
+
+test_that("restore(packages = ...) expands deps for multiple requested packages", {
+  skip_on_cran()
+  renv_tests_scope("breakfast")
+  init()
+
+  remove("bread")
+  remove("oatmeal")
+  expect_false(renv_package_installed("bread"))
+  expect_false(renv_package_installed("oatmeal"))
+
+  restore(packages = c("toast", "oatmeal"))
+
+  expect_true(renv_package_installed("bread"))
+  expect_true(renv_package_installed("toast"))
+  expect_true(renv_package_installed("oatmeal"))
+})
+
+test_that("renv_restore_recover installs latest versions of failed packages", {
+  skip_on_cran()
+  renv_tests_scope("bread")
+  init()
+
+  # remove bread to simulate a failed first pass
+  remove.packages("bread", lib = renv_libpaths_active())
+  expect_false(renv_package_installed("bread"))
+
+  # set up restore state as restore() would
+  renv_scope_restore(
+    project  = getwd(),
+    library  = renv_libpaths_active(),
+    records  = list(bread = list(Package = "bread", Version = "1.0.0", Source = "Repository")),
+    packages = "bread"
+  )
+
+  # recovery should install latest bread
+  recovered <- renv_restore_recover("bread", getwd())
+  expect_true("bread" %in% names(recovered))
+  expect_true(renv_package_installed("bread"))
+})

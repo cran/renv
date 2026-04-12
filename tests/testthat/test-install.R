@@ -846,3 +846,21 @@ test_that("the remotes field in a package's DESCRIPTION is honoured", {
   expect_equal(skeleton$RemoteRepo, "skeleton")
 
 })
+
+# https://github.com/rstudio/renv/issues/2251
+test_that("install() report doesn't crash when a package has no version", {
+
+  renv_tests_scope("missing")
+  init(bare = TRUE)
+  expect_snapshot(install(), error = TRUE)
+
+})
+
+test_that("install from local sources shows progress", {
+
+  renv_tests_scope()
+  init(bare = TRUE)
+  path <- renv_tests_path("packages/bread")
+  expect_snapshot(install(path))
+
+})

@@ -1,7 +1,7 @@
 Package: renv
 Type: Package
 Title: Project Environments
-Version: 1.2.0
+Version: 1.2.1
 Authors@R: c(
     person("Kevin", "Ushey", role = c("aut", "cre"), email = "kevin@rstudio.com",
            comment = c(ORCID = "0000-0003-2880-7407")),
@@ -22,7 +22,6 @@ Suggests: BiocManager, cli, compiler, covr, cpp11, curl, devtools,
         modules, packrat, pak, R6, remotes, reticulate, rmarkdown,
         rstudioapi, shiny, testthat, uuid, waldo, yaml, webfakes
 Encoding: UTF-8
-NeedsCompilation: yes
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr
 Config/Needs/website: tidyverse/tidytemplate
@@ -30,10 +29,11 @@ Config/testthat/edition: 3
 Config/testthat/parallel: true
 Config/testthat/start-first:
         bioconductor,python,install,restore,snapshot,retrieve,remotes
-Packaged: 2026-03-24 17:01:24 UTC; kevin
+NeedsCompilation: no
+Packaged: 2026-04-11 23:23:30 UTC; kevin
 Author: Kevin Ushey [aut, cre] (ORCID: <https://orcid.org/0000-0003-2880-7407>),
   Hadley Wickham [aut] (ORCID: <https://orcid.org/0000-0003-4757-117X>),
   Posit Software, PBC [cph, fnd]
 Maintainer: Kevin Ushey <kevin@rstudio.com>
 Repository: CRAN
-Date/Publication: 2026-03-25 10:30:11 UTC
+Date/Publication: 2026-04-12 05:10:13 UTC

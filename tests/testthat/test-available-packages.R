@@ -179,6 +179,10 @@ test_that("we can query the R universe", {
   lhs$MD5sum <- rhs$MD5sum <- NULL
   lhs$Remotes <- rhs$Remotes <- NULL
 
+  # R-devel may add new columns to available.packages();
+  # restrict comparison to the columns renv produces
+  lhs <- lhs[intersect(names(lhs), names(rhs))]
+
   # otherwise, check they're identical
   expect_identical(lhs, rhs)
 

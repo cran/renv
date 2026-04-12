@@ -208,6 +208,12 @@ renv_graph_description_repository <- function(record) {
   package <- record$Package
   version <- record$Version
 
+  # respect explicitly-requested package type (e.g. install(..., type = "binary"))
+  # so that graph resolution finds versions available for the requested type;
+  # without this, we always search source packages and may resolve a version
+  # that only exists as source when the user asked for binaries
+  type <- the$install_pkg_type %||% "source"
+
   # try available packages entry (returns full fields including Imports, Depends);
   # we need these fields for dependency graph resolution;
   # in strict mode with a URL-valued Repository, search only that repository
@@ -219,6 +225,7 @@ renv_graph_description_repository <- function(record) {
   entry <- catch(
     renv_available_packages_entry(
       package = package,
+      type    = type,
       filter  = version,
       repos   = repos,
       prefer  = record[["Repository"]]
@@ -232,7 +239,7 @@ renv_graph_description_repository <- function(record) {
   # cellar packages won't be found by renv_available_packages_entry.
   # NOTE: renv_available_packages_latest only returns limited fields
   # (Package, Version, etc.) — no Depends/Imports/LinkingTo
-  latest <- catch(renv_available_packages_latest(package))
+  latest <- catch(renv_available_packages_latest(package, type = type))
   if (!inherits(latest, "error")) {
     if (is.null(version) || identical(latest$Version, version))
       return(as.list(latest))
@@ -242,7 +249,7 @@ renv_graph_description_repository <- function(record) {
   # the full-field entry with overridden version; renv_available_packages_entry
   # without filter returns complete dependency fields unlike latest
   if (!is.null(version) && !inherits(latest, "error")) {
-    full <- catch(renv_available_packages_entry(package))
+    full <- catch(renv_available_packages_entry(package, type = type))
     if (!inherits(full, "error")) {
       desc <- as.list(full)
       desc$Version <- version
@@ -349,7 +356,7 @@ renv_graph_description_gitlab <- function(record) {
   subdir <- record$RemoteSubdir
   ref    <- record$RemoteRef
 
-  parts <- c(subdir, "DESCRIPTION")
+  parts <- c(if (nzchar(subdir %||% "")) subdir, "DESCRIPTION")
   descpath <- URLencode(paste(parts, collapse = "/"), reserved = TRUE)
 
   # scope authentication
@@ -373,15 +380,18 @@ renv_graph_description_bitbucket <- function(record) {
   host   <- record$RemoteHost %||% config$bitbucket.host()
   user   <- record$RemoteUsername
   repo   <- record$RemoteRepo
+  subdir <- record$RemoteSubdir
   ref    <- record$RemoteRef
 
   # scope authentication
   renv_scope_auth(repo)
 
   # get DESCRIPTION file
-  fmt <- "%s/repositories/%s/%s/src/%s/DESCRIPTION"
+  parts <- c(if (nzchar(subdir %||% "")) subdir, "DESCRIPTION")
+  descpath <- paste(parts, collapse = "/")
+  fmt <- "%s/repositories/%s/%s/src/%s/%s"
   origin <- renv_retrieve_origin(host)
-  url <- sprintf(fmt, origin, user, repo, ref)
+  url <- sprintf(fmt, origin, user, repo, ref, descpath)
 
   destfile <- renv_scope_tempfile("renv-description-")
   download(url, destfile = destfile, type = "bitbucket", quiet = TRUE)
@@ -587,15 +597,28 @@ renv_graph_roots <- function(records, fields) {
 
 renv_graph_needs_update <- function(pkg, record, requirements) {
 
-  # check whether the resolved version differs from installed
+  # check whether the resolved version is already installed
   path <- renv_restore_find(pkg, record)
-  if (!nzchar(path))
-    return(TRUE)
+  if (nzchar(path))
+    return(FALSE)
 
-  # check whether the installed version satisfies dependency requirements
-  reqs <- requirements[[pkg]]
-  installed <- renv_package_version(pkg)
-  !renv_graph_compatible(installed, reqs)
+  # for transitive dependencies that are already installed, check
+  # whether the installed version satisfies dependency requirements;
+  # this avoids upgrading dependencies during install() when the
+  # existing library version is already compatible.
+  # explicitly-requested packages (in state$packages) always get
+  # installed, so skip this check for those.
+  state <- renv_restore_state()
+  if (!(pkg %in% state$packages)) {
+    installed <- renv_package_version(pkg)
+    if (!is.null(installed)) {
+      reqs <- requirements[[pkg]]
+      if (renv_graph_compatible(installed, reqs))
+        return(FALSE)
+    }
+  }
+
+  TRUE
 
 }
 
@@ -1106,7 +1129,7 @@ renv_graph_install <- function(descriptions) {
 
       # stream per-package progress as each download completes;
       # disabled in testing mode to keep output order deterministic
-      showprogress <- !testing()
+      showprogress <- !testing() && !ci()
       awaiting <- names(downloadable)
 
       # define a callback to be invoked upon completion of each download
@@ -1116,8 +1139,8 @@ renv_graph_install <- function(descriptions) {
         if (is.null(pkg))
           return()
 
-        progress$clear()
-        progress$tick()
+        if (showprogress) progress$clear()
+        if (showprogress) progress$tick()
 
         desc <- descriptions[[pkg]]
         pkgver <- paste(desc$Package, desc$Version)
@@ -1133,7 +1156,7 @@ renv_graph_install <- function(descriptions) {
         streamed <<- c(streamed, pkg)
         awaiting <<- setdiff(awaiting, pkg)
 
-        if (length(awaiting) > 0L)
+        if (showprogress && length(awaiting) > 0L)
           progress$update(awaiting)
 
         flush(stdout())
@@ -1152,7 +1175,7 @@ renv_graph_install <- function(descriptions) {
         urls      = urls,
         destfiles = destfiles,
         types     = types,
-        callback  = if (showprogress) callback
+        callback  = if (!testing()) callback
       )
 
       # clear up and determine what packages need 'fallback' downloads
@@ -1283,9 +1306,18 @@ renv_graph_install <- function(descriptions) {
 
   }
 
+  showstatus <- !testing() && !verbose && !ci()
+
   # ── Phase 2a: Install all binaries up front ─────────────────
   # Binary installs are plain file copies with no build-time deps,
   # so they don't need wave ordering.
+
+  remaining <- names(binaries)
+
+  if (showstatus && length(remaining) > 0L) {
+    progress$reset("Installing", length(remaining))
+    progress$update(remaining)
+  }
 
   for (package in names(binaries)) {
 
@@ -1303,9 +1335,14 @@ renv_graph_install <- function(descriptions) {
 
     if (inherits(prepared, "error")) {
       msg <- conditionMessage(prepared)
+      if (showstatus) progress$clear()
       writef("- Failed to prepare '%s': %s", package, msg)
       errors$push(list(package = package, message = msg))
       failed$push(package)
+      if (showstatus) progress$tick()
+      remaining <- setdiff(remaining, package)
+      if (showstatus && length(remaining) > 0L)
+        progress$update(remaining)
       next
     }
 
@@ -1315,11 +1352,19 @@ renv_graph_install <- function(descriptions) {
     result <- catch(renv_graph_install_binary(prepared))
     t1 <- Sys.time()
 
+    if (showstatus) {
+      progress$clear()
+      progress$tick()
+    }
+
     if (inherits(result, "error")) {
       msg <- conditionMessage(result)
       renv_install_step_error(entry$record)
       errors$push(list(package = package, message = msg))
       failed$push(package)
+      remaining <- setdiff(remaining, package)
+      if (showstatus && length(remaining) > 0L)
+        progress$update(remaining)
       next
     }
 
@@ -1331,6 +1376,9 @@ renv_graph_install <- function(descriptions) {
 
     renv_graph_install_finalize(entry$record, prepared, installdir, project, linkable)
     all[[package]] <- entry$record
+    remaining <- setdiff(remaining, package)
+    if (showstatus && length(remaining) > 0L)
+      progress$update(remaining)
 
   }
 
@@ -1379,8 +1427,6 @@ renv_graph_install <- function(descriptions) {
     server <- renv_socket_server()
     defer(close(server$socket))
     active <- list()
-
-    showstatus <- !testing() && !verbose
 
     if (showstatus)
       progress$reset("Building", length(sourcenames))
@@ -1561,6 +1607,13 @@ renv_graph_install <- function(descriptions) {
     # R < 4.0 fallback: wave-based, pipe-based collection
     waves <- renv_graph_waves(sourcedescs)
 
+    remaining <- sourcenames
+
+    if (showstatus && length(remaining) > 0L) {
+      progress$reset("Building", length(remaining))
+      progress$update(remaining)
+    }
+
     for (wave in waves) {
 
       wave <- setdiff(wave, failed$data())
@@ -1586,9 +1639,14 @@ renv_graph_install <- function(descriptions) {
           ))
           if (inherits(prepared, "error")) {
             msg <- conditionMessage(prepared)
+            if (showstatus) progress$clear()
             writef("- Failed to prepare '%s': %s", pkg, msg)
             errors$push(list(package = pkg, message = msg))
             failed$push(pkg)
+            if (showstatus) progress$tick()
+            remaining <- setdiff(remaining, pkg)
+            if (showstatus && length(remaining) > 0L)
+              progress$update(remaining)
             next
           }
 
@@ -1602,7 +1660,14 @@ renv_graph_install <- function(descriptions) {
 
         for (pkg in names(workers)) {
           result <- renv_graph_install_collect(workers[[pkg]])
+          if (showstatus) {
+            progress$clear()
+            progress$tick()
+          }
           handle(pkg, result)
+          remaining <- setdiff(remaining, pkg)
+          if (showstatus && length(remaining) > 0L)
+            progress$update(remaining)
         }
 
       }
