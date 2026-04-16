@@ -48,13 +48,17 @@ test_that("system requirements are reported as expected", {
 
   skip_on_cran()
   skip_if(!renv_platform_linux())
+  skip_if(!nzchar(Sys.which("dpkg-query")))
 
   # check a package that is unlikely to be installed
   status <- system("dpkg-query -W blender 2> /dev/null")
   skip_if(status == 0L)
 
   sysreqs <- list("<unknown>" = "blender")
-  expect_snapshot(. <- renv_sysreqs_check(sysreqs, FALSE))
+  expect_snapshot(
+    . <- renv_sysreqs_check(sysreqs, FALSE),
+    transform = function(x) gsub("sudo \\S+ \\S+", "sudo <install>", x)
+  )
 
 })
 

@@ -1,4 +1,17 @@
 
+# renv 1.2.2
+
+* Fixed an issue where `renv::install()` failed with named remotes in
+  `DESCRIPTION` (e.g. `skeleton=kevinushey/skeleton`). The lazy remote
+  resolution was not fully unwrapped, causing "object of type 'closure'
+  is not subsettable" errors during dependency graph resolution. (#2272)
+
+* Fixed an issue where binary packages could be installed before their
+  dependencies during `renv::restore()`, causing load-test failures.
+  Binary and source packages now participate in the same dependency-ordered
+  installation. (#2268)
+
+
 # renv 1.2.1
 
 * `RENV_PATHS_LOCKFILE` now resolves relative paths against the project
