@@ -105,7 +105,9 @@ renv_pak_install <- function(packages,
                              type,
                              rebuild,
                              prompt,
-                             project)
+                             project,
+                             include = NULL,
+                             exclude = NULL)
 {
   pak <- renv_namespace_load("pak")
 
@@ -127,10 +129,35 @@ renv_pak_install <- function(packages,
   else
     as.character(packages)
 
-  # if no packages were specified, treat this as a request to
-  # install / update packages used in the project
-  if (length(packages) == 0L)
+  # remember whether the caller explicitly scoped this install so we can
+  # distinguish "no scope at all" (let pak update the project) from "explicit
+  # scope filtered to empty" (no-op, matching the non-pak path)
+  explicit <- length(packages) > 0L || length(include) > 0L || length(exclude) > 0L
+
+  # apply include / exclude consistently with the non-pak install path,
+  # so the semantics of these arguments don't depend on the installer.
+  # if no packages were specified positionally but include was, treat it
+  # as the request set (e.g. install(include = ...))
+  # https://github.com/rstudio/renv/issues/2281
+  if (length(packages) == 0L && length(include))
+    packages <- as.character(include)
+
+  if (length(exclude))
+    packages <- setdiff(packages, exclude)
+
+  if (length(include))
+    packages <- intersect(packages, include)
+
+  # if no packages remain, fall through to a project-wide update only when
+  # the caller did not provide an explicit scope; otherwise treat this as
+  # a no-op so we don't surprise the user with an unintended update
+  if (length(packages) == 0L) {
+    if (explicit) {
+      writef("- There are no packages to install.")
+      return(invisible(list()))
+    }
     return(renv_pak_update(project, library, prompt))
+  }
   
   # pak doesn't support ':' as a sub-directory separator, so try to
   # repair that here
@@ -210,3 +237,59 @@ renv_pak_restore <- function(lockfile,
 
 }
 
+renv_pak_restore_clean <- function(lockfile,
+                                   libpaths,
+                                   library,
+                                   project,
+                                   packages,
+                                   exclude,
+                                   prompt)
+{
+  current <- snapshot(
+    project  = project,
+    library  = libpaths,
+    lockfile = NULL,
+    type     = "all"
+  )
+
+  diff <- renv_lockfile_diff_packages(current, lockfile)
+  removes <- diff[diff == "remove"]
+  if (!length(removes))
+    return(invisible(NULL))
+
+  # only remove packages from the project library
+  ispkg <- map_lgl(names(removes), function(package) {
+    path <- find.package(package, lib.loc = libpaths, quiet = TRUE)
+    identical(dirname(path), library)
+  })
+  removes <- removes[ispkg]
+
+  # don't remove ignored packages
+  ignored <- renv_project_ignored_packages(project = project)
+  removes <- removes[renv_vector_diff(names(removes), ignored)]
+
+  # restrict to user-requested packages. unlike the main restore() path we
+  # don't expand `packages` via renv_graph_init() here, since the install
+  # graph's transitive deps come from the lockfile and so won't appear in
+  # the remove diff anyway.
+  selected <- if (is.null(packages))
+    setdiff(names(removes), exclude)
+  else
+    setdiff(packages, exclude)
+  removes <- removes[intersect(names(removes), selected)]
+
+  if (!length(removes))
+    return(invisible(NULL))
+
+  # report planned removals and confirm before mutating the library
+  if (prompt || renv_verbose()) {
+    renv_restore_report_actions(removes, current, lockfile)
+    cancel_if(prompt && !proceed())
+  }
+
+  enumerate(removes, function(package, action) {
+    renv_restore_remove(project, package, current)
+  })
+
+  invisible(removes)
+}

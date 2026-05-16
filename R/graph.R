@@ -245,9 +245,20 @@ renv_graph_description_repository <- function(record) {
       return(as.list(latest))
   }
 
-  # if the package exists in configured repos at a different version, use
-  # the full-field entry with overridden version; renv_available_packages_entry
-  # without filter returns complete dependency fields unlike latest
+  # the requested version wasn't found in configured repos; try crandb for the
+  # specific version's dependency fields. this must come before any fallback
+  # that reuses the latest entry's fields with an overridden version, since
+  # dependency constraints can change between versions (e.g. #2278)
+  if (!is.null(version)) {
+    crandb <- catch(renv_graph_description_crandb(package, version))
+    if (!inherits(crandb, "error"))
+      return(as.list(crandb))
+  }
+
+  # last-resort fallback when crandb is unreachable: use the latest entry's
+  # full fields with the requested version substituted. this may return stale
+  # dependency constraints if they changed between versions, but is better
+  # than failing outright.
   if (!is.null(version) && !inherits(latest, "error")) {
     full <- catch(renv_available_packages_entry(package, type = type))
     if (!inherits(full, "error")) {
@@ -255,13 +266,6 @@ renv_graph_description_repository <- function(record) {
       desc$Version <- version
       return(desc)
     }
-  }
-
-  # fall back to crandb for archived versions not in any configured repo
-  if (!is.null(version)) {
-    crandb <- catch(renv_graph_description_crandb(package, version))
-    if (!inherits(crandb, "error"))
-      return(as.list(crandb))
   }
 
   # if we found any entry at all (e.g. version filter excluded it),
@@ -1782,13 +1786,11 @@ renv_graph_install_errors <- function(errors, failed, descriptions) {
 
 renv_graph_install_classify <- function(record) {
 
-  # use type metadata from the download phase if available
-  type <- attr(record, "type", exact = TRUE)
-  if (!is.null(type))
-    return(type)
-
-  # otherwise, inspect the archive or directory directly;
-  # for archives this lists contents without extracting
+  # always inspect the archive or directory directly. The type attr
+  # on a repository record reflects the `type` argument passed to
+  # `available.packages()`, not the real contents of the downloaded
+  # file -- which is wrong for Posit Package Manager "binary"
+  # repositories, which serve binary packages at source-style URLs.
   renv_package_type(record$Path, quiet = TRUE)
 
 }
@@ -1870,7 +1872,8 @@ renv_graph_install_prepare <- function(record, path, library, type, isarchive) {
     # R CMD INSTALL handles both archives and directories
     args <- c(
       "--vanilla",
-      "CMD", "INSTALL", "--preclean", "--no-multiarch", "--with-keep.source",
+      "CMD", "INSTALL", "--preclean", "--no-multiarch",
+      if (config$install.keep.source()) "--with-keep.source" else "--without-keep.source",
       r_cmd_install_option(package, "configure.args", TRUE),
       r_cmd_install_option(package, "configure.vars", TRUE),
       r_cmd_install_option(package, c("install.opts", "INSTALL_opts"), FALSE),

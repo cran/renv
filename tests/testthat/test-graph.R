@@ -608,13 +608,18 @@ test_that("renv_graph_install_parse_result handles output with no status attr", 
 
 # install classification ----
 
-test_that("renv_graph_install_classify uses type attribute when present", {
+test_that("renv_graph_install_classify inspects archive contents", {
 
-  record <- list(Package = "bread", Path = "/tmp/bread_1.0.0.tar.gz")
+  # the classifier must not trust the record's "type" attribute;
+  # for PPM "binary" repositories, the attribute reflects the
+  # requested type, not the real contents of the archive.
+  path <- renv_tests_path("local/skeleton/skeleton_1.0.1.tar.gz")
+
+  record <- list(Package = "skeleton", Path = path)
+  expect_equal(renv_graph_install_classify(record), "source")
+
+  # a misleading "binary" tag must not override the real type
   attr(record, "type") <- "binary"
-  expect_equal(renv_graph_install_classify(record), "binary")
-
-  attr(record, "type") <- "source"
   expect_equal(renv_graph_install_classify(record), "source")
 
 })
@@ -1061,6 +1066,36 @@ test_that("renv_graph_description_repository respects install_pkg_type", {
   catch(renv_graph_description_repository(record))
   expect_true("binary" %in% env$types)
   expect_false("source" %in% env$types)
+
+})
+
+# https://github.com/rstudio/renv/issues/2278
+test_that("repository graph prefers crandb over latest-with-overridden-version", {
+
+  renv_tests_scope()
+
+  # stub crandb lookup so we don't touch the network, and so we can verify
+  # which path was taken: the stub returns a marker Depends field that
+  # differs from anything in the test repository
+  crandb_called <- FALSE
+  renv_scope_binding(
+    envir = asNamespace("renv"),
+    symbol = "renv_graph_description_crandb",
+    replacement = function(package, version) {
+      crandb_called <<- TRUE
+      list(Package = package, Version = version, Depends = "crandb-marker")
+    }
+  )
+
+  # ask for bread at a version that isn't in the test repository (which has
+  # 1.0.0); step 1 (version-filtered entry) and step 2 (latest matching) will
+  # both fail, so resolution must fall through to crandb
+  record <- list(Package = "bread", Version = "0.1.0", Source = "Repository")
+  desc <- renv_graph_description_repository(record)
+
+  expect_true(crandb_called)
+  expect_equal(desc$Version, "0.1.0")
+  expect_equal(desc$Depends, "crandb-marker")
 
 })
 
